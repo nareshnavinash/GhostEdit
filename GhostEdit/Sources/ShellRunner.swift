@@ -27,7 +27,7 @@ enum ShellRunnerError: LocalizedError {
         case .emptyResponse:
             return "CLI returned an empty response. Try switching the model in Settings."
         case .protectedTokensModified:
-            return "The AI response changed protected mentions/emojis. Retried once, but placeholders were not preserved."
+            return "The AI response changed protected static tokens. Retried once, but placeholders were not preserved."
         }
     }
 }

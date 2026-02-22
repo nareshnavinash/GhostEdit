@@ -18,7 +18,7 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
 - History viewer (`History...`) uses a wrapped table with headers and supports per-cell copy (`Cmd+C`) and CSV export
 - Writing coach action: **Sharpen My Writing Style** analyzes your past originals and shows positives plus improvements
 - Busy/unavailable model guidance in notifications and settings hint
-- Preserves Slack-style tokens during correction (`:emoji:` and `@<id>`) via placeholder protection + retry
+- Preserves static tokens during correction (mentions, emojis, URLs, emails, file paths, inline code) via placeholder protection + retry
 - Menu bar state indicator:
   - `ⓖ` idle
   - `🤓` processing
@@ -79,6 +79,28 @@ Notes:
 - If auto-discovery fails, set an absolute path for that provider.
 - If a model is busy/fails, switch models in **Settings...** and retry.
 - `historyLimit` controls how many recent corrections are kept in `history.json`.
+
+## Protected Tokens During Correction
+
+To keep platform-specific syntax intact (especially in Slack), GhostEdit replaces static tokens with placeholders before sending text to the model, then restores them after correction.
+
+Protected token types:
+- Mentions: `@name`, `@<id>`, and `<@id>`
+- Emojis: `:hat:`, `:cat:`, etc.
+- URLs: `https://...`
+- Email addresses: `name@company.com`
+- File paths:
+  - absolute/relative Unix paths like `/tmp/file.txt`, `./notes/todo.md`
+  - folder/file-style paths like `docs/readme.md`
+- Inline code spans: `` `git status` ``
+
+Failure behavior:
+- If the model edits/removes placeholder tokens, GhostEdit retries once automatically.
+- If the retry still fails token validation, GhostEdit shows an explicit error and does not paste a corrupted result.
+
+Practical effect:
+- Grammar/spelling/punctuation are still corrected.
+- Static items are kept exactly as typed so links, mentions, emojis, and paths survive correction.
 
 ## Mandatory Tests and Coverage
 

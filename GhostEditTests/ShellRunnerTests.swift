@@ -155,6 +155,24 @@ final class ShellRunnerTests: XCTestCase {
         XCTAssertEqual(output, "Please check with @<U123ABC> and then add :hat:.")
     }
 
+    func testCorrectTextPreservingTokensRestoresAtNameAndFilePath() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- "Please ask __GHOSTEDIT_KEEP_0__ to review __GHOSTEDIT_KEEP_1__."
+        """
+        let executable = try makeExecutableScript(named: "preserve-static.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let output = try testEnv.runner.correctTextPreservingTokens(
+            systemPrompt: "Fix grammar",
+            selectedText: "pls ask @naresh to review /tmp/report.txt"
+        )
+        XCTAssertEqual(output, "Please ask @naresh to review /tmp/report.txt.")
+    }
+
     func testCorrectTextPreservingTokensRetriesOnceWhenPlaceholderMissing() throws {
         let testEnv = try makeRunnerEnvironment()
         let callsLog = testEnv.homeURL.appendingPathComponent("token-retry.log")
@@ -524,7 +542,7 @@ final class ShellRunnerTests: XCTestCase {
         )
         XCTAssertEqual(
             ShellRunnerError.protectedTokensModified.errorDescription,
-            "The AI response changed protected mentions/emojis. Retried once, but placeholders were not preserved."
+            "The AI response changed protected static tokens. Retried once, but placeholders were not preserved."
         )
     }
 
