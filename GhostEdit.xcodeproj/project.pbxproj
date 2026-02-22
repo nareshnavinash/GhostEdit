@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		09A43D09F41A5F048A640588 /* GhostEditCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 33C90B5A383CE8E06047A674 /* GhostEditCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		0C90930E75E434709A91E54F /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C996DDEE9C8B3F039E6ABBE /* HotkeyManager.swift */; };
+		13F49DF808DEEFA0F50A3114 /* HistoryTableModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDB823432C740C6B3C712BC2 /* HistoryTableModel.swift */; };
 		28AC827911C8D4C36D0CF7EE /* PersistentShellSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6C12DF332B64F2E5870B3A /* PersistentShellSession.swift */; };
 		2FEC073EDBBA2687B680572F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02CA262A37DF28DF09D5B7E /* AppDelegate.swift */; };
 		53BBE4927545377B3648D3AA /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B0A3EBE89D97EEA6C99D23 /* ClipboardManager.swift */; };
@@ -18,6 +19,7 @@
 		881B9C18CC53E0780479A082 /* CorrectionHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD69B09E5A0F1173B476BD23 /* CorrectionHistoryStoreTests.swift */; };
 		8CB37049BD7E1673D42AEE8C /* GhostEditCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 33C90B5A383CE8E06047A674 /* GhostEditCore.framework */; };
 		91B7EA74641364F535A763AC /* CorrectionHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48762FEE0ADD0B53660C76D /* CorrectionHistoryStore.swift */; };
+		92262D1260E82CC716AD0016 /* HistoryTableModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416AEE28E691DC13F7713AA4 /* HistoryTableModelTests.swift */; };
 		9D48A6EC72F1A548B315C259 /* ClaudeRuntimeSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F1EA4FA7580389D753F6E3 /* ClaudeRuntimeSupportTests.swift */; };
 		CA780C7EE5E804CBF8103584 /* ConfigManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B642D84E35DFABB1886A46EA /* ConfigManagerTests.swift */; };
 		CC18A92B98B78199268BB570 /* GhostEditCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 33C90B5A383CE8E06047A674 /* GhostEditCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -74,6 +76,7 @@
 		19B0A3EBE89D97EEA6C99D23 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		2D4EA327528B55DB5C2AD64D /* ShellRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRunner.swift; sourceTree = "<group>"; };
 		33C90B5A383CE8E06047A674 /* GhostEditCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = GhostEditCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		416AEE28E691DC13F7713AA4 /* HistoryTableModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryTableModelTests.swift; sourceTree = "<group>"; };
 		427D8D18C179075A09FC7B82 /* GhostEditTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GhostEditTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4A3079211B444C4F0D1D416C /* ClaudeRuntimeSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeRuntimeSupport.swift; sourceTree = "<group>"; };
 		60A7425688D277A0486D28B0 /* ConfigManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigManager.swift; sourceTree = "<group>"; };
@@ -87,6 +90,7 @@
 		F479A47545C9BCF85C4025BA /* ShellRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRunnerTests.swift; sourceTree = "<group>"; };
 		F48762FEE0ADD0B53660C76D /* CorrectionHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionHistoryStore.swift; sourceTree = "<group>"; };
 		FD69B09E5A0F1173B476BD23 /* CorrectionHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionHistoryStoreTests.swift; sourceTree = "<group>"; };
+		FDB823432C740C6B3C712BC2 /* HistoryTableModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryTableModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,6 +129,7 @@
 				19B0A3EBE89D97EEA6C99D23 /* ClipboardManager.swift */,
 				60A7425688D277A0486D28B0 /* ConfigManager.swift */,
 				F48762FEE0ADD0B53660C76D /* CorrectionHistoryStore.swift */,
+				FDB823432C740C6B3C712BC2 /* HistoryTableModel.swift */,
 				9C996DDEE9C8B3F039E6ABBE /* HotkeyManager.swift */,
 				EA9C5D9A20D47E1D5A0B997E /* LaunchAtLoginManager.swift */,
 				107C8005BF9B19116B7FD5BA /* main.swift */,
@@ -140,6 +145,7 @@
 				D6F1EA4FA7580389D753F6E3 /* ClaudeRuntimeSupportTests.swift */,
 				B642D84E35DFABB1886A46EA /* ConfigManagerTests.swift */,
 				FD69B09E5A0F1173B476BD23 /* CorrectionHistoryStoreTests.swift */,
+				416AEE28E691DC13F7713AA4 /* HistoryTableModelTests.swift */,
 				F479A47545C9BCF85C4025BA /* ShellRunnerTests.swift */,
 			);
 			path = GhostEditTests;
@@ -272,6 +278,7 @@
 				53BBE4927545377B3648D3AA /* ClipboardManager.swift in Sources */,
 				E84DD5B8C999394B5375C717 /* ConfigManager.swift in Sources */,
 				91B7EA74641364F535A763AC /* CorrectionHistoryStore.swift in Sources */,
+				13F49DF808DEEFA0F50A3114 /* HistoryTableModel.swift in Sources */,
 				0C90930E75E434709A91E54F /* HotkeyManager.swift in Sources */,
 				5A164E9FAA1017AE15ADD622 /* LaunchAtLoginManager.swift in Sources */,
 				28AC827911C8D4C36D0CF7EE /* PersistentShellSession.swift in Sources */,
@@ -294,6 +301,7 @@
 				9D48A6EC72F1A548B315C259 /* ClaudeRuntimeSupportTests.swift in Sources */,
 				CA780C7EE5E804CBF8103584 /* ConfigManagerTests.swift in Sources */,
 				881B9C18CC53E0780479A082 /* CorrectionHistoryStoreTests.swift in Sources */,
+				92262D1260E82CC716AD0016 /* HistoryTableModelTests.swift in Sources */,
 				CE57FD81FB1D64587480FC67 /* ShellRunnerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -328,7 +336,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};
@@ -368,7 +376,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};

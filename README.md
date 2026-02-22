@@ -14,7 +14,7 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
   - Gemini: `gemini-2.5-flash-lite`
 - Launch at login toggle in **Settings...**
 - Configurable correction history size (`History N`) in **Settings...**
-- History viewer (`History...`) shows original text, generated text, provider/model, status, and duration
+- History viewer (`History...`) uses a table with headers and shows original text, generated text, provider/model, status, and duration
 - Busy/unavailable model guidance in notifications and settings hint
 - Menu bar state indicator:
   - `ⓖ` idle
@@ -91,6 +91,8 @@ This gate enforces:
   - `GhostEdit/Sources/ConfigManager.swift`
   - `GhostEdit/Sources/ShellRunner.swift`
   - `GhostEdit/Sources/ClaudeRuntimeSupport.swift`
+  - `GhostEdit/Sources/CorrectionHistoryStore.swift`
+  - `GhostEdit/Sources/HistoryTableModel.swift`
 
 The same gate is wired into:
 - `.githooks/pre-commit`

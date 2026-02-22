@@ -984,8 +984,10 @@ final class SettingsWindowController: NSWindowController {
     }
 }
 
-final class HistoryWindowController: NSWindowController {
-    private let textView = NSTextView(frame: .zero)
+final class HistoryWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+    private let tableView = NSTableView(frame: .zero)
+    private let emptyLabel = NSTextField(labelWithString: "No corrections yet.")
+    private var rows: [HistoryTableRow] = []
     private let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -1015,29 +1017,12 @@ final class HistoryWindowController: NSWindowController {
     }
 
     func update(entries: [CorrectionHistoryEntry]) {
-        guard !entries.isEmpty else {
-            textView.string = "No corrections yet."
-            return
-        }
-
-        let blocks = entries.enumerated().map { index, entry in
-            let status = entry.succeeded ? "Succeeded" : "Failed"
-            let timestamp = timestampFormatter.string(from: entry.timestamp)
-            return [
-                "\(index + 1). \(timestamp)",
-                "Status: \(status)",
-                "Provider: \(entry.provider)",
-                "Model: \(entry.model)",
-                "Duration: \(entry.durationMilliseconds) ms",
-                "Original:",
-                entry.originalText,
-                "Generated:",
-                entry.generatedText,
-                String(repeating: "-", count: 72)
-            ].joined(separator: "\n")
-        }
-
-        textView.string = blocks.joined(separator: "\n")
+        rows = HistoryTableModel.rows(
+            from: entries,
+            timestampFormatter: { self.timestampFormatter.string(from: $0) }
+        )
+        tableView.reloadData()
+        emptyLabel.isHidden = !rows.isEmpty
     }
 
     private func buildUI() {
@@ -1062,24 +1047,135 @@ final class HistoryWindowController: NSWindowController {
         subtitle.textColor = .secondaryLabelColor
         rootStack.addArrangedSubview(subtitle)
 
+        emptyLabel.textColor = .secondaryLabelColor
+        rootStack.addArrangedSubview(emptyLabel)
+
+        configureTableView()
+
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
+        scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
         scrollView.borderType = .bezelBorder
-
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.isRichText = false
-        textView.usesFontPanel = false
-        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        textView.textContainerInset = NSSize(width: 8, height: 8)
-        textView.backgroundColor = .textBackgroundColor
-        textView.string = ""
-
-        scrollView.documentView = textView
+        scrollView.documentView = tableView
         scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
         rootStack.addArrangedSubview(scrollView)
+    }
+
+    private func configureTableView() {
+        tableView.usesAlternatingRowBackgroundColors = true
+        tableView.allowsMultipleSelection = false
+        tableView.allowsColumnReordering = false
+        tableView.rowHeight = 24
+        tableView.intercellSpacing = NSSize(width: 8, height: 6)
+        tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        tableView.delegate = self
+        tableView.dataSource = self
+        tableView.headerView = NSTableHeaderView()
+
+        HistoryTableColumn.allCases.forEach { column in
+            let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(column.rawValue))
+            tableColumn.title = title(for: column)
+            tableColumn.width = width(for: column)
+            tableColumn.minWidth = minWidth(for: column)
+            tableView.addTableColumn(tableColumn)
+        }
+    }
+
+    private func title(for column: HistoryTableColumn) -> String {
+        switch column {
+        case .timestamp:
+            return "Timestamp"
+        case .status:
+            return "Status"
+        case .provider:
+            return "Provider"
+        case .model:
+            return "Model"
+        case .duration:
+            return "Duration"
+        case .original:
+            return "Original Text"
+        case .generated:
+            return "Generated Text"
+        }
+    }
+
+    private func width(for column: HistoryTableColumn) -> CGFloat {
+        switch column {
+        case .timestamp:
+            return 170
+        case .status:
+            return 90
+        case .provider:
+            return 90
+        case .model:
+            return 170
+        case .duration:
+            return 100
+        case .original:
+            return 260
+        case .generated:
+            return 260
+        }
+    }
+
+    private func minWidth(for column: HistoryTableColumn) -> CGFloat {
+        switch column {
+        case .timestamp:
+            return 140
+        case .status:
+            return 70
+        case .provider:
+            return 70
+        case .model:
+            return 120
+        case .duration:
+            return 80
+        case .original:
+            return 180
+        case .generated:
+            return 180
+        }
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        rows.count
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard
+            rows.indices.contains(row),
+            let tableColumn,
+            let column = HistoryTableColumn(rawValue: tableColumn.identifier.rawValue)
+        else {
+            return nil
+        }
+
+        let text = rows[row].value(for: column)
+        let viewID = NSUserInterfaceItemIdentifier("HistoryCell-\(column.rawValue)")
+
+        let cellView: NSTableCellView
+        if let reused = tableView.makeView(withIdentifier: viewID, owner: self) as? NSTableCellView {
+            cellView = reused
+        } else {
+            cellView = NSTableCellView(frame: .zero)
+            cellView.identifier = viewID
+            let label = NSTextField(labelWithString: "")
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.lineBreakMode = .byTruncatingTail
+            cellView.textField = label
+            cellView.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 6),
+                label.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -6),
+                label.centerYAnchor.constraint(equalTo: cellView.centerYAnchor)
+            ])
+        }
+
+        cellView.textField?.stringValue = text
+        cellView.textField?.toolTip = text
+        return cellView
     }
 }
