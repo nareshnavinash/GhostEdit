@@ -99,6 +99,20 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(loaded.hotkeyModifiers, customConfig.hotkeyModifiers)
     }
 
+    func testBootstrapMigratesLegacyDefaultPromptToCurrentDefault() throws {
+        let (manager, _) = makeManager()
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: manager.baseDirectoryURL, withIntermediateDirectories: true)
+
+        let legacyDefaultPrompt = "Fix the grammar, spelling, and punctuation of the following text. Improve clarity and flow, but keep the tone authentic. Return ONLY the fixed text. Do not add introductory conversational filler."
+        try legacyDefaultPrompt.write(to: manager.promptURL, atomically: true, encoding: .utf8)
+
+        try manager.bootstrapIfNeeded()
+
+        let prompt = try String(contentsOf: manager.promptURL, encoding: .utf8)
+        XCTAssertEqual(prompt, manager.defaultPrompt)
+    }
+
     func testLoadPromptFallsBackWhenPromptIsWhitespace() throws {
         let (manager, _) = makeManager()
         try manager.bootstrapIfNeeded()

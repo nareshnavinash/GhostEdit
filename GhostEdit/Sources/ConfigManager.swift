@@ -66,7 +66,10 @@ final class ConfigManager {
     let promptURL: URL
     let configURL: URL
 
-    let defaultPrompt = "Fix the grammar, spelling, and punctuation of the following text. Improve clarity and flow, but keep the tone authentic. Return ONLY the fixed text. Do not add introductory conversational filler."
+    let defaultPrompt = "Edit the following text for grammar, spelling, and punctuation. Improve clarity and flow while preserving the original meaning, message sequence, and authentic tone. Keep the final writing absolutely professional, concise, and direct. Where natural, reflect these behaviors in tone: think big, deliver user value fast, own it, raise the bar, dive deep, learn and grow, and support each other. Return ONLY the revised text with no introductory or conversational filler."
+    private let legacyDefaultPrompts: Set<String> = [
+        "Fix the grammar, spelling, and punctuation of the following text. Improve clarity and flow, but keep the tone authentic. Return ONLY the fixed text. Do not add introductory conversational filler."
+    ]
 
     init(fileManager: FileManager = .default, homeDirectoryURL: URL? = nil) {
         self.fileManager = fileManager
@@ -90,6 +93,7 @@ final class ConfigManager {
         if !fileManager.fileExists(atPath: promptURL.path) {
             try defaultPrompt.write(to: promptURL, atomically: true, encoding: .utf8)
         }
+        try migratePromptIfNeeded()
 
         if !fileManager.fileExists(atPath: configURL.path) {
             let data = try JSONEncoder.prettyEncoder.encode(AppConfig.default)
@@ -132,6 +136,16 @@ final class ConfigManager {
             hotkeyKeyCode: config.hotkeyKeyCode,
             hotkeyModifiers: config.hotkeyModifiers
         )
+    }
+
+    private func migratePromptIfNeeded() throws {
+        let existingPrompt = try String(contentsOf: promptURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard legacyDefaultPrompts.contains(existingPrompt) else {
+            return
+        }
+
+        try defaultPrompt.write(to: promptURL, atomically: true, encoding: .utf8)
     }
 
     private func migrateLegacyDirectoryIfNeeded() throws {
