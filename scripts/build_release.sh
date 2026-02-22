@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="GrammarFixer"
-SCHEME="GrammarFixer"
+APP_NAME="GhostEdit"
+SCHEME="GhostEdit"
 PROJECT_PATH="$ROOT_DIR/${APP_NAME}.xcodeproj"
 DERIVED_DATA_PATH="$ROOT_DIR/build/DerivedData"
 RELEASE_DIR="$ROOT_DIR/build/release"

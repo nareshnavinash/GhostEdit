@@ -7,7 +7,7 @@ final class PersistentShellSession {
         let stderr: String
     }
 
-    private let serialQueue = DispatchQueue(label: "com.grammarfixer.shell-session")
+    private let serialQueue = DispatchQueue(label: "com.ghostedit.shell-session")
     private let outputCondition = NSCondition()
 
     private var process: Process?
@@ -205,7 +205,7 @@ final class PersistentShellSession {
 
     private func makeTempFileURL(token: String, suffix: String) -> URL {
         URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("grammarfixer-\(token)-\(suffix).txt")
+            .appendingPathComponent("ghostedit-\(token)-\(suffix).txt")
     }
 
     private func shellQuote(_ text: String) -> String {

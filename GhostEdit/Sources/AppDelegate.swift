@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import UserNotifications
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let hotkeyManager = HotkeyManager()
     private let clipboardManager = ClipboardManager()
@@ -31,7 +31,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return formatter
     }()
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    private var isRunningUnitTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
+        if isRunningUnitTests {
+            return
+        }
+
         NSApp.setActivationPolicy(.accessory)
         configureStatusItem()
 
@@ -39,8 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try configManager.bootstrapIfNeeded()
         } catch {
             showFatalAlert(
-                title: "GrammarFixer Setup Failed",
-                message: "Could not create ~/.grammarfixer files.\n\n\(error.localizedDescription)"
+                title: "GhostEdit Setup Failed",
+                message: "Could not create ~/.ghostedit files.\n\n\(error.localizedDescription)"
             )
             return
         }
@@ -51,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setStatus("Idle")
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    public func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregister()
         stopProcessingIndicator()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
@@ -60,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func configureStatusItem() {
         if let button = statusItem.button {
             setMenuBarIcon(idleIcon)
-            button.toolTip = "GrammarFixer"
+            button.toolTip = "GhostEdit"
         }
 
         let menu = NSMenu()
@@ -126,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         let quit = NSMenuItem(
-            title: "Quit GrammarFixer",
+            title: "Quit GhostEdit",
             action: #selector(quitAction),
             keyEquivalent: "q"
         )
@@ -233,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         targetAppAtTrigger = targetApp
         clipboardSnapshot = clipboardManager.snapshot()
 
-        let sentinel = "__GRAMMARFIXER_SENTINEL_\(UUID().uuidString)__"
+        let sentinel = "__GHOSTEDIT_SENTINEL_\(UUID().uuidString)__"
         clipboardManager.writePlainText(sentinel)
 
         let strategies: [ClipboardManager.ShortcutPosting] = [.annotatedSession, .hidSystem]
@@ -442,7 +450,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "Accessibility Permission Required"
-            alert.informativeText = "Enable GrammarFixer in System Settings > Privacy & Security > Accessibility so it can send Cmd+C and Cmd+V."
+            alert.informativeText = "Enable GhostEdit in System Settings > Privacy & Security > Accessibility so it can send Cmd+C and Cmd+V."
             alert.addButton(withTitle: "Open Accessibility Settings")
             alert.addButton(withTitle: "Later")
 
@@ -461,7 +469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "claude CLI Not Found"
-            alert.informativeText = "Set an absolute path in ~/.grammarfixer/config.json (claudePath), then try again."
+            alert.informativeText = "Set an absolute path in ~/.ghostedit/config.json (claudePath), then try again."
             alert.addButton(withTitle: "Open Config")
             alert.addButton(withTitle: "OK")
 
@@ -477,7 +485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "Claude Authentication Required"
-            alert.informativeText = "Your Claude CLI session is expired.\n\nRun this command in Terminal:\nclaude auth login\n\nThen retry GrammarFixer."
+            alert.informativeText = "Your Claude CLI session is expired.\n\nRun this command in Terminal:\nclaude auth login\n\nThen retry GhostEdit."
             alert.addButton(withTitle: "OK")
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
@@ -486,7 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func notifyFailure(body: String) {
         let content = UNMutableNotificationContent()
-        content.title = "GrammarFixer"
+        content.title = "GhostEdit"
         content.body = body
         content.sound = .default
 
@@ -501,7 +509,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setStatus(_ text: String) {
         statusMenuItem?.title = "\(statusPrefix)\(text)"
-        statusItem.button?.toolTip = "GrammarFixer\n\(text)"
+        statusItem.button?.toolTip = "GhostEdit\n\(text)"
     }
 
     private func setMenuBarIcon(_ icon: String) {
@@ -603,7 +611,7 @@ final class SettingsWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "GrammarFixer Settings"
+        window.title = "GhostEdit Settings"
         window.isReleasedWhenClosed = false
         window.center()
 

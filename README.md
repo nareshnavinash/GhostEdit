@@ -1,38 +1,17 @@
-# GrammarFixer
+# GhostEdit
 
-GrammarFixer is a native macOS menu bar app that fixes selected text in any app using the local `claude` CLI.
+GhostEdit is a native macOS menu bar app that fixes selected text in any app using the local `claude` CLI.
 
 ## Features
 
 - Global hotkey (`Command + E` by default)
 - Works in background (no Dock icon)
-- Configurable prompt in `~/.grammarfixer/prompt.txt`
+- Configurable prompt in `~/.ghostedit/prompt.txt`
 - Configurable Claude model in **Settings...**
 - Default model is **haiku**
 - Menu bar state indicator:
   - `ⓖ` idle
   - `🤓` processing
-
-## Directory Structure
-
-```text
-GrammarFixer/
-├── .github/workflows/release.yml
-├── .gitignore
-├── project.yml
-├── scripts/build_release.sh
-├── scripts/notarize_release.sh
-└── GrammarFixer/
-    ├── Info.plist
-    ├── Assets.xcassets/
-    └── Sources/
-        ├── AppDelegate.swift
-        ├── ClipboardManager.swift
-        ├── ConfigManager.swift
-        ├── HotkeyManager.swift
-        ├── ShellRunner.swift
-        └── main.swift
-```
 
 ## Build and Run (Local)
 
@@ -51,17 +30,19 @@ xcodegen generate --spec project.yml
 3. Open in Xcode:
 
 ```bash
-open GrammarFixer.xcodeproj
+open GhostEdit.xcodeproj
 ```
 
 4. Set your signing team and run.
 
 ## First Launch Files
 
-GrammarFixer creates:
+GhostEdit creates:
 
-- `~/.grammarfixer/prompt.txt`
-- `~/.grammarfixer/config.json`
+- `~/.ghostedit/prompt.txt`
+- `~/.ghostedit/config.json`
+
+If `~/.grammarfixer` exists from older builds, GhostEdit migrates it to `~/.ghostedit` automatically.
 
 Default `config.json`:
 
@@ -79,18 +60,34 @@ Notes:
 - `claudePath` can be left empty if auto-discovery works.
 - If auto-discovery fails, set an absolute path (for example: `/opt/homebrew/bin/claude`).
 
-## Settings
+## Mandatory Tests and Coverage
 
-Use the menu item **Settings...** to choose model:
+Run the full test+coverage gate:
 
-- Haiku (default)
-- Sonnet
-- Opus
-- Custom model name
+```bash
+./scripts/run_tests_with_coverage.sh
+```
+
+This gate enforces:
+- Unit tests must pass.
+- 100% line coverage on:
+  - `GhostEdit/Sources/ConfigManager.swift`
+  - `GhostEdit/Sources/ShellRunner.swift`
+  - `GhostEdit/Sources/ClaudeRuntimeSupport.swift`
+
+The same gate is wired into:
+- `.githooks/pre-commit`
+- `.githooks/pre-push`
+
+Enable repo hooks locally:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## Accessibility Permission
 
-GrammarFixer sends `Cmd+C` and `Cmd+V` programmatically. Grant permission at:
+GhostEdit sends `Cmd+C` and `Cmd+V` programmatically. Grant permission at:
 
 - System Settings > Privacy & Security > Accessibility
 
@@ -110,13 +107,13 @@ SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/build_rel
 
 Artifacts are generated in:
 
-- `build/release/GrammarFixer-macOS.zip`
-- `build/release/GrammarFixer-macOS.dmg`
+- `build/release/GhostEdit-macOS.zip`
+- `build/release/GhostEdit-macOS.dmg`
 
 For true out-of-the-box install on other Macs (no Gatekeeper warning), notarize the DMG:
 
 ```bash
-NOTARY_PROFILE="your-notary-profile" ./scripts/notarize_release.sh build/release/GrammarFixer-macOS.dmg
+NOTARY_PROFILE="your-notary-profile" ./scripts/notarize_release.sh build/release/GhostEdit-macOS.dmg
 ```
 
 `NOTARY_PROFILE` is a keychain profile created with Apple `notarytool`.
@@ -131,7 +128,7 @@ A workflow is included at `.github/workflows/release.yml`.
 
 ## Privacy and Repo Safety
 
-This repo does not store local user prompt/config files from `~/.grammarfixer`.
+This repo does not store local user prompt/config files from `~/.ghostedit`.
 
 Before pushing, verify no local secrets were added:
 

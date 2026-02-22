@@ -59,22 +59,30 @@ struct AppConfig: Codable {
 }
 
 final class ConfigManager {
-    private let fileManager = FileManager.default
+    private let fileManager: FileManager
 
     let baseDirectoryURL: URL
+    let legacyDirectoryURL: URL
     let promptURL: URL
     let configURL: URL
 
     let defaultPrompt = "Fix the grammar, spelling, and punctuation of the following text. Improve clarity and flow, but keep the tone authentic. Return ONLY the fixed text. Do not add introductory conversational filler."
 
-    init() {
-        baseDirectoryURL = fileManager.homeDirectoryForCurrentUser
+    init(fileManager: FileManager = .default, homeDirectoryURL: URL? = nil) {
+        self.fileManager = fileManager
+
+        let homeURL = homeDirectoryURL ?? fileManager.homeDirectoryForCurrentUser
+        baseDirectoryURL = homeURL
+            .appendingPathComponent(".ghostedit", isDirectory: true)
+        legacyDirectoryURL = homeURL
             .appendingPathComponent(".grammarfixer", isDirectory: true)
         promptURL = baseDirectoryURL.appendingPathComponent("prompt.txt")
         configURL = baseDirectoryURL.appendingPathComponent("config.json")
     }
 
     func bootstrapIfNeeded() throws {
+        try migrateLegacyDirectoryIfNeeded()
+
         if !fileManager.fileExists(atPath: baseDirectoryURL.path) {
             try fileManager.createDirectory(at: baseDirectoryURL, withIntermediateDirectories: true)
         }
@@ -124,6 +132,18 @@ final class ConfigManager {
             hotkeyKeyCode: config.hotkeyKeyCode,
             hotkeyModifiers: config.hotkeyModifiers
         )
+    }
+
+    private func migrateLegacyDirectoryIfNeeded() throws {
+        guard !fileManager.fileExists(atPath: baseDirectoryURL.path) else {
+            return
+        }
+
+        guard fileManager.fileExists(atPath: legacyDirectoryURL.path) else {
+            return
+        }
+
+        try fileManager.moveItem(at: legacyDirectoryURL, to: baseDirectoryURL)
     }
 }
 

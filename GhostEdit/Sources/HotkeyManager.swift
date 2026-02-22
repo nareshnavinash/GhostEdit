@@ -8,7 +8,7 @@ final class HotkeyManager {
     private var handler: Handler?
 
     private let hotKeyIdentifier: UInt32 = 1
-    private let signature: OSType = 0x47465852 // "GFXR"
+    private let signature: OSType = 0x47534544 // "GSED"
 
     deinit {
         unregister()

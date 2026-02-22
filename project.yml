@@ -1,31 +1,75 @@
-name: GrammarFixer
+name: GhostEdit
 options:
   createIntermediateGroups: true
 settings:
   base:
     SWIFT_VERSION: 5.0
     MACOSX_DEPLOYMENT_TARGET: 13.0
-    PRODUCT_BUNDLE_IDENTIFIER: com.grammarfixer.app
 targets:
-  GrammarFixer:
+  GhostEditCore:
+    type: framework
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: GhostEdit/Sources
+        excludes:
+          - main.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ghostedit.core
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+  GhostEdit:
     type: application
     platform: macOS
     deploymentTarget: "13.0"
     sources:
-      - path: GrammarFixer/Sources
+      - path: GhostEdit/Sources/main.swift
     resources:
-      - path: GrammarFixer/Assets.xcassets
+      - path: GhostEdit/Assets.xcassets
+    dependencies:
+      - target: GhostEditCore
     settings:
       base:
-        INFOPLIST_FILE: GrammarFixer/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.ghostedit.app
+        INFOPLIST_FILE: GhostEdit/Info.plist
         CODE_SIGN_STYLE: Automatic
-        CURRENT_PROJECT_VERSION: 6
-        MARKETING_VERSION: 1.2
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 1.0
         ENABLE_HARDENED_RUNTIME: YES
+  GhostEditTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: GhostEditTests
+    dependencies:
+      - target: GhostEditCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ghostedit.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
 schemes:
-  GrammarFixer:
+  GhostEdit:
     build:
       targets:
-        GrammarFixer: all
+        GhostEditCore: all
+        GhostEdit: all
+    test:
+      targets:
+        - name: GhostEditTests
     run:
       config: Debug
+  GhostEditTests:
+    build:
+      targets:
+        GhostEditCore: all
+        GhostEditTests: all
+    test:
+      targets:
+        - name: GhostEditTests

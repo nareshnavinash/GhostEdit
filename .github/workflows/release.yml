@@ -27,5 +27,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/release/GrammarFixer-macOS.zip
-            build/release/GrammarFixer-macOS.dmg
+            build/release/GhostEdit-macOS.zip
+            build/release/GhostEdit-macOS.dmg

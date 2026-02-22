@@ -15,10 +15,24 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "9B02C6FB501D8F6F315FD944"
-               BuildableName = "GrammarFixer.app"
-               BlueprintName = "GrammarFixer"
-               ReferencedContainer = "container:GrammarFixer.xcodeproj">
+               BlueprintIdentifier = "8046BEDCC4FC6DDBF836EF9E"
+               BuildableName = "GhostEditCore.framework"
+               BlueprintName = "GhostEditCore"
+               ReferencedContainer = "container:GhostEdit.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0DD75AB72BD019E61BB1E419"
+               BuildableName = "GhostEditTests.xctest"
+               BlueprintName = "GhostEditTests"
+               ReferencedContainer = "container:GhostEdit.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -32,14 +46,27 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "9B02C6FB501D8F6F315FD944"
-            BuildableName = "GrammarFixer.app"
-            BlueprintName = "GrammarFixer"
-            ReferencedContainer = "container:GrammarFixer.xcodeproj">
+            BlueprintIdentifier = "8046BEDCC4FC6DDBF836EF9E"
+            BuildableName = "GhostEditCore.framework"
+            BlueprintName = "GhostEditCore"
+            ReferencedContainer = "container:GhostEdit.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0DD75AB72BD019E61BB1E419"
+               BuildableName = "GhostEditTests.xctest"
+               BlueprintName = "GhostEditTests"
+               ReferencedContainer = "container:GhostEdit.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -51,18 +78,15 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES">
-      <BuildableProductRunnable
-         runnableDebuggingMode = "0">
+      <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "9B02C6FB501D8F6F315FD944"
-            BuildableName = "GrammarFixer.app"
-            BlueprintName = "GrammarFixer"
-            ReferencedContainer = "container:GrammarFixer.xcodeproj">
+            BlueprintIdentifier = "8046BEDCC4FC6DDBF836EF9E"
+            BuildableName = "GhostEditCore.framework"
+            BlueprintName = "GhostEditCore"
+            ReferencedContainer = "container:GhostEdit.xcodeproj">
          </BuildableReference>
-      </BuildableProductRunnable>
-      <CommandLineArguments>
-      </CommandLineArguments>
+      </MacroExpansion>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
@@ -70,16 +94,15 @@
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"
       debugDocumentVersioning = "YES">
-      <BuildableProductRunnable
-         runnableDebuggingMode = "0">
+      <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "9B02C6FB501D8F6F315FD944"
-            BuildableName = "GrammarFixer.app"
-            BlueprintName = "GrammarFixer"
-            ReferencedContainer = "container:GrammarFixer.xcodeproj">
+            BlueprintIdentifier = "8046BEDCC4FC6DDBF836EF9E"
+            BuildableName = "GhostEditCore.framework"
+            BlueprintName = "GhostEditCore"
+            ReferencedContainer = "container:GhostEdit.xcodeproj">
          </BuildableReference>
-      </BuildableProductRunnable>
+      </MacroExpansion>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug">
