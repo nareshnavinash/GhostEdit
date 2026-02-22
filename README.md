@@ -137,6 +137,10 @@ Optional: sign with a specific Developer ID identity:
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/build_release.sh
 ```
 
+By default, the build script uses ad-hoc signing with a stable designated requirement (`identifier "com.ghostedit.app"`). This helps macOS treat app updates as the same trusted app for Accessibility more reliably than cdhash-based ad-hoc signing.
+
+For the most reliable persistence of Accessibility trust across updates, use a consistent real signing identity (Developer ID or Apple Development).
+
 Artifacts are generated in:
 
 - `build/release/GhostEdit-macOS.zip`

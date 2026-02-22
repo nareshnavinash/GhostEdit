@@ -60,7 +60,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         startObservingActiveApplication()
-        _ = ensureAccessibilityPermission(promptSystemDialog: true, showGuidanceAlert: false)
+        _ = ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: false)
         syncLaunchAtLoginPreferenceSilently()
         registerHotkey()
         setStatus("Idle")
@@ -524,7 +524,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "Accessibility Permission Required"
-            alert.informativeText = "Enable GhostEdit in System Settings > Privacy & Security > Accessibility so it can send Cmd+C and Cmd+V."
+            alert.informativeText = AccessibilitySupport.guidanceText(appName: "GhostEdit")
             alert.addButton(withTitle: "Open Accessibility Settings")
             alert.addButton(withTitle: "Later")
 
@@ -874,6 +874,7 @@ final class SettingsWindowController: NSWindowController {
     )
     private let historyLimitField = NSTextField(string: "")
     private let hintLabel = NSTextField(labelWithString: "")
+    private let rootStack = NSStackView()
 
     private let providerOptions: [CLIProvider] = [.claude, .codex, .gemini]
     private let hotkeyKeyOptions = HotkeySupport.keyOptions
@@ -884,13 +885,22 @@ final class SettingsWindowController: NSWindowController {
         self.onConfigSaved = onConfigSaved
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 500),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: SettingsLayoutSupport.windowWidth,
+                height: SettingsLayoutSupport.minWindowHeight
+            ),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
         window.title = "GhostEdit Settings"
         window.isReleasedWhenClosed = false
+        window.contentMinSize = NSSize(
+            width: SettingsLayoutSupport.windowWidth,
+            height: SettingsLayoutSupport.minWindowHeight
+        )
         window.center()
 
         super.init(window: window)
@@ -908,7 +918,6 @@ final class SettingsWindowController: NSWindowController {
             return
         }
 
-        let rootStack = NSStackView()
         rootStack.orientation = .vertical
         rootStack.spacing = 14
         rootStack.translatesAutoresizingMaskIntoConstraints = false
@@ -1021,6 +1030,8 @@ final class SettingsWindowController: NSWindowController {
         buttonRow.addArrangedSubview(closeButton)
         buttonRow.addArrangedSubview(saveButton)
         rootStack.addArrangedSubview(buttonRow)
+
+        updateWindowHeightToFitContent()
     }
 
     private func makeFieldLabel(_ text: String) -> NSTextField {
@@ -1053,6 +1064,7 @@ final class SettingsWindowController: NSWindowController {
         let rawModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedModel = rawModel.isEmpty ? AppConfig.defaultModel(for: provider) : rawModel
         reloadModelOptions(for: provider, selectedModel: selectedModel)
+        updateWindowHeightToFitContent()
     }
 
     @objc private func providerPopupChanged() {
@@ -1148,6 +1160,18 @@ final class SettingsWindowController: NSWindowController {
         if isCustom {
             customModelField.becomeFirstResponder()
         }
+        updateWindowHeightToFitContent()
+    }
+
+    private func updateWindowHeightToFitContent() {
+        guard let window, let contentView = window.contentView else {
+            return
+        }
+
+        contentView.layoutSubtreeIfNeeded()
+        let preferredHeight = SettingsLayoutSupport.preferredWindowHeight(for: rootStack.fittingSize.height)
+        window.contentMinSize = NSSize(width: SettingsLayoutSupport.windowWidth, height: preferredHeight)
+        window.setContentSize(NSSize(width: SettingsLayoutSupport.windowWidth, height: preferredHeight))
     }
 
     private func selectedOptionValue() -> String? {

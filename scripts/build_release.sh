@@ -47,8 +47,18 @@ if [[ ! -d "$APP_PATH" ]]; then
 fi
 
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
-echo "[3/5] Signing app (identity: $SIGN_IDENTITY)"
-codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_PATH"
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  BUNDLE_IDENTIFIER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP_PATH/Contents/Info.plist")
+  STABLE_REQUIREMENT="designated => identifier \"$BUNDLE_IDENTIFIER\""
+  echo "[3/5] Signing app (identity: ad-hoc, stable requirement: $BUNDLE_IDENTIFIER)"
+  # Keep nested signatures from the build and only re-sign the app wrapper.
+  # This avoids ad-hoc cdhash designated requirements that can force TCC re-approval.
+  codesign --force --sign - --requirements "=$STABLE_REQUIREMENT" "$APP_PATH"
+else
+  echo "[3/5] Signing app (identity: $SIGN_IDENTITY)"
+  codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_PATH"
+fi
+codesign --verify --deep --strict "$APP_PATH"
 
 echo "[4/5] Creating zip artifact"
 ZIP_PATH="$RELEASE_DIR/${APP_NAME}-macOS.zip"
