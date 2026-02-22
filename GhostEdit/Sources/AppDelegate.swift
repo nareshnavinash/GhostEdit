@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import UserNotifications
+import UniformTypeIdentifiers
 
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -985,19 +986,26 @@ final class SettingsWindowController: NSWindowController {
 }
 
 final class HistoryWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
-    private let tableView = NSTableView(frame: .zero)
+    private let tableView = HistoryCopyTableView(frame: .zero)
     private let emptyLabel = NSTextField(labelWithString: "No corrections yet.")
+    private let cellFont = NSFont.systemFont(ofSize: 12)
     private var rows: [HistoryTableRow] = []
+    private var entries: [CorrectionHistoryEntry] = []
     private let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .medium
         return formatter
     }()
+    private let fileTimestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter
+    }()
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 780, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 980, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -1011,17 +1019,24 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         update(entries: [])
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
     func update(entries: [CorrectionHistoryEntry]) {
+        self.entries = entries
         rows = HistoryTableModel.rows(
             from: entries,
             timestampFormatter: { self.timestampFormatter.string(from: $0) }
         )
+
         tableView.reloadData()
+        refreshRowHeights()
         emptyLabel.isHidden = !rows.isEmpty
     }
 
@@ -1043,9 +1058,23 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
             rootStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16)
         ])
 
-        let subtitle = NSTextField(labelWithString: "Latest corrections (newest first).")
+        let subtitle = NSTextField(
+            labelWithString: "Latest corrections (newest first). Click a cell and press Cmd+C to copy that cell."
+        )
         subtitle.textColor = .secondaryLabelColor
+        subtitle.maximumNumberOfLines = 2
+        subtitle.lineBreakMode = .byWordWrapping
         rootStack.addArrangedSubview(subtitle)
+
+        let controlsRow = NSStackView()
+        controlsRow.orientation = .horizontal
+        controlsRow.spacing = 10
+        controlsRow.alignment = .centerY
+
+        let exportButton = NSButton(title: "Export CSV...", target: self, action: #selector(exportCSVClicked))
+        controlsRow.addArrangedSubview(exportButton)
+        controlsRow.addArrangedSubview(NSView())
+        rootStack.addArrangedSubview(controlsRow)
 
         emptyLabel.textColor = .secondaryLabelColor
         rootStack.addArrangedSubview(emptyLabel)
@@ -1067,20 +1096,38 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.allowsMultipleSelection = false
         tableView.allowsColumnReordering = false
-        tableView.rowHeight = 24
+        tableView.allowsEmptySelection = true
+        tableView.selectionHighlightStyle = .regular
         tableView.intercellSpacing = NSSize(width: 8, height: 6)
         tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         tableView.delegate = self
         tableView.dataSource = self
         tableView.headerView = NSTableHeaderView()
+        tableView.copyHandler = { [weak self] in
+            self?.copySelectedCellToPasteboard() ?? false
+        }
+
+        let menu = NSMenu()
+        let copyCellItem = NSMenuItem(title: "Copy Cell", action: #selector(copyCellAction), keyEquivalent: "")
+        copyCellItem.target = self
+        menu.addItem(copyCellItem)
+        tableView.menu = menu
 
         HistoryTableColumn.allCases.forEach { column in
             let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(column.rawValue))
             tableColumn.title = title(for: column)
             tableColumn.width = width(for: column)
             tableColumn.minWidth = minWidth(for: column)
+            tableColumn.resizingMask = .autoresizingMask
             tableView.addTableColumn(tableColumn)
         }
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(tableColumnDidResize),
+            name: NSTableView.columnDidResizeNotification,
+            object: tableView
+        )
     }
 
     private func title(for column: HistoryTableColumn) -> String {
@@ -1115,9 +1162,9 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         case .duration:
             return 100
         case .original:
-            return 260
+            return 320
         case .generated:
-            return 260
+            return 320
         }
     }
 
@@ -1134,14 +1181,42 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         case .duration:
             return 80
         case .original:
-            return 180
+            return 220
         case .generated:
-            return 180
+            return 220
         }
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
         rows.count
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        guard rows.indices.contains(row) else {
+            return 30
+        }
+
+        let padding: CGFloat = 10
+        var maxTextHeight: CGFloat = 20
+        let currentRow = rows[row]
+        for column in HistoryTableColumn.allCases {
+            guard
+                let tableColumn = tableView.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier(column.rawValue))
+            else {
+                continue
+            }
+
+            let value = currentRow.value(for: column)
+            let availableWidth = max(40, tableColumn.width - 12)
+            let bounds = (value as NSString).boundingRect(
+                with: NSSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: cellFont]
+            )
+            maxTextHeight = max(maxTextHeight, ceil(bounds.height))
+        }
+
+        return max(30, maxTextHeight + padding)
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -1162,20 +1237,137 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         } else {
             cellView = NSTableCellView(frame: .zero)
             cellView.identifier = viewID
-            let label = NSTextField(labelWithString: "")
-            label.translatesAutoresizingMaskIntoConstraints = false
-            label.lineBreakMode = .byTruncatingTail
-            cellView.textField = label
-            cellView.addSubview(label)
+
+            let textField = NSTextField(frame: .zero)
+            textField.translatesAutoresizingMaskIntoConstraints = false
+            textField.isEditable = false
+            textField.isSelectable = true
+            textField.isBordered = false
+            textField.drawsBackground = false
+            textField.usesSingleLineMode = false
+            textField.maximumNumberOfLines = 0
+            textField.lineBreakMode = .byWordWrapping
+            textField.font = cellFont
+            cellView.textField = textField
+            cellView.addSubview(textField)
+
             NSLayoutConstraint.activate([
-                label.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 6),
-                label.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -6),
-                label.centerYAnchor.constraint(equalTo: cellView.centerYAnchor)
+                textField.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 6),
+                textField.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -6),
+                textField.topAnchor.constraint(equalTo: cellView.topAnchor, constant: 4),
+                textField.bottomAnchor.constraint(equalTo: cellView.bottomAnchor, constant: -4)
             ])
         }
 
         cellView.textField?.stringValue = text
         cellView.textField?.toolTip = text
         return cellView
+    }
+
+    @objc private func copyCellAction() {
+        _ = copySelectedCellToPasteboard()
+    }
+
+    @objc private func exportCSVClicked() {
+        let panel = NSSavePanel()
+        panel.title = "Export History CSV"
+        panel.message = "Choose where to save the history export."
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "ghostedit-history-\(fileTimestampFormatter.string(from: Date())).csv"
+
+        guard panel.runModal() == .OK, let chosenURL = panel.url else {
+            return
+        }
+
+        let exportURL: URL
+        if chosenURL.pathExtension.lowercased() == "csv" {
+            exportURL = chosenURL
+        } else {
+            exportURL = chosenURL.appendingPathExtension("csv")
+        }
+
+        let csv = HistoryCSVExporter.csv(
+            entries: entries,
+            timestampFormatter: { self.timestampFormatter.string(from: $0) }
+        )
+
+        do {
+            try csv.write(to: exportURL, atomically: true, encoding: .utf8)
+        } catch {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Export failed"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
+    }
+
+    @objc private func tableColumnDidResize(_ notification: Notification) {
+        refreshRowHeights()
+    }
+
+    private func refreshRowHeights() {
+        guard !rows.isEmpty else {
+            return
+        }
+
+        let indexes = IndexSet(integersIn: 0..<rows.count)
+        tableView.noteHeightOfRows(withIndexesChanged: indexes)
+    }
+
+    @discardableResult
+    private func copySelectedCellToPasteboard() -> Bool {
+        guard
+            let (rowIndex, column) = selectedCellLocation(),
+            rows.indices.contains(rowIndex)
+        else {
+            NSSound.beep()
+            return false
+        }
+
+        let value = rows[rowIndex].value(for: column)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(value, forType: .string)
+        return true
+    }
+
+    private func selectedCellLocation() -> (Int, HistoryTableColumn)? {
+        let rowCandidates = [tableView.clickedRow, tableView.activeRow, tableView.selectedRow]
+        guard let rowIndex = rowCandidates.first(where: { rows.indices.contains($0) }) else {
+            return nil
+        }
+
+        let columnCandidates = [tableView.clickedColumn, tableView.activeColumn]
+        for columnIndex in columnCandidates where tableView.tableColumns.indices.contains(columnIndex) {
+            let identifier = tableView.tableColumns[columnIndex].identifier.rawValue
+            if let mapped = HistoryTableColumn(rawValue: identifier) {
+                return (rowIndex, mapped)
+            }
+        }
+
+        return (rowIndex, .generated)
+    }
+}
+
+private final class HistoryCopyTableView: NSTableView {
+    var activeRow: Int = -1
+    var activeColumn: Int = -1
+    var copyHandler: (() -> Bool)?
+
+    override func mouseDown(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+        activeRow = row(at: location)
+        activeColumn = column(at: location)
+        super.mouseDown(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        let characters = event.charactersIgnoringModifiers?.lowercased()
+        if event.modifierFlags.contains(.command), characters == "c", copyHandler?() == true {
+            return
+        }
+        super.keyDown(with: event)
     }
 }
