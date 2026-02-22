@@ -91,7 +91,7 @@ struct AppConfig: Codable {
         geminiPath: "",
         provider: CLIProvider.default.rawValue,
         model: "haiku",
-        timeoutSeconds: 30,
+        timeoutSeconds: 60,
         hotkeyKeyCode: 14,
         hotkeyModifiers: 256,
         launchAtLogin: false,

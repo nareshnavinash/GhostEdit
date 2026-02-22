@@ -907,6 +907,7 @@ final class SettingsWindowController: NSWindowController {
         action: nil
     )
     private let historyLimitField = NSTextField(string: "")
+    private let timeoutField = NSTextField(string: "")
     private let hintLabel = NSTextField(labelWithString: "")
     private let rootStack = NSStackView()
 
@@ -965,7 +966,7 @@ final class SettingsWindowController: NSWindowController {
             rootStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -20)
         ])
 
-        let subtitle = NSTextField(labelWithString: "Choose provider/model, hotkey, and how many past corrections to keep.")
+        let subtitle = NSTextField(labelWithString: "Choose provider/model, hotkey, timeout, and how many past corrections to keep.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.lineBreakMode = .byWordWrapping
         subtitle.maximumNumberOfLines = 2
@@ -1041,6 +1042,12 @@ final class SettingsWindowController: NSWindowController {
         let historyLimitRow = makeRow(label: historyLimitLabel, field: historyLimitField)
         rootStack.addArrangedSubview(historyLimitRow)
 
+        let timeoutLabel = makeFieldLabel("Timeout")
+        timeoutField.placeholderString = "60"
+        timeoutField.alignment = .left
+        let timeoutRow = makeRow(label: timeoutLabel, field: timeoutField)
+        rootStack.addArrangedSubview(timeoutRow)
+
         hintLabel.textColor = .secondaryLabelColor
         hintLabel.maximumNumberOfLines = 3
         hintLabel.lineBreakMode = .byWordWrapping
@@ -1093,6 +1100,7 @@ final class SettingsWindowController: NSWindowController {
         providerPopup.selectItem(at: providerIndex)
         launchAtLoginCheckbox.state = config.launchAtLogin ? .on : .off
         historyLimitField.stringValue = "\(config.historyLimit)"
+        timeoutField.stringValue = "\(config.timeoutSeconds)"
         loadHotkeyValues(from: config)
 
         let rawModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1237,6 +1245,7 @@ final class SettingsWindowController: NSWindowController {
         let provider = selectedProvider()
         let model = selectedModel()
         let historyLimitText = historyLimitField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let timeoutText = timeoutField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let hotkeyKeyCode = selectedHotkeyKeyCode() else {
             NSSound.beep()
             let alert = NSAlert()
@@ -1274,6 +1283,15 @@ final class SettingsWindowController: NSWindowController {
             alert.runModal()
             return
         }
+        guard let timeoutSeconds = Int(timeoutText), timeoutSeconds >= 5 else {
+            NSSound.beep()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Timeout is invalid"
+            alert.informativeText = "Enter a whole number of at least 5 for Timeout (seconds)."
+            alert.runModal()
+            return
+        }
 
         var config = configManager.loadConfig()
         config.provider = provider.rawValue
@@ -1282,6 +1300,7 @@ final class SettingsWindowController: NSWindowController {
         config.hotkeyModifiers = hotkeyModifiers
         config.launchAtLogin = (launchAtLoginCheckbox.state == .on)
         config.historyLimit = historyLimit
+        config.timeoutSeconds = timeoutSeconds
 
         do {
             try configManager.saveConfig(config)
