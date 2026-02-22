@@ -3,6 +3,7 @@ export const colors = {
   ghostWhiteSubtle: "#D8D8E0",
   darkBg: "#1A1A2E",
   darkBgDeep: "#0F0F1A",
+  gLetter: "#3D3D58",
   processingAccent: "#7C7CFF",
   processingGlow: "#7C7CFF66",
   eyes: "#2D2D3A",

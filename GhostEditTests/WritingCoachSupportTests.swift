@@ -35,6 +35,53 @@ final class WritingCoachSupportTests: XCTestCase {
         )
     }
 
+    func testParseInsightsParsesJSONInsideMarkdownFence() {
+        let response = """
+        ```json
+        {"positives":["Clear structure"],"improvements":["Use shorter sentences"]}
+        ```
+        """
+
+        let parsed = WritingCoachSupport.parseInsights(from: response)
+        XCTAssertEqual(
+            parsed,
+            WritingCoachInsights(
+                positives: ["Clear structure"],
+                improvements: ["Use shorter sentences"]
+            )
+        )
+    }
+
+    func testParseInsightsParsesInlineMarkdownFenceWithoutNewline() {
+        let response = "```{\"positives\":[\"Strong clarity\"],\"improvements\":[\"Add concrete examples\"]}```"
+
+        let parsed = WritingCoachSupport.parseInsights(from: response)
+        XCTAssertEqual(
+            parsed,
+            WritingCoachInsights(
+                positives: ["Strong clarity"],
+                improvements: ["Add concrete examples"]
+            )
+        )
+    }
+
+    func testParseInsightsParsesEmbeddedJSONObjectFromWrappedText() {
+        let response = """
+        Here are your results:
+        {"positives":["Strong intent"],"improvements":["Use calmer language"]}
+        Thanks.
+        """
+
+        let parsed = WritingCoachSupport.parseInsights(from: response)
+        XCTAssertEqual(
+            parsed,
+            WritingCoachInsights(
+                positives: ["Strong intent"],
+                improvements: ["Use calmer language"]
+            )
+        )
+    }
+
     func testParseInsightsFallsBackToBulletedSections() {
         let response = """
         Positives
@@ -76,6 +123,8 @@ final class WritingCoachSupportTests: XCTestCase {
         XCTAssertNil(WritingCoachSupport.parseInsights(from: ""))
         XCTAssertNil(WritingCoachSupport.parseInsights(from: "Random paragraph without bullet structure"))
         XCTAssertNil(WritingCoachSupport.parseInsights(from: "{\"positives\":[],\"improvements\":[]}"))
+        XCTAssertNil(WritingCoachSupport.parseInsights(from: "```"))
+        XCTAssertNil(WritingCoachSupport.parseInsights(from: "```\n```"))
     }
 
     func testParseInsightsIgnoresInvalidNumberedMarkers() {

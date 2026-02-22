@@ -79,16 +79,83 @@ enum WritingCoachSupport {
     }
 
     private static func parseJSONPayload(from text: String) -> WritingCoachInsights? {
-        let data = Data(text.utf8)
+        for candidate in jsonCandidates(from: text) {
+            let data = Data(candidate.utf8)
+            guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+                continue
+            }
 
-        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            return WritingCoachInsights(
+                positives: normalize(payload.positives),
+                improvements: normalize(payload.improvements)
+            )
+        }
+
+        return nil
+    }
+
+    private static func jsonCandidates(from text: String) -> [String] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var candidates: [String] = [trimmed]
+
+        if let unfenced = stripMarkdownCodeFence(from: trimmed) {
+            candidates.append(unfenced)
+            if let embedded = extractJSONObject(from: unfenced) {
+                candidates.append(embedded)
+            }
+        }
+
+        if let embedded = extractJSONObject(from: trimmed) {
+            candidates.append(embedded)
+        }
+
+        var deduped: [String] = []
+        for candidate in candidates {
+            let normalized = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            if normalized.isEmpty || deduped.contains(normalized) {
+                continue
+            }
+            deduped.append(normalized)
+        }
+        return deduped
+    }
+
+    private static func stripMarkdownCodeFence(from text: String) -> String? {
+        guard text.hasPrefix("```"), text.hasSuffix("```") else {
             return nil
         }
 
-        return WritingCoachInsights(
-            positives: normalize(payload.positives),
-            improvements: normalize(payload.improvements)
-        )
+        guard let closingFence = text.range(of: "```", options: .backwards), closingFence.lowerBound != text.startIndex else {
+            return nil
+        }
+
+        let contentStart: String.Index
+        if let firstNewline = text.range(of: "\n") {
+            contentStart = firstNewline.upperBound
+        } else {
+            contentStart = text.index(text.startIndex, offsetBy: 3)
+        }
+
+        let contentEnd = closingFence.lowerBound
+        guard contentStart < contentEnd else {
+            return nil
+        }
+
+        let content = String(text[contentStart..<contentEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return content.isEmpty ? nil : content
+    }
+
+    private static func extractJSONObject(from text: String) -> String? {
+        guard
+            let firstBrace = text.firstIndex(of: "{"),
+            let lastBrace = text.lastIndex(of: "}"),
+            firstBrace <= lastBrace
+        else {
+            return nil
+        }
+
+        let object = String(text[firstBrace...lastBrace]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return object.isEmpty ? nil : object
     }
 
     private static func parseBulletSections(from text: String) -> WritingCoachInsights {

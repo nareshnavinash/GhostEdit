@@ -17,13 +17,14 @@ export const GhostIcon: React.FC<GhostIconProps> = ({
 }) => {
   const frame = useCurrentFrame();
 
-  const ghostFill = monochrome ? colors.black : colors.ghostWhite;
-  const eyeFill = monochrome ? colors.white : colors.eyes;
-  const glassesFill = monochrome ? colors.white : colors.processingAccent;
+  const gFill = monochrome ? colors.black : colors.gLetter;
+  const ghostFill = monochrome ? "none" : colors.ghostWhite;
+  const eyeFill = monochrome ? colors.black : colors.eyes;
+  const glassesFill = monochrome ? colors.black : colors.processingAccent;
 
   // Animation: gentle float
   const floatY = animate
-    ? interpolate(frame, [0, 30, 60], [-4, 4, -4], {
+    ? interpolate(frame, [0, 30, 60], [-3, 3, -3], {
         extrapolateRight: "extend",
       })
     : 0;
@@ -35,7 +36,17 @@ export const GhostIcon: React.FC<GhostIconProps> = ({
       })
     : 0.4;
 
-  // The ghost is designed in a 100x100 viewBox
+  // Design: Bold G letter with ghost as negative space inside.
+  // Layers (bottom to top):
+  //   1. Dark G circle (the ring body)
+  //   2. White ghost shape (carved out of the ring interior)
+  //   3. Dark G arm (top-right terminal, overlaps gap area)
+  //   4. Dark eyes on the ghost
+  //   5. Processing glasses (optional)
+  //
+  // Center of G ring: (50, 54), outer radius: 40
+  // Ghost wisp extends above the ring (to ~y=6)
+
   return (
     <svg
       width={size}
@@ -44,41 +55,55 @@ export const GhostIcon: React.FC<GhostIconProps> = ({
       xmlns="http://www.w3.org/2000/svg"
     >
       <g transform={`translate(0, ${floatY})`}>
-        {/* Ghost body: semicircle top + rect + wavy bottom */}
+        {/* 1. Dark G circle — full ring body */}
+        <circle cx="50" cy="54" r="40" fill={gFill} />
+
+        {/* 2. Ghost — white shape inside the ring + wisp above */}
         <path
           d={[
-            // Start at bottom-left
-            "M 20 85",
-            // Wavy bottom: 3 tails
-            "Q 27 75, 33 85",
-            "Q 40 95, 50 85",
-            "Q 57 75, 67 85",
-            "Q 73 95, 80 85",
-            // Right side up
-            "L 80 45",
-            // Semicircle top (arc from right to left)
-            "A 30 30 0 0 0 20 45",
-            // Close
+            // Start at right inner wall, mid-height
+            "M 70 56",
+            // Wavy ghost bottom (right to left, 3 waves)
+            "Q 62 46, 54 56",
+            "Q 46 66, 38 56",
+            "Q 30 46, 22 56",
+            // Up the left inner wall
+            "C 18 38, 22 22, 34 14",
+            // Ghost dome curves up toward wisp
+            "C 42 8, 52 4, 58 6",
+            // Wisp — pointed tip extending above the G circle
+            "C 66 8, 72 14, 72 22",
+            // Down the right inner wall back to start
+            "C 72 34, 72 46, 70 56",
             "Z",
           ].join(" ")}
           fill={ghostFill}
         />
 
-        {/* Left eye */}
-        <ellipse cx="38" cy="48" rx="5" ry="6" fill={eyeFill} />
+        {/* 3. Dark G arm — top-right terminal */}
+        <path
+          d={[
+            "M 70 20",
+            "C 76 8, 92 10, 90 22",
+            "C 88 30, 80 28, 76 22",
+            "Z",
+          ].join(" ")}
+          fill={gFill}
+        />
 
-        {/* Right eye */}
-        <ellipse cx="62" cy="48" rx="5" ry="6" fill={eyeFill} />
+        {/* 4. Eyes */}
+        <ellipse cx="40" cy="36" rx="5" ry="7" fill={eyeFill} />
+        <ellipse cx="58" cy="36" rx="5" ry="7" fill={eyeFill} />
 
-        {/* Processing state: nerd glasses */}
+        {/* 5. Processing state: nerd glasses */}
         {state === "processing" && (
           <>
-            {/* Glasses glow (animated) */}
+            {/* Glow pulse (animated only) */}
             {animate && (
               <>
                 <circle
-                  cx="38"
-                  cy="48"
+                  cx="40"
+                  cy="36"
                   r="12"
                   fill="none"
                   stroke={colors.processingAccent}
@@ -86,8 +111,8 @@ export const GhostIcon: React.FC<GhostIconProps> = ({
                   opacity={glowOpacity}
                 />
                 <circle
-                  cx="62"
-                  cy="48"
+                  cx="58"
+                  cy="36"
                   r="12"
                   fill="none"
                   stroke={colors.processingAccent}
@@ -97,20 +122,20 @@ export const GhostIcon: React.FC<GhostIconProps> = ({
               </>
             )}
 
-            {/* Left lens frame */}
+            {/* Left lens */}
             <circle
-              cx="38"
-              cy="48"
+              cx="40"
+              cy="36"
               r="10"
               fill="none"
               stroke={glassesFill}
               strokeWidth="2.5"
             />
 
-            {/* Right lens frame */}
+            {/* Right lens */}
             <circle
-              cx="62"
-              cy="48"
+              cx="58"
+              cy="36"
               r="10"
               fill="none"
               stroke={glassesFill}
@@ -119,10 +144,10 @@ export const GhostIcon: React.FC<GhostIconProps> = ({
 
             {/* Bridge */}
             <line
-              x1="48"
-              y1="46"
-              x2="52"
-              y2="46"
+              x1="50"
+              y1="34"
+              x2="48"
+              y2="34"
               stroke={glassesFill}
               strokeWidth="2.5"
               strokeLinecap="round"
@@ -130,10 +155,10 @@ export const GhostIcon: React.FC<GhostIconProps> = ({
 
             {/* Left arm */}
             <line
-              x1="28"
-              y1="46"
-              x2="22"
-              y2="44"
+              x1="30"
+              y1="34"
+              x2="24"
+              y2="32"
               stroke={glassesFill}
               strokeWidth="2"
               strokeLinecap="round"
@@ -141,10 +166,10 @@ export const GhostIcon: React.FC<GhostIconProps> = ({
 
             {/* Right arm */}
             <line
-              x1="72"
-              y1="46"
-              x2="78"
-              y2="44"
+              x1="68"
+              y1="34"
+              x2="74"
+              y2="32"
               stroke={glassesFill}
               strokeWidth="2"
               strokeLinecap="round"

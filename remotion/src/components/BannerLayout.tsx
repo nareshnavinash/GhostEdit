@@ -1,7 +1,10 @@
 import React from "react";
 import { AbsoluteFill } from "remotion";
+import { loadFont } from "@remotion/google-fonts/Creepster";
 import { colors, fonts, brand } from "../design/tokens";
 import { GhostIcon } from "./GhostIcon";
+
+const { fontFamily: ghostFont } = loadFont();
 
 type BannerLayoutProps = {
   width: number;
@@ -14,8 +17,8 @@ export const BannerLayout: React.FC<BannerLayoutProps> = ({
 }) => {
   const isWide = width / height > 2;
   const iconSize = Math.min(height * 0.6, width * 0.2);
-  const headingSize = Math.max(height * 0.12, 24);
-  const taglineSize = Math.max(height * 0.06, 14);
+  const headingSize = Math.max(height * 0.14, 28);
+  const taglineSize = Math.max(height * 0.055, 14);
 
   return (
     <AbsoluteFill
@@ -34,16 +37,16 @@ export const BannerLayout: React.FC<BannerLayoutProps> = ({
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: height * 0.03,
+          gap: height * 0.04,
         }}
       >
         <div
           style={{
-            fontFamily: fonts.heading,
+            fontFamily: ghostFont,
             fontSize: headingSize,
-            fontWeight: 700,
+            fontWeight: 400,
             color: colors.ghostWhite,
-            letterSpacing: "-0.02em",
+            letterSpacing: "0.04em",
           }}
         >
           {brand.name}
@@ -54,7 +57,7 @@ export const BannerLayout: React.FC<BannerLayoutProps> = ({
             fontSize: taglineSize,
             fontWeight: 400,
             color: colors.ghostWhiteSubtle,
-            letterSpacing: "0.01em",
+            letterSpacing: "0.02em",
           }}
         >
           {brand.tagline}
