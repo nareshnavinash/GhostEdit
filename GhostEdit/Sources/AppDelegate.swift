@@ -370,8 +370,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             prompt = try configManager.loadPrompt()
         } catch {
+            let message = "Could not read prompt file.\n\n\(error.localizedDescription)"
             restoreClipboardSnapshot(after: 0)
-            notifyFailure(body: "Correction Failed. Could not read prompt file.")
+            notifyFailure(body: "Correction Failed. \(message)")
+            showFailureAlert(title: "Correction Failed", message: message)
             setStatus("Failed to read prompt file")
             finishProcessing()
             return
@@ -407,7 +409,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
                         if !pasted {
                             NSSound.beep()
-                            self.notifyFailure(body: "Correction Failed. Could not paste corrected text.")
+                            let message = "Could not paste corrected text.\n\nMake sure your cursor is in the target field, then run GhostEdit again."
+                            self.notifyFailure(body: "Correction Failed. \(message)")
+                            self.showFailureAlert(title: "Correction Failed", message: message)
                             self.setStatus("Paste failed")
                         } else {
                             let time = self.timeFormatter.string(from: Date())
@@ -471,6 +475,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         setStatus("Correction failed")
         notifyFailure(body: "Correction Failed. \(message)")
+        showFailureAlert(title: "Correction Failed", message: message)
     }
 
     private func startProcessingIndicator() {
@@ -782,6 +787,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         setStatus("Writing coach failed")
         notifyFailure(body: "Writing Coach Failed. \(message)")
+        showFailureAlert(title: "Writing Coach Failed", message: message)
+    }
+
+    private func showFailureAlert(title: String, message: String) {
+        let present: () -> Void = {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = title
+            alert.informativeText = message
+            alert.addButton(withTitle: "OK")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+
+        if Thread.isMainThread {
+            present()
+        } else {
+            DispatchQueue.main.async(execute: present)
+        }
     }
 
     private func refreshHistoryWindowIfVisible() {
