@@ -1,9 +1,14 @@
 import Foundation
 
 enum ClaudeRuntimeSupport {
-    static func claudeSearchPaths(homeDirectoryPath: String, environment: [String: String]) -> [String] {
+    static func cliSearchPaths(
+        provider: CLIProvider,
+        homeDirectoryPath: String,
+        environment: [String: String]
+    ) -> [String] {
         var paths: [String] = []
         var seen = Set<String>()
+        let executableName = provider.executableName
 
         func appendUnique(_ path: String) {
             guard !path.isEmpty else { return }
@@ -15,15 +20,15 @@ enum ClaudeRuntimeSupport {
             paths.append(expanded)
         }
 
-        appendUnique("\(homeDirectoryPath)/.local/bin/claude")
-        appendUnique("/opt/homebrew/bin/claude")
-        appendUnique("/usr/local/bin/claude")
-        appendUnique("/usr/bin/claude")
-        appendUnique("\(homeDirectoryPath)/bin/claude")
+        appendUnique("\(homeDirectoryPath)/.local/bin/\(executableName)")
+        appendUnique("/opt/homebrew/bin/\(executableName)")
+        appendUnique("/usr/local/bin/\(executableName)")
+        appendUnique("/usr/bin/\(executableName)")
+        appendUnique("\(homeDirectoryPath)/bin/\(executableName)")
 
         if let envPath = environment["PATH"] {
             for directory in envPath.split(separator: ":") {
-                appendUnique("\(directory)/claude")
+                appendUnique("\(directory)/\(executableName)")
             }
         }
 
@@ -58,6 +63,7 @@ enum ClaudeRuntimeSupport {
     }
 
     static func classifyProcessFailure(
+        provider: CLIProvider,
         exitCode: Int32,
         stdout: String,
         stderr: String
@@ -67,11 +73,13 @@ enum ClaudeRuntimeSupport {
             || normalized.contains("authentication_error")
             || normalized.contains("token has expired")
             || normalized.contains("oauth token")
-            || normalized.contains("claude auth login")
+            || normalized.contains("\(provider.executableName) login")
+            || normalized.contains("\(provider.executableName) auth login")
             || normalized.contains("api error: 401")
             || normalized.contains("unauthorized")
+            || normalized.contains("invalid credentials")
         {
-            return .authenticationRequired
+            return .authenticationRequired(provider: provider)
         }
 
         let preferredDetails = stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -80,21 +88,54 @@ enum ClaudeRuntimeSupport {
         return .processFailed(exitCode: exitCode, stderr: preferredDetails)
     }
 
-    static func claudeArguments(prompt: String, model: String) -> [String] {
-        var args = [
-            "-p",
-            prompt,
-            "--setting-sources",
-            "user",
-            "--tools",
-            ""
-        ]
-
+    static func cliArguments(provider: CLIProvider, prompt: String, model: String) -> [String] {
         let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedModel.isEmpty {
-            args.append(contentsOf: ["--model", trimmedModel])
-        }
 
-        return args
+        switch provider {
+        case .claude:
+            var args = [
+                "-p",
+                prompt,
+                "--setting-sources",
+                "user",
+                "--tools",
+                ""
+            ]
+            if !trimmedModel.isEmpty {
+                args.append(contentsOf: ["--model", trimmedModel])
+            }
+            return args
+        case .codex:
+            var args = [
+                "exec",
+                "--skip-git-repo-check",
+                "--sandbox",
+                "read-only"
+            ]
+            if !trimmedModel.isEmpty {
+                args.append(contentsOf: ["--model", trimmedModel])
+            }
+            args.append(prompt)
+            return args
+        case .gemini:
+            var args = [
+                "--prompt",
+                prompt,
+                "--output-format",
+                "text"
+            ]
+            if !trimmedModel.isEmpty {
+                args.append(contentsOf: ["--model", trimmedModel])
+            }
+            return args
+        }
+    }
+
+    static func claudeSearchPaths(homeDirectoryPath: String, environment: [String: String]) -> [String] {
+        cliSearchPaths(provider: .claude, homeDirectoryPath: homeDirectoryPath, environment: environment)
+    }
+
+    static func claudeArguments(prompt: String, model: String) -> [String] {
+        cliArguments(provider: .claude, prompt: prompt, model: model)
     }
 }

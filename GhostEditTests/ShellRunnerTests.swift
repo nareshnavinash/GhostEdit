@@ -13,7 +13,7 @@ final class ShellRunnerTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    func testCorrectTextPassesExpectedArgumentsAndWorkingDirectory() throws {
+    func testCorrectTextPassesExpectedArgumentsAndWorkingDirectoryForClaude() throws {
         let testEnv = try makeRunnerEnvironment()
         let argsLog = testEnv.homeURL.appendingPathComponent("args.log")
         let pwdLog = testEnv.homeURL.appendingPathComponent("pwd.log")
@@ -26,7 +26,9 @@ final class ShellRunnerTests: XCTestCase {
         """
 
         let executable = try makeExecutableScript(named: "claude-ok.sh", contents: script, homeURL: testEnv.homeURL)
-        try testEnv.manager.saveConfig(AppConfig.default.withClaudePath(executable.path))
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
 
         let output = try testEnv.runner.correctText(
             systemPrompt: "Fix grammar",
@@ -36,9 +38,7 @@ final class ShellRunnerTests: XCTestCase {
         XCTAssertEqual(output, "corrected text")
 
         let argsData = try Data(contentsOf: argsLog)
-        let args = argsData
-            .split(separator: 0, omittingEmptySubsequences: false)
-            .map { String(decoding: $0, as: UTF8.self) }
+        let args = decodeNullSeparatedArguments(from: argsData)
         XCTAssertEqual(args[0], "-p")
         XCTAssertEqual(args[1], "Fix grammar\n\nthis are wrong")
         XCTAssertEqual(args[2], "--setting-sources")
@@ -56,6 +56,67 @@ final class ShellRunnerTests: XCTestCase {
         )
     }
 
+    func testCorrectTextPassesExpectedArgumentsForCodex() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let argsLog = testEnv.homeURL.appendingPathComponent("codex-args.log")
+
+        let script = """
+        #!/bin/zsh
+        printf '%s\\0' "$@" > '\(argsLog.path)'
+        print -r -- "codex corrected"
+        """
+
+        let executable = try makeExecutableScript(named: "codex-ok.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.codex, executablePath: executable.path, model: "gpt-5-codex")
+        )
+
+        let output = try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
+        XCTAssertEqual(output, "codex corrected")
+
+        let argsData = try Data(contentsOf: argsLog)
+        let args = decodeNullSeparatedArguments(from: argsData)
+        XCTAssertEqual(args, [
+            "exec",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "read-only",
+            "--model",
+            "gpt-5-codex",
+            "p\n\nx"
+        ])
+    }
+
+    func testCorrectTextPassesExpectedArgumentsForGemini() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let argsLog = testEnv.homeURL.appendingPathComponent("gemini-args.log")
+
+        let script = """
+        #!/bin/zsh
+        printf '%s\\0' "$@" > '\(argsLog.path)'
+        print -r -- "gemini corrected"
+        """
+
+        let executable = try makeExecutableScript(named: "gemini-ok.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.gemini, executablePath: executable.path, model: "gemini-2.5-flash")
+        )
+
+        let output = try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
+        XCTAssertEqual(output, "gemini corrected")
+
+        let argsData = try Data(contentsOf: argsLog)
+        let args = decodeNullSeparatedArguments(from: argsData)
+        XCTAssertEqual(args, [
+            "--prompt",
+            "p\n\nx",
+            "--output-format",
+            "text",
+            "--model",
+            "gemini-2.5-flash"
+        ])
+    }
+
     func testCorrectTextClassifiesAuthenticationErrorFromStdout() throws {
         let testEnv = try makeRunnerEnvironment()
         let script = """
@@ -64,15 +125,18 @@ final class ShellRunnerTests: XCTestCase {
         exit 1
         """
 
-        let executable = try makeExecutableScript(named: "claude-auth-stdout.sh", contents: script, homeURL: testEnv.homeURL)
-        try testEnv.manager.saveConfig(AppConfig.default.withClaudePath(executable.path))
+        let executable = try makeExecutableScript(named: "cli-auth-stdout.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path)
+        )
 
         XCTAssertThrowsError(
             try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
         ) { error in
-            guard case ShellRunnerError.authenticationRequired = error else {
+            guard case let ShellRunnerError.authenticationRequired(provider) = error else {
                 return XCTFail("Expected authenticationRequired, got: \(error)")
             }
+            XCTAssertEqual(provider, .claude)
         }
     }
 
@@ -80,19 +144,22 @@ final class ShellRunnerTests: XCTestCase {
         let testEnv = try makeRunnerEnvironment()
         let script = """
         #!/bin/zsh
-        print -r -- 'unauthorized request' >&2
+        print -r -- 'please run codex login' >&2
         exit 1
         """
 
-        let executable = try makeExecutableScript(named: "claude-auth-stderr.sh", contents: script, homeURL: testEnv.homeURL)
-        try testEnv.manager.saveConfig(AppConfig.default.withClaudePath(executable.path))
+        let executable = try makeExecutableScript(named: "cli-auth-stderr.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.codex, executablePath: executable.path)
+        )
 
         XCTAssertThrowsError(
             try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
         ) { error in
-            guard case ShellRunnerError.authenticationRequired = error else {
+            guard case let ShellRunnerError.authenticationRequired(provider) = error else {
                 return XCTFail("Expected authenticationRequired, got: \(error)")
             }
+            XCTAssertEqual(provider, .codex)
         }
     }
 
@@ -116,15 +183,10 @@ final class ShellRunnerTests: XCTestCase {
         print -r -- "fallback ok"
         """
 
-        let executable = try makeExecutableScript(named: "claude-fallback.sh", contents: script, homeURL: testEnv.homeURL)
-        let customConfig = AppConfig(
-            claudePath: executable.path,
-            model: "custom-model",
-            timeoutSeconds: 30,
-            hotkeyKeyCode: 14,
-            hotkeyModifiers: 256
+        let executable = try makeExecutableScript(named: "cli-fallback.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "custom-model")
         )
-        try testEnv.manager.saveConfig(customConfig)
 
         let output = try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
         XCTAssertEqual(output, "fallback ok")
@@ -143,8 +205,10 @@ final class ShellRunnerTests: XCTestCase {
         exit 2
         """
 
-        let executable = try makeExecutableScript(named: "claude-failure-stdout.sh", contents: script, homeURL: testEnv.homeURL)
-        try testEnv.manager.saveConfig(AppConfig.default.withClaudePath(executable.path))
+        let executable = try makeExecutableScript(named: "cli-failure-stdout.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.gemini, executablePath: executable.path)
+        )
 
         XCTAssertThrowsError(
             try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
@@ -157,7 +221,7 @@ final class ShellRunnerTests: XCTestCase {
         }
     }
 
-    func testCorrectTextThrowsEmptyResponseWhenClaudeReturnsWhitespace() throws {
+    func testCorrectTextThrowsEmptyResponseWhenCLIReturnsWhitespace() throws {
         let testEnv = try makeRunnerEnvironment()
         let script = """
         #!/bin/zsh
@@ -165,8 +229,10 @@ final class ShellRunnerTests: XCTestCase {
         exit 0
         """
 
-        let executable = try makeExecutableScript(named: "claude-empty.sh", contents: script, homeURL: testEnv.homeURL)
-        try testEnv.manager.saveConfig(AppConfig.default.withClaudePath(executable.path))
+        let executable = try makeExecutableScript(named: "cli-empty.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.codex, executablePath: executable.path, model: "")
+        )
 
         XCTAssertThrowsError(
             try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
@@ -177,9 +243,9 @@ final class ShellRunnerTests: XCTestCase {
         }
     }
 
-    func testResolveClaudePathSearchesAndCachesDiscoveredPath() throws {
+    func testResolveCLIPathSearchesAndCachesDiscoveredPath() throws {
         let (homeURL, manager, _) = try makeRunnerEnvironment()
-        let discoveredPath = "\(homeURL.path)/.local/bin/claude"
+        let discoveredPath = "\(homeURL.path)/.local/bin/codex"
         let fileManager = StubExecutableFileManager(executablePaths: [discoveredPath])
         let runner = ShellRunner(
             configManager: manager,
@@ -188,17 +254,31 @@ final class ShellRunnerTests: XCTestCase {
             homeDirectoryPath: homeURL.path
         )
 
-        let first = try runner.resolveClaudePath(preferredPath: "/definitely/missing/claude")
+        let first = try runner.resolveCLIPath(provider: .codex, preferredPath: "/definitely/missing/codex")
         XCTAssertEqual(first, discoveredPath)
         let firstCallCount = fileManager.callCount
 
-        let second = try runner.resolveClaudePath(preferredPath: nil)
+        let second = try runner.resolveCLIPath(provider: .codex, preferredPath: nil)
         XCTAssertEqual(second, discoveredPath)
         XCTAssertEqual(fileManager.callCount, firstCallCount + 1)
         XCTAssertEqual(fileManager.queriedPaths.last, discoveredPath)
     }
 
-    func testResolveClaudePathThrowsNotFoundWhenNoExecutableExists() throws {
+    func testResolveClaudePathWrapperUsesClaudeProvider() throws {
+        let (homeURL, manager, _) = try makeRunnerEnvironment()
+        let discoveredPath = "\(homeURL.path)/.local/bin/claude"
+        let fileManager = StubExecutableFileManager(executablePaths: [discoveredPath])
+        let runner = ShellRunner(
+            configManager: manager,
+            fileManager: fileManager,
+            environment: [:],
+            homeDirectoryPath: homeURL.path
+        )
+
+        XCTAssertEqual(try runner.resolveClaudePath(preferredPath: nil), discoveredPath)
+    }
+
+    func testResolveCLIPathThrowsNotFoundWhenNoExecutableExists() throws {
         let (homeURL, manager, _) = try makeRunnerEnvironment()
         let fileManager = StubExecutableFileManager(executablePaths: [])
         let runner = ShellRunner(
@@ -208,22 +288,29 @@ final class ShellRunnerTests: XCTestCase {
             homeDirectoryPath: homeURL.path
         )
 
-        XCTAssertThrowsError(try runner.resolveClaudePath(preferredPath: nil)) { error in
-            guard case ShellRunnerError.claudeNotFound = error else {
-                return XCTFail("Expected claudeNotFound, got: \(error)")
+        XCTAssertThrowsError(
+            try runner.resolveCLIPath(provider: .gemini, preferredPath: nil)
+        ) { error in
+            guard case let ShellRunnerError.cliNotFound(provider) = error else {
+                return XCTFail("Expected cliNotFound, got: \(error)")
             }
+            XCTAssertEqual(provider, .gemini)
         }
     }
 
     func testPrewarmAttemptsBackgroundPathResolution() throws {
         let (homeURL, manager, _) = try makeRunnerEnvironment()
-        let discoveredPath = "\(homeURL.path)/.local/bin/claude"
+        let discoveredPath = "\(homeURL.path)/.local/bin/gemini"
         let fileManager = StubExecutableFileManager(executablePaths: [discoveredPath])
         let runner = ShellRunner(
             configManager: manager,
             fileManager: fileManager,
             environment: [:],
             homeDirectoryPath: homeURL.path
+        )
+
+        try manager.saveConfig(
+            AppConfig.default.withProvider(.gemini, executablePath: discoveredPath, model: "")
         )
 
         runner.prewarm()
@@ -244,8 +331,10 @@ final class ShellRunnerTests: XCTestCase {
         print -r -- "won't run"
         """
 
-        let executable = try makeExecutableScript(named: "claude-launch-fail.sh", contents: script, homeURL: testEnv.homeURL)
-        try testEnv.manager.saveConfig(AppConfig.default.withClaudePath(executable.path))
+        let executable = try makeExecutableScript(named: "cli-launch-fail.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path)
+        )
 
         XCTAssertThrowsError(
             try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
@@ -257,7 +346,7 @@ final class ShellRunnerTests: XCTestCase {
         }
     }
 
-    func testCorrectTextThrowsTimedOutWhenClaudeHangs() throws {
+    func testCorrectTextThrowsTimedOutWhenCLIHangs() throws {
         let testEnv = try makeRunnerEnvironment()
         let script = """
         #!/bin/zsh
@@ -265,15 +354,15 @@ final class ShellRunnerTests: XCTestCase {
         print -r -- "too late"
         """
 
-        let executable = try makeExecutableScript(named: "claude-timeout.sh", contents: script, homeURL: testEnv.homeURL)
-        let config = AppConfig(
-            claudePath: executable.path,
-            model: "custom-model",
-            timeoutSeconds: 1,
-            hotkeyKeyCode: 14,
-            hotkeyModifiers: 256
+        let executable = try makeExecutableScript(named: "cli-timeout.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(
+                .gemini,
+                executablePath: executable.path,
+                model: "gemini-2.5-flash",
+                timeoutSeconds: 1
+            )
         )
-        try testEnv.manager.saveConfig(config)
 
         XCTAssertThrowsError(
             try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
@@ -294,8 +383,10 @@ final class ShellRunnerTests: XCTestCase {
         exit 2
         """
 
-        let executable = try makeExecutableScript(named: "claude-invalid-utf8.sh", contents: script, homeURL: testEnv.homeURL)
-        try testEnv.manager.saveConfig(AppConfig.default.withClaudePath(executable.path))
+        let executable = try makeExecutableScript(named: "cli-invalid-utf8.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.codex, executablePath: executable.path, model: "")
+        )
 
         XCTAssertThrowsError(
             try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
@@ -310,32 +401,32 @@ final class ShellRunnerTests: XCTestCase {
 
     func testShellRunnerErrorDescriptions() {
         XCTAssertEqual(
-            ShellRunnerError.claudeNotFound.errorDescription,
-            "The claude CLI could not be found. Set an absolute path in ~/.ghostedit/config.json."
+            ShellRunnerError.cliNotFound(provider: .claude).errorDescription,
+            "The claude CLI could not be found. Set an absolute path in ~/.ghostedit/config.json or switch provider in Settings."
         )
         XCTAssertEqual(
-            ShellRunnerError.authenticationRequired.errorDescription,
-            "Claude authentication has expired. Run `claude auth login` in Terminal, then try again."
+            ShellRunnerError.authenticationRequired(provider: .codex).errorDescription,
+            "Codex authentication has expired. Run `codex login` in Terminal, then try again."
         )
         XCTAssertEqual(
             ShellRunnerError.launchFailed("boom").errorDescription,
-            "Failed to start claude: boom"
+            "Failed to start CLI process: boom"
         )
         XCTAssertEqual(
             ShellRunnerError.processFailed(exitCode: 17, stderr: "details here").errorDescription,
-            "claude exited with code 17: details here"
+            "CLI exited with code 17: details here\nTry switching the model in Settings if this model is busy or unavailable."
         )
         XCTAssertEqual(
             ShellRunnerError.processFailed(exitCode: 17, stderr: "   \n  ").errorDescription,
-            "claude exited with code 17."
+            "CLI exited with code 17. Try switching the model in Settings if the selected model is busy."
         )
         XCTAssertEqual(
             ShellRunnerError.timedOut(seconds: 8).errorDescription,
-            "claude timed out after 8 seconds."
+            "CLI timed out after 8 seconds. Try switching the model in Settings if the selected model is busy."
         )
         XCTAssertEqual(
             ShellRunnerError.emptyResponse.errorDescription,
-            "claude returned an empty response."
+            "CLI returned an empty response. Try switching the model in Settings."
         )
     }
 
@@ -356,16 +447,48 @@ final class ShellRunnerTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
         return scriptURL
     }
+
+    private func decodeNullSeparatedArguments(from data: Data) -> [String] {
+        var args = data
+            .split(separator: 0, omittingEmptySubsequences: false)
+            .map { String(decoding: $0, as: UTF8.self) }
+        while args.last == "" {
+            args.removeLast()
+        }
+        return args
+    }
 }
 
 private extension AppConfig {
-    func withClaudePath(_ path: String) -> AppConfig {
-        AppConfig(
-            claudePath: path,
-            model: model,
-            timeoutSeconds: timeoutSeconds,
+    func withProvider(
+        _ provider: CLIProvider,
+        executablePath: String,
+        model: String? = nil,
+        timeoutSeconds: Int? = nil
+    ) -> AppConfig {
+        var claudePath = claudePath
+        var codexPath = codexPath
+        var geminiPath = geminiPath
+
+        switch provider {
+        case .claude:
+            claudePath = executablePath
+        case .codex:
+            codexPath = executablePath
+        case .gemini:
+            geminiPath = executablePath
+        }
+
+        return AppConfig(
+            claudePath: claudePath,
+            codexPath: codexPath,
+            geminiPath: geminiPath,
+            provider: provider.rawValue,
+            model: model ?? AppConfig.defaultModel(for: provider),
+            timeoutSeconds: timeoutSeconds ?? self.timeoutSeconds,
             hotkeyKeyCode: hotkeyKeyCode,
-            hotkeyModifiers: hotkeyModifiers
+            hotkeyModifiers: hotkeyModifiers,
+            launchAtLogin: launchAtLogin
         )
     }
 }

@@ -1,8 +1,8 @@
 import Foundation
 
 enum ShellRunnerError: LocalizedError {
-    case claudeNotFound
-    case authenticationRequired
+    case cliNotFound(provider: CLIProvider)
+    case authenticationRequired(provider: CLIProvider)
     case launchFailed(String)
     case processFailed(exitCode: Int32, stderr: String)
     case timedOut(seconds: Int)
@@ -10,21 +10,21 @@ enum ShellRunnerError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .claudeNotFound:
-            return "The claude CLI could not be found. Set an absolute path in ~/.ghostedit/config.json."
-        case .authenticationRequired:
-            return "Claude authentication has expired. Run `claude auth login` in Terminal, then try again."
+        case let .cliNotFound(provider):
+            return "The \(provider.executableName) CLI could not be found. Set an absolute path in ~/.ghostedit/config.json or switch provider in Settings."
+        case let .authenticationRequired(provider):
+            return "\(provider.displayName) authentication has expired. Run `\(provider.authCommand)` in Terminal, then try again."
         case let .launchFailed(message):
-            return "Failed to start claude: \(message)"
+            return "Failed to start CLI process: \(message)"
         case let .processFailed(exitCode, stderr):
             let details = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             return details.isEmpty
-                ? "claude exited with code \(exitCode)."
-                : "claude exited with code \(exitCode): \(details)"
+                ? "CLI exited with code \(exitCode). Try switching the model in Settings if the selected model is busy."
+                : "CLI exited with code \(exitCode): \(details)\nTry switching the model in Settings if this model is busy or unavailable."
         case let .timedOut(seconds):
-            return "claude timed out after \(seconds) seconds."
+            return "CLI timed out after \(seconds) seconds. Try switching the model in Settings if the selected model is busy."
         case .emptyResponse:
-            return "claude returned an empty response."
+            return "CLI returned an empty response. Try switching the model in Settings."
         }
     }
 }
@@ -36,7 +36,7 @@ final class ShellRunner {
     private let homeDirectoryPath: String
 
     private let discoveredPathLock = NSLock()
-    private var discoveredClaudePath: String?
+    private var discoveredCLIPaths: [CLIProvider: String] = [:]
 
     init(
         configManager: ConfigManager,
@@ -55,18 +55,27 @@ final class ShellRunner {
             guard let self else { return }
 
             let config = self.configManager.loadConfig()
-            _ = try? self.resolveClaudePath(preferredPath: config.resolvedClaudePath)
+            let provider = config.resolvedProvider
+            _ = try? self.resolveCLIPath(
+                provider: provider,
+                preferredPath: config.resolvedPath(for: provider)
+            )
         }
     }
 
     func correctText(systemPrompt: String, selectedText: String) throws -> String {
         let config = configManager.loadConfig()
-        let claudePath = try resolveClaudePath(preferredPath: config.resolvedClaudePath)
-        let model = config.resolvedModel
+        let provider = config.resolvedProvider
+        let executablePath = try resolveCLIPath(
+            provider: provider,
+            preferredPath: config.resolvedPath(for: provider)
+        )
+        let model = config.resolvedModel(for: provider)
         let input = "\(systemPrompt)\n\n\(selectedText)"
 
-        let output = try runClaude(
-            executablePath: claudePath,
+        let output = try runCLI(
+            provider: provider,
+            executablePath: executablePath,
             model: model,
             prompt: input,
             timeoutSeconds: config.timeoutSeconds
@@ -80,34 +89,39 @@ final class ShellRunner {
         return trimmed
     }
 
-    func resolveClaudePath(preferredPath: String?) throws -> String {
+    func resolveCLIPath(provider: CLIProvider, preferredPath: String?) throws -> String {
         if let preferredPath, isExecutable(preferredPath) {
             return preferredPath
         }
 
         discoveredPathLock.lock()
-        if let cached = discoveredClaudePath, isExecutable(cached) {
+        if let cached = discoveredCLIPaths[provider], isExecutable(cached) {
             discoveredPathLock.unlock()
             return cached
         }
         discoveredPathLock.unlock()
 
-        let searchPaths = ClaudeRuntimeSupport.claudeSearchPaths(
+        let searchPaths = ClaudeRuntimeSupport.cliSearchPaths(
+            provider: provider,
             homeDirectoryPath: homeDirectoryPath,
             environment: environment
         )
 
         for path in searchPaths where isExecutable(path) {
-            cacheDiscoveredPath(path)
+            cacheDiscoveredPath(path, provider: provider)
             return path
         }
 
-        throw ShellRunnerError.claudeNotFound
+        throw ShellRunnerError.cliNotFound(provider: provider)
     }
 
-    private func cacheDiscoveredPath(_ path: String) {
+    func resolveClaudePath(preferredPath: String?) throws -> String {
+        try resolveCLIPath(provider: .claude, preferredPath: preferredPath)
+    }
+
+    private func cacheDiscoveredPath(_ path: String, provider: CLIProvider) {
         discoveredPathLock.lock()
-        discoveredClaudePath = path
+        discoveredCLIPaths[provider] = path
         discoveredPathLock.unlock()
     }
 
@@ -115,7 +129,8 @@ final class ShellRunner {
         fileManager.isExecutableFile(atPath: path)
     }
 
-    private func runClaude(
+    private func runCLI(
+        provider: CLIProvider,
         executablePath: String,
         model: String,
         prompt: String,
@@ -124,7 +139,8 @@ final class ShellRunner {
         let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
-            return try runClaudeDirect(
+            return try runCLIDirect(
+                provider: provider,
                 executablePath: executablePath,
                 model: trimmedModel,
                 prompt: prompt,
@@ -133,7 +149,8 @@ final class ShellRunner {
         } catch let error as ShellRunnerError {
             // Some CLI versions reject aliases like "haiku". Retry once with default model.
             if case .processFailed = error, !trimmedModel.isEmpty {
-                return try runClaudeDirect(
+                return try runCLIDirect(
+                    provider: provider,
                     executablePath: executablePath,
                     model: "",
                     prompt: prompt,
@@ -144,7 +161,8 @@ final class ShellRunner {
         }
     }
 
-    private func runClaudeDirect(
+    private func runCLIDirect(
+        provider: CLIProvider,
         executablePath: String,
         model: String,
         prompt: String,
@@ -153,7 +171,11 @@ final class ShellRunner {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.currentDirectoryURL = configManager.baseDirectoryURL
-        process.arguments = ClaudeRuntimeSupport.claudeArguments(prompt: prompt, model: model)
+        process.arguments = ClaudeRuntimeSupport.cliArguments(
+            provider: provider,
+            prompt: prompt,
+            model: model
+        )
 
         var runtimeEnvironment = environment
         runtimeEnvironment["PATH"] = ClaudeRuntimeSupport.runtimePathValue(
@@ -192,6 +214,7 @@ final class ShellRunner {
 
         guard process.terminationStatus == 0 else {
             throw ClaudeRuntimeSupport.classifyProcessFailure(
+                provider: provider,
                 exitCode: process.terminationStatus,
                 stdout: outputText,
                 stderr: errorText

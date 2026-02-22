@@ -1,60 +1,167 @@
 import Foundation
 
+enum CLIProvider: String, Codable, CaseIterable {
+    case claude
+    case codex
+    case gemini
+
+    static let `default`: CLIProvider = .claude
+
+    var displayName: String {
+        switch self {
+        case .claude:
+            return "Claude"
+        case .codex:
+            return "Codex"
+        case .gemini:
+            return "Gemini"
+        }
+    }
+
+    var executableName: String { rawValue }
+
+    var authCommand: String {
+        switch self {
+        case .claude:
+            return "claude auth login"
+        case .codex:
+            return "codex login"
+        case .gemini:
+            return "gemini"
+        }
+    }
+
+    var configPathKey: String {
+        switch self {
+        case .claude:
+            return "claudePath"
+        case .codex:
+            return "codexPath"
+        case .gemini:
+            return "geminiPath"
+        }
+    }
+}
+
 struct AppConfig: Codable {
     var claudePath: String
+    var codexPath: String
+    var geminiPath: String
+    var provider: String
     var model: String
     var timeoutSeconds: Int
     var hotkeyKeyCode: UInt32
     var hotkeyModifiers: UInt32
+    var launchAtLogin: Bool
 
     static let `default` = AppConfig(
         claudePath: "",
+        codexPath: "",
+        geminiPath: "",
+        provider: CLIProvider.default.rawValue,
         model: "haiku",
         timeoutSeconds: 30,
         hotkeyKeyCode: 14,
-        hotkeyModifiers: 256
+        hotkeyModifiers: 256,
+        launchAtLogin: false
     )
 
     enum CodingKeys: String, CodingKey {
         case claudePath
+        case codexPath
+        case geminiPath
+        case provider
         case model
         case timeoutSeconds
         case hotkeyKeyCode
         case hotkeyModifiers
+        case launchAtLogin
     }
 
     init(
         claudePath: String,
+        codexPath: String,
+        geminiPath: String,
+        provider: String,
         model: String,
         timeoutSeconds: Int,
         hotkeyKeyCode: UInt32,
-        hotkeyModifiers: UInt32
+        hotkeyModifiers: UInt32,
+        launchAtLogin: Bool
     ) {
         self.claudePath = claudePath
+        self.codexPath = codexPath
+        self.geminiPath = geminiPath
+        self.provider = provider
         self.model = model
         self.timeoutSeconds = timeoutSeconds
         self.hotkeyKeyCode = hotkeyKeyCode
         self.hotkeyModifiers = hotkeyModifiers
+        self.launchAtLogin = launchAtLogin
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         claudePath = try container.decodeIfPresent(String.self, forKey: .claudePath) ?? ""
+        codexPath = try container.decodeIfPresent(String.self, forKey: .codexPath) ?? ""
+        geminiPath = try container.decodeIfPresent(String.self, forKey: .geminiPath) ?? ""
+        provider = try container.decodeIfPresent(String.self, forKey: .provider) ?? CLIProvider.default.rawValue
         model = try container.decodeIfPresent(String.self, forKey: .model) ?? AppConfig.default.model
         timeoutSeconds = try container.decodeIfPresent(Int.self, forKey: .timeoutSeconds) ?? AppConfig.default.timeoutSeconds
         hotkeyKeyCode = try container.decodeIfPresent(UInt32.self, forKey: .hotkeyKeyCode) ?? AppConfig.default.hotkeyKeyCode
         hotkeyModifiers = try container.decodeIfPresent(UInt32.self, forKey: .hotkeyModifiers) ?? AppConfig.default.hotkeyModifiers
+        launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? AppConfig.default.launchAtLogin
     }
 
     var resolvedClaudePath: String? {
-        let trimmed = claudePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        resolvedPath(for: .claude)
+    }
+
+    var resolvedCodexPath: String? {
+        resolvedPath(for: .codex)
+    }
+
+    var resolvedGeminiPath: String? {
+        resolvedPath(for: .gemini)
+    }
+
+    var resolvedProvider: CLIProvider {
+        let trimmed = provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return CLIProvider(rawValue: trimmed) ?? .default
+    }
+
+    func resolvedPath(for provider: CLIProvider) -> String? {
+        let value: String
+        switch provider {
+        case .claude:
+            value = claudePath
+        case .codex:
+            value = codexPath
+        case .gemini:
+            value = geminiPath
+        }
+
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    var resolvedModel: String {
+    func resolvedModel(for provider: CLIProvider? = nil) -> String {
+        let selectedProvider = provider ?? resolvedProvider
         let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? AppConfig.default.model : trimmed
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        return AppConfig.defaultModel(for: selectedProvider)
+    }
+
+    static func defaultModel(for provider: CLIProvider) -> String {
+        switch provider {
+        case .claude:
+            return "haiku"
+        case .codex, .gemini:
+            return ""
+        }
     }
 }
 
@@ -66,9 +173,10 @@ final class ConfigManager {
     let promptURL: URL
     let configURL: URL
 
-    let defaultPrompt = "Edit the following text for grammar, spelling, and punctuation. Improve clarity and flow while preserving the original meaning, message sequence, and authentic tone. Keep the final writing absolutely professional, concise, and direct. Where natural, reflect these behaviors in tone: think big, deliver user value fast, own it, raise the bar, dive deep, learn and grow, and support each other. Return ONLY the revised text with no introductory or conversational filler."
+    let defaultPrompt = "Please revise the following text by correcting grammar, spelling, and punctuation. Use polite, professional periphrasis while preserving the original meaning, intent, and message flow. Keep the tone natural to the writer. Return ONLY the revised text, with no preface or extra commentary."
     private let legacyDefaultPrompts: Set<String> = [
-        "Fix the grammar, spelling, and punctuation of the following text. Improve clarity and flow, but keep the tone authentic. Return ONLY the fixed text. Do not add introductory conversational filler."
+        "Fix the grammar, spelling, and punctuation of the following text. Improve clarity and flow, but keep the tone authentic. Return ONLY the fixed text. Do not add introductory conversational filler.",
+        "Edit the following text for grammar, spelling, and punctuation. Improve clarity and flow while preserving the original meaning, message sequence, and authentic tone. Keep the final writing absolutely professional, concise, and direct. Where natural, reflect these behaviors in tone: think big, deliver user value fast, own it, raise the bar, dive deep, learn and grow, and support each other. Return ONLY the revised text with no introductory or conversational filler."
     ]
 
     init(fileManager: FileManager = .default, homeDirectoryURL: URL? = nil) {
@@ -127,14 +235,20 @@ final class ConfigManager {
 
     private func normalize(_ config: AppConfig) -> AppConfig {
         let timeout = max(5, config.timeoutSeconds)
+        let provider = config.resolvedProvider
         let model = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedModel = model.isEmpty ? AppConfig.defaultModel(for: provider) : model
 
         return AppConfig(
             claudePath: config.claudePath,
-            model: model.isEmpty ? AppConfig.default.model : model,
+            codexPath: config.codexPath,
+            geminiPath: config.geminiPath,
+            provider: provider.rawValue,
+            model: normalizedModel,
             timeoutSeconds: timeout,
             hotkeyKeyCode: config.hotkeyKeyCode,
-            hotkeyModifiers: config.hotkeyModifiers
+            hotkeyModifiers: config.hotkeyModifiers,
+            launchAtLogin: config.launchAtLogin
         )
     }
 

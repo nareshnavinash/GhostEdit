@@ -36,7 +36,7 @@ targets:
         INFOPLIST_FILE: GhostEdit/Info.plist
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 1.1
+        MARKETING_VERSION: 1.2.0
         ENABLE_HARDENED_RUNTIME: YES
   GhostEditTests:
     type: bundle.unit-test

@@ -2,8 +2,9 @@ import XCTest
 @testable import GhostEditCore
 
 final class ClaudeRuntimeSupportTests: XCTestCase {
-    func testClaudeSearchPathsIncludesDefaultsAndDeduplicates() {
-        let paths = ClaudeRuntimeSupport.claudeSearchPaths(
+    func testCLISearchPathsIncludesDefaultsAndDeduplicates() {
+        let paths = ClaudeRuntimeSupport.cliSearchPaths(
+            provider: .claude,
             homeDirectoryPath: "/Users/example",
             environment: ["PATH": "/usr/local/bin:/custom/bin:/usr/local/bin"]
         )
@@ -16,6 +17,22 @@ final class ClaudeRuntimeSupportTests: XCTestCase {
             "/Users/example/bin/claude",
             "/custom/bin/claude"
         ])
+    }
+
+    func testCLISearchPathsUsesProviderExecutableName() {
+        let codexPaths = ClaudeRuntimeSupport.cliSearchPaths(
+            provider: .codex,
+            homeDirectoryPath: "/Users/example",
+            environment: ["PATH": "/custom/bin"]
+        )
+        let geminiPaths = ClaudeRuntimeSupport.cliSearchPaths(
+            provider: .gemini,
+            homeDirectoryPath: "/Users/example",
+            environment: ["PATH": "/custom/bin"]
+        )
+
+        XCTAssertTrue(codexPaths.contains("/custom/bin/codex"))
+        XCTAssertTrue(geminiPaths.contains("/custom/bin/gemini"))
     }
 
     func testRuntimePathValuePreservesOrderAndDeduplicates() {
@@ -38,18 +55,35 @@ final class ClaudeRuntimeSupportTests: XCTestCase {
 
     func testClassifyProcessFailureDetectsAuthenticationFromCombinedOutput() {
         let error = ClaudeRuntimeSupport.classifyProcessFailure(
+            provider: .claude,
             exitCode: 1,
             stdout: "",
             stderr: "API ERROR: 401 authentication_error: OAuth token has expired"
         )
 
-        guard case ShellRunnerError.authenticationRequired = error else {
+        guard case let ShellRunnerError.authenticationRequired(provider) = error else {
             return XCTFail("Expected authenticationRequired, got: \(error)")
         }
+        XCTAssertEqual(provider, .claude)
+    }
+
+    func testClassifyProcessFailureDetectsAuthenticationFromProviderLoginHint() {
+        let error = ClaudeRuntimeSupport.classifyProcessFailure(
+            provider: .codex,
+            exitCode: 2,
+            stdout: "please run codex login",
+            stderr: ""
+        )
+
+        guard case let ShellRunnerError.authenticationRequired(provider) = error else {
+            return XCTFail("Expected authenticationRequired, got: \(error)")
+        }
+        XCTAssertEqual(provider, .codex)
     }
 
     func testClassifyProcessFailurePrefersStderrWhenPresent() {
         let error = ClaudeRuntimeSupport.classifyProcessFailure(
+            provider: .gemini,
             exitCode: 9,
             stdout: "stdout message",
             stderr: "stderr message"
@@ -65,6 +99,7 @@ final class ClaudeRuntimeSupportTests: XCTestCase {
 
     func testClassifyProcessFailureFallsBackToStdoutWhenStderrMissing() {
         let error = ClaudeRuntimeSupport.classifyProcessFailure(
+            provider: .gemini,
             exitCode: 7,
             stdout: "stdout details",
             stderr: "\n   \n"
@@ -78,8 +113,12 @@ final class ClaudeRuntimeSupportTests: XCTestCase {
         XCTAssertEqual(stderr, "stdout details")
     }
 
-    func testClaudeArgumentsIncludesModelWhenProvided() {
-        let args = ClaudeRuntimeSupport.claudeArguments(prompt: "prompt", model: "haiku")
+    func testCLIArgumentsForClaudeIncludesModelWhenProvided() {
+        let args = ClaudeRuntimeSupport.cliArguments(
+            provider: .claude,
+            prompt: "prompt",
+            model: "haiku"
+        )
 
         XCTAssertEqual(args, [
             "-p",
@@ -93,8 +132,12 @@ final class ClaudeRuntimeSupportTests: XCTestCase {
         ])
     }
 
-    func testClaudeArgumentsOmitsModelWhenBlank() {
-        let args = ClaudeRuntimeSupport.claudeArguments(prompt: "prompt", model: "   ")
+    func testCLIArgumentsForClaudeOmitsModelWhenBlank() {
+        let args = ClaudeRuntimeSupport.cliArguments(
+            provider: .claude,
+            prompt: "prompt",
+            model: "   "
+        )
 
         XCTAssertEqual(args, [
             "-p",
@@ -103,6 +146,84 @@ final class ClaudeRuntimeSupportTests: XCTestCase {
             "user",
             "--tools",
             ""
+        ])
+    }
+
+    func testCLIArgumentsForCodex() {
+        let withModel = ClaudeRuntimeSupport.cliArguments(
+            provider: .codex,
+            prompt: "hello",
+            model: "gpt-5-codex"
+        )
+        let withoutModel = ClaudeRuntimeSupport.cliArguments(
+            provider: .codex,
+            prompt: "hello",
+            model: "   "
+        )
+
+        XCTAssertEqual(withModel, [
+            "exec",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "read-only",
+            "--model",
+            "gpt-5-codex",
+            "hello"
+        ])
+        XCTAssertEqual(withoutModel, [
+            "exec",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "read-only",
+            "hello"
+        ])
+    }
+
+    func testCLIArgumentsForGemini() {
+        let withModel = ClaudeRuntimeSupport.cliArguments(
+            provider: .gemini,
+            prompt: "hello",
+            model: "gemini-2.5-flash"
+        )
+        let withoutModel = ClaudeRuntimeSupport.cliArguments(
+            provider: .gemini,
+            prompt: "hello",
+            model: ""
+        )
+
+        XCTAssertEqual(withModel, [
+            "--prompt",
+            "hello",
+            "--output-format",
+            "text",
+            "--model",
+            "gemini-2.5-flash"
+        ])
+        XCTAssertEqual(withoutModel, [
+            "--prompt",
+            "hello",
+            "--output-format",
+            "text"
+        ])
+    }
+
+    func testClaudeWrapperFunctionsMapToGenericHelpers() {
+        let searchPaths = ClaudeRuntimeSupport.claudeSearchPaths(
+            homeDirectoryPath: "/Users/example",
+            environment: ["PATH": "/custom/bin"]
+        )
+        let args = ClaudeRuntimeSupport.claudeArguments(prompt: "p", model: "haiku")
+
+        XCTAssertTrue(searchPaths.contains("/custom/bin/claude"))
+        XCTAssertEqual(args, [
+            "-p",
+            "p",
+            "--setting-sources",
+            "user",
+            "--tools",
+            "",
+            "--model",
+            "haiku"
         ])
     }
 }

@@ -1,14 +1,16 @@
 # GhostEdit
 
-GhostEdit is a native macOS menu bar app that fixes selected text in any app using the local `claude` CLI.
+GhostEdit is a native macOS menu bar app that fixes selected text in any app using a local CLI provider.
 
 ## Features
 
 - Global hotkey (`Command + E` by default)
 - Works in background (no Dock icon)
 - Configurable prompt in `~/.ghostedit/prompt.txt`
-- Configurable Claude model in **Settings...**
-- Default model is **haiku**
+- Provider switch in **Settings...**: Claude, Codex, Gemini
+- Model switch in **Settings...** (provider-specific presets + custom model)
+- Launch at login toggle in **Settings...**
+- Busy/unavailable model guidance in notifications and settings hint
 - Menu bar state indicator:
   - `ⓖ` idle
   - `🤓` processing
@@ -49,16 +51,23 @@ Default `config.json`:
 ```json
 {
   "claudePath": "",
+  "codexPath": "",
+  "geminiPath": "",
+  "provider": "claude",
   "model": "haiku",
   "hotkeyKeyCode": 14,
   "hotkeyModifiers": 256,
-  "timeoutSeconds": 30
+  "timeoutSeconds": 30,
+  "launchAtLogin": false
 }
 ```
 
 Notes:
-- `claudePath` can be left empty if auto-discovery works.
-- If auto-discovery fails, set an absolute path (for example: `/opt/homebrew/bin/claude`).
+- `provider` controls which CLI is used.
+- `model` is shared and interpreted by the selected provider.
+- `claudePath`, `codexPath`, and `geminiPath` can be empty if auto-discovery works.
+- If auto-discovery fails, set an absolute path for that provider.
+- If a model is busy/fails, switch models in **Settings...** and retry.
 
 ## Mandatory Tests and Coverage
 
@@ -90,6 +99,14 @@ git config core.hooksPath .githooks
 GhostEdit sends `Cmd+C` and `Cmd+V` programmatically. Grant permission at:
 
 - System Settings > Privacy & Security > Accessibility
+
+## Provider Authentication
+
+If authentication expires, GhostEdit will show a prompt with the command to run:
+
+- Claude: `claude auth login`
+- Codex: `codex login`
+- Gemini: `gemini`
 
 ## Create Installable Artifacts
 

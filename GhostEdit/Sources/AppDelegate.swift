@@ -55,6 +55,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         startObservingActiveApplication()
         _ = ensureAccessibilityPermission(promptSystemDialog: true, showGuidanceAlert: false)
+        syncLaunchAtLoginPreferenceSilently()
         registerHotkey()
         setStatus("Idle")
     }
@@ -328,7 +329,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func processSelectedText(_ selectedText: String) {
         let prompt: String
-        let model = configManager.loadConfig().resolvedModel
+        let config = configManager.loadConfig()
+        let provider = config.resolvedProvider
+        let model = config.resolvedModel(for: provider)
         do {
             prompt = try configManager.loadPrompt()
         } catch {
@@ -339,7 +342,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        setStatus("Processing with claude (\(model))...")
+        let modelDisplay = model.isEmpty ? "provider default" : model
+        setStatus("Processing with \(provider.executableName) (\(modelDisplay))...")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
@@ -382,21 +386,38 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleProcessingError(_ error: Error) {
-        if case ShellRunnerError.claudeNotFound = error {
-            setStatus("claude CLI not found; update config.json")
-            notifyFailure(body: "Correction Failed. claude CLI not found.")
-            showClaudePathAlert()
+        if case let ShellRunnerError.cliNotFound(provider) = error {
+            setStatus("\(provider.executableName) CLI not found; update config.json")
+            notifyFailure(body: "Correction Failed. \(provider.displayName) CLI not found.")
+            showCLIPathAlert(provider: provider)
             return
         }
 
-        if case ShellRunnerError.authenticationRequired = error {
-            setStatus("claude auth required; run claude auth login")
-            notifyFailure(body: "Correction Failed. Claude authentication expired. Run `claude auth login` in Terminal.")
-            showClaudeAuthAlert()
+        if case let ShellRunnerError.authenticationRequired(provider) = error {
+            setStatus("\(provider.executableName) authentication required")
+            notifyFailure(body: "Correction Failed. \(provider.displayName) authentication expired. Run `\(provider.authCommand)` in Terminal.")
+            showCLIAuthAlert(provider: provider)
             return
         }
 
-        let message = error.localizedDescription
+        let shouldSuggestModelSwitch: Bool
+        if let shellError = error as? ShellRunnerError {
+            switch shellError {
+            case .processFailed, .timedOut, .emptyResponse:
+                shouldSuggestModelSwitch = true
+            default:
+                shouldSuggestModelSwitch = false
+            }
+        } else {
+            shouldSuggestModelSwitch = false
+        }
+
+        let message: String
+        if shouldSuggestModelSwitch {
+            message = "\(error.localizedDescription)\nTry switching model in Settings if the selected model is busy or unavailable."
+        } else {
+            message = error.localizedDescription
+        }
         setStatus("Correction failed")
         notifyFailure(body: "Correction Failed. \(message)")
     }
@@ -464,12 +485,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showClaudePathAlert() {
+    private func showCLIPathAlert(provider: CLIProvider) {
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "claude CLI Not Found"
-            alert.informativeText = "Set an absolute path in ~/.ghostedit/config.json (claudePath), then try again."
+            alert.messageText = "\(provider.displayName) CLI Not Found"
+            alert.informativeText = "Set an absolute path in ~/.ghostedit/config.json (\(provider.configPathKey)), or switch provider/model in Settings."
             alert.addButton(withTitle: "Open Config")
             alert.addButton(withTitle: "OK")
 
@@ -480,12 +501,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showClaudeAuthAlert() {
+    private func showCLIAuthAlert(provider: CLIProvider) {
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Claude Authentication Required"
-            alert.informativeText = "Your Claude CLI session is expired.\n\nRun this command in Terminal:\nclaude auth login\n\nThen retry GhostEdit."
+            alert.messageText = "\(provider.displayName) Authentication Required"
+            alert.informativeText = "Your \(provider.displayName) CLI session is expired.\n\nRun this command in Terminal:\n\(provider.authCommand)\n\nThen retry GhostEdit."
             alert.addButton(withTitle: "OK")
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
@@ -541,7 +562,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else {
                     return
                 }
-                self.setStatus("Settings saved (model: \(config.resolvedModel))")
+                let provider = config.resolvedProvider
+                let model = config.resolvedModel(for: provider)
+                let modelDisplay = model.isEmpty ? "provider default" : model
+                self.setStatus("Settings saved (\(provider.executableName), model: \(modelDisplay))")
             }
         }
 
@@ -571,6 +595,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func syncLaunchAtLoginPreferenceSilently() {
+        let launchAtLogin = configManager.loadConfig().launchAtLogin
+        try? LaunchAtLoginManager.setEnabled(launchAtLogin)
+    }
+
     private func showFatalAlert(title: String, message: String) {
         let alert = NSAlert()
         alert.alertStyle = .critical
@@ -590,23 +619,26 @@ final class SettingsWindowController: NSWindowController {
     private let configManager: ConfigManager
     private let onConfigSaved: (AppConfig) -> Void
 
+    private let providerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let modelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let customModelField = NSTextField(string: "")
     private let customModelContainer = NSStackView()
+    private let launchAtLoginCheckbox = NSButton(
+        checkboxWithTitle: "Start GhostEdit automatically when you log in",
+        target: nil,
+        action: nil
+    )
+    private let hintLabel = NSTextField(labelWithString: "")
 
-    private let modelOptions: [ModelOption] = [
-        ModelOption(title: "Haiku (default)", value: "haiku"),
-        ModelOption(title: "Sonnet", value: "sonnet"),
-        ModelOption(title: "Opus", value: "opus"),
-        ModelOption(title: "Custom", value: nil)
-    ]
+    private let providerOptions: [CLIProvider] = [.claude, .codex, .gemini]
+    private var modelOptions: [ModelOption] = []
 
     init(configManager: ConfigManager, onConfigSaved: @escaping (AppConfig) -> Void) {
         self.configManager = configManager
         self.onConfigSaved = onConfigSaved
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 240),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 320),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -644,23 +676,30 @@ final class SettingsWindowController: NSWindowController {
             rootStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -20)
         ])
 
-        let subtitle = NSTextField(labelWithString: "Choose the Claude model used for grammar correction.")
+        let subtitle = NSTextField(labelWithString: "Choose provider and model used for correction.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.lineBreakMode = .byWordWrapping
         subtitle.maximumNumberOfLines = 2
         rootStack.addArrangedSubview(subtitle)
 
+        let providerLabel = makeFieldLabel("Provider")
+        let providerRow = makeRow(label: providerLabel, field: providerPopup)
+        rootStack.addArrangedSubview(providerRow)
+
+        providerPopup.removeAllItems()
+        providerOptions.forEach { providerPopup.addItem(withTitle: $0.displayName) }
+        providerPopup.target = self
+        providerPopup.action = #selector(providerPopupChanged)
+
         let modelLabel = makeFieldLabel("Model")
         let modelRow = makeRow(label: modelLabel, field: modelPopup)
         rootStack.addArrangedSubview(modelRow)
 
-        modelPopup.removeAllItems()
-        modelOptions.forEach { modelPopup.addItem(withTitle: $0.title) }
         modelPopup.target = self
         modelPopup.action = #selector(modelPopupChanged)
 
         let customLabel = makeFieldLabel("Custom")
-        customModelField.placeholderString = "e.g. claude-sonnet-4-6"
+        customModelField.placeholderString = "Enter custom model name"
         customModelContainer.orientation = .horizontal
         customModelContainer.spacing = 12
         customModelContainer.alignment = .firstBaseline
@@ -668,9 +707,14 @@ final class SettingsWindowController: NSWindowController {
         customModelContainer.addArrangedSubview(customModelField)
         rootStack.addArrangedSubview(customModelContainer)
 
-        let hint = NSTextField(labelWithString: "Tip: Haiku is selected by default for speed and low cost.")
-        hint.textColor = .secondaryLabelColor
-        rootStack.addArrangedSubview(hint)
+        launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        rootStack.addArrangedSubview(launchAtLoginCheckbox)
+
+        hintLabel.textColor = .secondaryLabelColor
+        hintLabel.maximumNumberOfLines = 3
+        hintLabel.lineBreakMode = .byWordWrapping
+        hintLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        rootStack.addArrangedSubview(hintLabel)
 
         let spacer = NSView()
         spacer.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -711,21 +755,70 @@ final class SettingsWindowController: NSWindowController {
 
     private func loadCurrentValues() {
         let config = configManager.loadConfig()
-        let currentModel = config.resolvedModel
+        let provider = config.resolvedProvider
+        let providerIndex = providerOptions.firstIndex(of: provider) ?? 0
+        providerPopup.selectItem(at: providerIndex)
+        launchAtLoginCheckbox.state = config.launchAtLogin ? .on : .off
 
-        if let index = modelOptions.firstIndex(where: { $0.value == currentModel }) {
-            modelPopup.selectItem(at: index)
-            customModelField.stringValue = ""
-        } else {
-            modelPopup.selectItem(at: modelOptions.count - 1)
-            customModelField.stringValue = currentModel
-        }
+        let rawModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let selectedModel = rawModel.isEmpty ? AppConfig.defaultModel(for: provider) : rawModel
+        reloadModelOptions(for: provider, selectedModel: selectedModel)
+    }
 
-        refreshCustomFieldVisibility()
+    @objc private func providerPopupChanged() {
+        let provider = selectedProvider()
+        reloadModelOptions(for: provider, selectedModel: AppConfig.defaultModel(for: provider))
     }
 
     @objc private func modelPopupChanged() {
         refreshCustomFieldVisibility()
+    }
+
+    private func reloadModelOptions(for provider: CLIProvider, selectedModel: String) {
+        modelOptions = modelOptionsForProvider(provider)
+        modelPopup.removeAllItems()
+        modelOptions.forEach { modelPopup.addItem(withTitle: $0.title) }
+
+        if let index = modelOptions.firstIndex(where: { $0.value == selectedModel }) {
+            modelPopup.selectItem(at: index)
+            customModelField.stringValue = ""
+        } else {
+            modelPopup.selectItem(at: modelOptions.count - 1)
+            customModelField.stringValue = selectedModel
+        }
+
+        refreshCustomFieldVisibility()
+        updateHint(for: provider)
+    }
+
+    private func modelOptionsForProvider(_ provider: CLIProvider) -> [ModelOption] {
+        switch provider {
+        case .claude:
+            return [
+                ModelOption(title: "Claude default (haiku)", value: "haiku"),
+                ModelOption(title: "Sonnet", value: "sonnet"),
+                ModelOption(title: "Opus", value: "opus"),
+                ModelOption(title: "Custom", value: nil)
+            ]
+        case .codex:
+            return [
+                ModelOption(title: "Codex provider default", value: ""),
+                ModelOption(title: "gpt-5.3-codex", value: "gpt-5.3-codex"),
+                ModelOption(title: "gpt-5-codex", value: "gpt-5-codex"),
+                ModelOption(title: "Custom", value: nil)
+            ]
+        case .gemini:
+            return [
+                ModelOption(title: "Gemini provider default", value: ""),
+                ModelOption(title: "gemini-2.5-flash", value: "gemini-2.5-flash"),
+                ModelOption(title: "gemini-2.5-pro", value: "gemini-2.5-pro"),
+                ModelOption(title: "Custom", value: nil)
+            ]
+        }
+    }
+
+    private func updateHint(for provider: CLIProvider) {
+        hintLabel.stringValue = "If a \(provider.displayName) model is busy or fails, switch to another model here and try again."
     }
 
     private func refreshCustomFieldVisibility() {
@@ -745,6 +838,14 @@ final class SettingsWindowController: NSWindowController {
         return modelOptions[index].value
     }
 
+    private func selectedProvider() -> CLIProvider {
+        let index = providerPopup.indexOfSelectedItem
+        guard providerOptions.indices.contains(index) else {
+            return .default
+        }
+        return providerOptions[index]
+    }
+
     private func selectedModel() -> String {
         if let fixedValue = selectedOptionValue() {
             return fixedValue
@@ -754,8 +855,9 @@ final class SettingsWindowController: NSWindowController {
     }
 
     @objc private func saveClicked() {
+        let provider = selectedProvider()
         let model = selectedModel()
-        guard !model.isEmpty else {
+        if selectedOptionValue() == nil, model.isEmpty {
             NSSound.beep()
             let alert = NSAlert()
             alert.alertStyle = .warning
@@ -766,10 +868,21 @@ final class SettingsWindowController: NSWindowController {
         }
 
         var config = configManager.loadConfig()
+        config.provider = provider.rawValue
         config.model = model
+        config.launchAtLogin = (launchAtLoginCheckbox.state == .on)
 
         do {
             try configManager.saveConfig(config)
+            do {
+                try LaunchAtLoginManager.setEnabled(config.launchAtLogin)
+            } catch {
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "Could not update Launch at Login"
+                alert.informativeText = error.localizedDescription
+                alert.runModal()
+            }
             onConfigSaved(config)
             close()
         } catch {

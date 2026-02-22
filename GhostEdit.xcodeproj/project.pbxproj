@@ -12,6 +12,7 @@
 		28AC827911C8D4C36D0CF7EE /* PersistentShellSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6C12DF332B64F2E5870B3A /* PersistentShellSession.swift */; };
 		2FEC073EDBBA2687B680572F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02CA262A37DF28DF09D5B7E /* AppDelegate.swift */; };
 		53BBE4927545377B3648D3AA /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B0A3EBE89D97EEA6C99D23 /* ClipboardManager.swift */; };
+		5A164E9FAA1017AE15ADD622 /* LaunchAtLoginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA9C5D9A20D47E1D5A0B997E /* LaunchAtLoginManager.swift */; };
 		5F4261F9E269578EC06C99E5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 107C8005BF9B19116B7FD5BA /* main.swift */; };
 		63CA5F9E9DD8660BAF3991C1 /* ShellRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4EA327528B55DB5C2AD64D /* ShellRunner.swift */; };
 		8CB37049BD7E1673D42AEE8C /* GhostEditCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 33C90B5A383CE8E06047A674 /* GhostEditCore.framework */; };
@@ -80,6 +81,7 @@
 		BFA4DE7478749A962208C497 /* GhostEdit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GhostEdit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D02CA262A37DF28DF09D5B7E /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		D6F1EA4FA7580389D753F6E3 /* ClaudeRuntimeSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeRuntimeSupportTests.swift; sourceTree = "<group>"; };
+		EA9C5D9A20D47E1D5A0B997E /* LaunchAtLoginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginManager.swift; sourceTree = "<group>"; };
 		F479A47545C9BCF85C4025BA /* ShellRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRunnerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -119,6 +121,7 @@
 				19B0A3EBE89D97EEA6C99D23 /* ClipboardManager.swift */,
 				60A7425688D277A0486D28B0 /* ConfigManager.swift */,
 				9C996DDEE9C8B3F039E6ABBE /* HotkeyManager.swift */,
+				EA9C5D9A20D47E1D5A0B997E /* LaunchAtLoginManager.swift */,
 				107C8005BF9B19116B7FD5BA /* main.swift */,
 				BC6C12DF332B64F2E5870B3A /* PersistentShellSession.swift */,
 				2D4EA327528B55DB5C2AD64D /* ShellRunner.swift */,
@@ -263,6 +266,7 @@
 				53BBE4927545377B3648D3AA /* ClipboardManager.swift in Sources */,
 				E84DD5B8C999394B5375C717 /* ConfigManager.swift in Sources */,
 				0C90930E75E434709A91E54F /* HotkeyManager.swift in Sources */,
+				5A164E9FAA1017AE15ADD622 /* LaunchAtLoginManager.swift in Sources */,
 				28AC827911C8D4C36D0CF7EE /* PersistentShellSession.swift in Sources */,
 				63CA5F9E9DD8660BAF3991C1 /* ShellRunner.swift in Sources */,
 			);
@@ -316,7 +320,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};
@@ -356,7 +360,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};
