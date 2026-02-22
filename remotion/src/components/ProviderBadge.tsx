@@ -18,16 +18,16 @@ export const ProviderBadge: React.FC<ProviderBadgeProps> = ({
   provider,
   size = "md",
 }) => {
-  const fontSize = size === "sm" ? 12 : size === "md" ? 16 : 22;
-  const paddingH = size === "sm" ? 10 : size === "md" ? 16 : 24;
-  const paddingV = size === "sm" ? 4 : size === "md" ? 8 : 12;
+  const fontSize = size === "sm" ? 20 : size === "md" ? 28 : 38;
+  const paddingH = size === "sm" ? 16 : size === "md" ? 24 : 36;
+  const paddingV = size === "sm" ? 8 : size === "md" ? 12 : 18;
 
   return (
     <div
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 8,
+        gap: 12,
         padding: `${paddingV}px ${paddingH}px`,
         borderRadius: 999,
         backgroundColor: `${providerColors[provider]}18`,

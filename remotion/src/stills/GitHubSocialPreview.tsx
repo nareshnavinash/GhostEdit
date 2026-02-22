@@ -23,16 +23,17 @@ export const GitHubSocialPreview: React.FC = () => {
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 20,
+            gap: 16,
             flex: 1,
           }}
         >
-          <GhostLogo size={160} glowOpacity={0.3} />
+          <GhostLogo size={180} glowOpacity={0.3} />
           <div
             style={{
               ...fontStyles.title,
-              fontSize: 56,
+              fontSize: 88,
               color: colors.spiritWhite,
+              lineHeight: 1,
             }}
           >
             GhostEdit
@@ -40,14 +41,14 @@ export const GitHubSocialPreview: React.FC = () => {
           <div
             style={{
               ...fontStyles.body,
-              fontSize: 22,
+              fontSize: 34,
               color: colors.etherGray,
-              lineHeight: 1.4,
+              lineHeight: 1.3,
             }}
           >
             Native macOS menu bar app that fixes your writing with local AI.
           </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
             <ProviderBadge provider="Claude" size="sm" />
             <ProviderBadge provider="Codex" size="sm" />
             <ProviderBadge provider="Gemini" size="sm" />
@@ -59,25 +60,26 @@ export const GitHubSocialPreview: React.FC = () => {
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 14,
+            gap: 16,
           }}
         >
           {[
             "⌘E — Fix in any app",
             "🔒 Local AI providers",
-            "📝 Writing coach mode",
+            "📝 Writing coach",
             "⚡ Works everywhere",
           ].map((feature, i) => (
             <div
               key={i}
               style={{
-                padding: "12px 24px",
-                borderRadius: 10,
+                padding: "16px 28px",
+                borderRadius: 12,
                 backgroundColor: colors.phantomSlate,
                 border: `1px solid ${colors.etherGray}22`,
                 ...fontStyles.regular,
-                fontSize: 20,
+                fontSize: 32,
                 color: colors.spiritWhite,
+                whiteSpace: "nowrap",
               }}
             >
               {feature}

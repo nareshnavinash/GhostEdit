@@ -15,16 +15,17 @@ export const OpenGraphImage: React.FC = () => {
           justifyContent: "center",
           width: "100%",
           height: "100%",
-          gap: 24,
+          gap: 20,
         }}
       >
-        <GhostLogo size={200} glowOpacity={0.3} />
+        <GhostLogo size={240} glowOpacity={0.3} />
 
         <div
           style={{
             ...fontStyles.title,
-            fontSize: 72,
+            fontSize: 120,
             color: colors.spiritWhite,
+            lineHeight: 1,
           }}
         >
           GhostEdit
@@ -33,8 +34,9 @@ export const OpenGraphImage: React.FC = () => {
         <div
           style={{
             ...fontStyles.body,
-            fontSize: 28,
+            fontSize: 44,
             color: colors.etherGray,
+            lineHeight: 1.2,
           }}
         >
           Fix your writing. Sharpen your habits.
@@ -43,19 +45,19 @@ export const OpenGraphImage: React.FC = () => {
         {/* Before/After example */}
         <div
           style={{
-            marginTop: 24,
+            marginTop: 16,
             display: "flex",
             flexDirection: "column",
-            gap: 8,
-            padding: "20px 32px",
-            borderRadius: 12,
+            gap: 10,
+            padding: "24px 40px",
+            borderRadius: 14,
             backgroundColor: colors.phantomSlate,
           }}
         >
           <div
             style={{
               ...fontStyles.regular,
-              fontSize: 22,
+              fontSize: 34,
               color: colors.whisperRose,
               textDecoration: "line-through",
             }}
@@ -65,7 +67,7 @@ export const OpenGraphImage: React.FC = () => {
           <div
             style={{
               ...fontStyles.regular,
-              fontSize: 22,
+              fontSize: 34,
               color: colors.phantomGreen,
             }}
           >

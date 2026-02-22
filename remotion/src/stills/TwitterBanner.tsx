@@ -82,8 +82,8 @@ export const TwitterBanner: React.FC = () => {
           justifyContent: "center",
           width: "100%",
           height: "100%",
-          padding: "0 50px",
-          gap: 60,
+          padding: "0 60px",
+          gap: 50,
         }}
       >
         {/* Left - Logo */}
@@ -100,8 +100,9 @@ export const TwitterBanner: React.FC = () => {
           <div
             style={{
               ...fontStyles.title,
-              fontSize: 64,
+              fontSize: 100,
               color: colors.spiritWhite,
+              lineHeight: 1,
             }}
           >
             GhostEdit
@@ -109,14 +110,14 @@ export const TwitterBanner: React.FC = () => {
           <div
             style={{
               ...fontStyles.body,
-              fontSize: 24,
+              fontSize: 40,
               color: colors.etherGray,
-              maxWidth: 500,
+              lineHeight: 1.2,
             }}
           >
             Fix your writing. Sharpen your habits.
           </div>
-          <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+          <div style={{ display: "flex", gap: 14, marginTop: 10 }}>
             <ProviderBadge provider="Claude" size="md" />
             <ProviderBadge provider="Codex" size="md" />
             <ProviderBadge provider="Gemini" size="md" />

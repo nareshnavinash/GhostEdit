@@ -29,20 +29,21 @@ export const InstagramPost: React.FC = () => {
           justifyContent: "center",
           width: "100%",
           height: "100%",
-          padding: 60,
-          gap: 32,
+          padding: 50,
+          gap: 24,
         }}
       >
         {/* Icon */}
-        <GhostLogo size={260} glowOpacity={0.3} showParticles />
+        <GhostLogo size={280} glowOpacity={0.3} showParticles />
 
         {/* Title */}
         <div
           style={{
             ...fontStyles.title,
-            fontSize: 72,
+            fontSize: 120,
             color: colors.spiritWhite,
             textAlign: "center",
+            lineHeight: 1,
           }}
         >
           GhostEdit
@@ -51,9 +52,10 @@ export const InstagramPost: React.FC = () => {
         <div
           style={{
             ...fontStyles.body,
-            fontSize: 26,
+            fontSize: 42,
             color: colors.etherGray,
             textAlign: "center",
+            lineHeight: 1.2,
           }}
         >
           Fix your writing. Sharpen your habits.
@@ -65,7 +67,7 @@ export const InstagramPost: React.FC = () => {
             display: "flex",
             flexDirection: "column",
             gap: 16,
-            marginTop: 20,
+            marginTop: 12,
             width: "100%",
           }}
         >
@@ -79,16 +81,16 @@ export const InstagramPost: React.FC = () => {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 16,
-                padding: "16px 24px",
-                borderRadius: 12,
+                gap: 18,
+                padding: "18px 28px",
+                borderRadius: 14,
                 backgroundColor: `${colors.phantomSlate}CC`,
                 ...fontStyles.regular,
-                fontSize: 24,
+                fontSize: 38,
                 color: colors.spiritWhite,
               }}
             >
-              <span style={{ fontSize: 28 }}>{item.icon}</span>
+              <span style={{ fontSize: 44 }}>{item.icon}</span>
               {item.text}
             </div>
           ))}
@@ -98,9 +100,9 @@ export const InstagramPost: React.FC = () => {
         <div
           style={{
             ...fontStyles.body,
-            fontSize: 18,
+            fontSize: 30,
             color: colors.etherGray,
-            marginTop: 12,
+            marginTop: 8,
           }}
         >
           Available for macOS
