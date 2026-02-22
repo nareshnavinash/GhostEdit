@@ -119,6 +119,98 @@ final class ShellRunnerTests: XCTestCase {
         ])
     }
 
+    func testCorrectTextPreservingTokensFallsBackToNormalFlowWhenNoProtectedTokens() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- "plain corrected text"
+        """
+        let executable = try makeExecutableScript(named: "plain-correct.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let output = try testEnv.runner.correctTextPreservingTokens(
+            systemPrompt: "Fix grammar",
+            selectedText: "this are plain text"
+        )
+        XCTAssertEqual(output, "plain corrected text")
+    }
+
+    func testCorrectTextPreservingTokensRestoresMentionsAndEmoji() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- "Please check with __GHOSTEDIT_KEEP_0__ and then add __GHOSTEDIT_KEEP_1__."
+        """
+        let executable = try makeExecutableScript(named: "preserve-tokens.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let output = try testEnv.runner.correctTextPreservingTokens(
+            systemPrompt: "Fix grammar",
+            selectedText: "pls check with @<U123ABC> and add :hat:"
+        )
+        XCTAssertEqual(output, "Please check with @<U123ABC> and then add :hat:.")
+    }
+
+    func testCorrectTextPreservingTokensRetriesOnceWhenPlaceholderMissing() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let callsLog = testEnv.homeURL.appendingPathComponent("token-retry.log")
+        let script = """
+        #!/bin/zsh
+        count=0
+        if [[ -f '\(callsLog.path)' ]]; then
+          count=$(cat '\(callsLog.path)')
+        fi
+        count=$((count + 1))
+        print -r -- "$count" > '\(callsLog.path)'
+
+        if [[ "$count" -eq 1 ]]; then
+          print -r -- "First pass forgot placeholder."
+        else
+          print -r -- "Second pass keeps __GHOSTEDIT_KEEP_0__."
+        fi
+        """
+        let executable = try makeExecutableScript(named: "preserve-retry.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let output = try testEnv.runner.correctTextPreservingTokens(
+            systemPrompt: "Fix grammar",
+            selectedText: "hello @<U99>"
+        )
+        XCTAssertEqual(output, "Second pass keeps @<U99>.")
+        let attempts = try String(contentsOf: callsLog, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(attempts, "2")
+    }
+
+    func testCorrectTextPreservingTokensThrowsWhenPlaceholderStillMissingAfterRetries() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- "Always missing protected tokens."
+        """
+        let executable = try makeExecutableScript(named: "preserve-fail.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        XCTAssertThrowsError(
+            try testEnv.runner.correctTextPreservingTokens(
+                systemPrompt: "Fix grammar",
+                selectedText: "hello @<U1>",
+                maxValidationRetries: 0
+            )
+        ) { error in
+            guard case ShellRunnerError.protectedTokensModified = error else {
+                return XCTFail("Expected protectedTokensModified, got: \(error)")
+            }
+        }
+    }
+
     func testCorrectTextClassifiesAuthenticationErrorFromStdout() throws {
         let testEnv = try makeRunnerEnvironment()
         let script = """
@@ -429,6 +521,10 @@ final class ShellRunnerTests: XCTestCase {
         XCTAssertEqual(
             ShellRunnerError.emptyResponse.errorDescription,
             "CLI returned an empty response. Try switching the model in Settings."
+        )
+        XCTAssertEqual(
+            ShellRunnerError.protectedTokensModified.errorDescription,
+            "The AI response changed protected mentions/emojis. Retried once, but placeholders were not preserved."
         )
     }
 

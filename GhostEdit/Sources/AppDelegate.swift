@@ -384,7 +384,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
 
             do {
-                let correctedText = try self.shellRunner.correctText(
+                let correctedText = try self.shellRunner.correctTextPreservingTokens(
                     systemPrompt: prompt,
                     selectedText: selectedText
                 )

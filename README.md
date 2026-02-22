@@ -18,6 +18,7 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
 - History viewer (`History...`) uses a wrapped table with headers and supports per-cell copy (`Cmd+C`) and CSV export
 - Writing coach action: **Sharpen My Writing Style** analyzes your past originals and shows positives plus improvements
 - Busy/unavailable model guidance in notifications and settings hint
+- Preserves Slack-style tokens during correction (`:emoji:` and `@<id>`) via placeholder protection + retry
 - Menu bar state indicator:
   - `ⓖ` idle
   - `🤓` processing
@@ -98,6 +99,9 @@ This gate enforces:
   - `GhostEdit/Sources/HistoryCSVExporter.swift`
   - `GhostEdit/Sources/HotkeySupport.swift`
   - `GhostEdit/Sources/WritingCoachSupport.swift`
+  - `GhostEdit/Sources/AccessibilitySupport.swift`
+  - `GhostEdit/Sources/SettingsLayoutSupport.swift`
+  - `GhostEdit/Sources/TokenPreservationSupport.swift`
 
 The same gate is wired into:
 - `.githooks/pre-commit`

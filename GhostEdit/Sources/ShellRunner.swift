@@ -7,6 +7,7 @@ enum ShellRunnerError: LocalizedError {
     case processFailed(exitCode: Int32, stderr: String)
     case timedOut(seconds: Int)
     case emptyResponse
+    case protectedTokensModified
 
     var errorDescription: String? {
         switch self {
@@ -25,6 +26,8 @@ enum ShellRunnerError: LocalizedError {
             return "CLI timed out after \(seconds) seconds. Try switching the model in Settings if the selected model is busy."
         case .emptyResponse:
             return "CLI returned an empty response. Try switching the model in Settings."
+        case .protectedTokensModified:
+            return "The AI response changed protected mentions/emojis. Retried once, but placeholders were not preserved."
         }
     }
 }
@@ -87,6 +90,33 @@ final class ShellRunner {
         }
 
         return trimmed
+    }
+
+    func correctTextPreservingTokens(
+        systemPrompt: String,
+        selectedText: String,
+        maxValidationRetries: Int = 1
+    ) throws -> String {
+        let protection = TokenPreservationSupport.protectTokens(in: selectedText)
+        guard protection.hasProtectedTokens else {
+            return try correctText(systemPrompt: systemPrompt, selectedText: selectedText)
+        }
+
+        let augmentedPrompt = TokenPreservationSupport.appendInstruction(to: systemPrompt)
+        let retries = max(0, maxValidationRetries)
+
+        for _ in 0...retries {
+            let candidate = try correctText(
+                systemPrompt: augmentedPrompt,
+                selectedText: protection.protectedText
+            )
+
+            if TokenPreservationSupport.placeholdersAreIntact(in: candidate, tokens: protection.tokens) {
+                return TokenPreservationSupport.restoreTokens(in: candidate, tokens: protection.tokens)
+            }
+        }
+
+        throw ShellRunnerError.protectedTokensModified
     }
 
     func resolveCLIPath(provider: CLIProvider, preferredPath: String?) throws -> String {
