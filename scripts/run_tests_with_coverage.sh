@@ -60,6 +60,8 @@ REQUIRED_FILES=(
   "$ROOT_DIR/GhostEdit/Sources/CorrectionHistoryStore.swift"
   "$ROOT_DIR/GhostEdit/Sources/HistoryTableModel.swift"
   "$ROOT_DIR/GhostEdit/Sources/HistoryCSVExporter.swift"
+  "$ROOT_DIR/GhostEdit/Sources/HotkeySupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/WritingCoachSupport.swift"
 )
 
 xcrun llvm-cov report \

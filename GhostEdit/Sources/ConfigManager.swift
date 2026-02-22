@@ -95,7 +95,7 @@ struct AppConfig: Codable {
         hotkeyKeyCode: 14,
         hotkeyModifiers: 256,
         launchAtLogin: false,
-        historyLimit: 20
+        historyLimit: 200
     )
 
     enum CodingKeys: String, CodingKey {

@@ -21,7 +21,10 @@
 		91B7EA74641364F535A763AC /* CorrectionHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48762FEE0ADD0B53660C76D /* CorrectionHistoryStore.swift */; };
 		92262D1260E82CC716AD0016 /* HistoryTableModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 416AEE28E691DC13F7713AA4 /* HistoryTableModelTests.swift */; };
 		9D48A6EC72F1A548B315C259 /* ClaudeRuntimeSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F1EA4FA7580389D753F6E3 /* ClaudeRuntimeSupportTests.swift */; };
+		B0CC55992319C9F6EB472543 /* HotkeySupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDCC2504CAF8FAD1E28BA027 /* HotkeySupportTests.swift */; };
 		B1EED691F16254A97CFA03D3 /* HistoryCSVExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7472BEE4D60D247C3C5D0A8D /* HistoryCSVExporter.swift */; };
+		BB802A688B4BB1E555C4EA31 /* WritingCoachSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D73C78F2EF0D5E5A9DABF365 /* WritingCoachSupport.swift */; };
+		C1AB2C3DBB5F800D48AFD07F /* HotkeySupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B906B851893CA488140981F6 /* HotkeySupport.swift */; };
 		C34640B7FB93D719302A58AA /* HistoryCSVExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9777490B774BC665A96882DD /* HistoryCSVExporterTests.swift */; };
 		CA780C7EE5E804CBF8103584 /* ConfigManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B642D84E35DFABB1886A46EA /* ConfigManagerTests.swift */; };
 		CC18A92B98B78199268BB570 /* GhostEditCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 33C90B5A383CE8E06047A674 /* GhostEditCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -29,6 +32,7 @@
 		DC3A2B5AECFFAE0D5816B873 /* ClaudeRuntimeSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3079211B444C4F0D1D416C /* ClaudeRuntimeSupport.swift */; };
 		DF1EEAD2D1B1A6CCECBEA81D /* GhostEditCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 33C90B5A383CE8E06047A674 /* GhostEditCore.framework */; };
 		E84DD5B8C999394B5375C717 /* ConfigManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60A7425688D277A0486D28B0 /* ConfigManager.swift */; };
+		FBCE1963C331166177FA58C2 /* WritingCoachSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B25C010234BF1FE78E81978F /* WritingCoachSupportTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -85,11 +89,15 @@
 		7472BEE4D60D247C3C5D0A8D /* HistoryCSVExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryCSVExporter.swift; sourceTree = "<group>"; };
 		9777490B774BC665A96882DD /* HistoryCSVExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryCSVExporterTests.swift; sourceTree = "<group>"; };
 		9C996DDEE9C8B3F039E6ABBE /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
+		B25C010234BF1FE78E81978F /* WritingCoachSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingCoachSupportTests.swift; sourceTree = "<group>"; };
 		B642D84E35DFABB1886A46EA /* ConfigManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigManagerTests.swift; sourceTree = "<group>"; };
+		B906B851893CA488140981F6 /* HotkeySupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySupport.swift; sourceTree = "<group>"; };
 		BC6C12DF332B64F2E5870B3A /* PersistentShellSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistentShellSession.swift; sourceTree = "<group>"; };
+		BDCC2504CAF8FAD1E28BA027 /* HotkeySupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySupportTests.swift; sourceTree = "<group>"; };
 		BFA4DE7478749A962208C497 /* GhostEdit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GhostEdit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D02CA262A37DF28DF09D5B7E /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		D6F1EA4FA7580389D753F6E3 /* ClaudeRuntimeSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeRuntimeSupportTests.swift; sourceTree = "<group>"; };
+		D73C78F2EF0D5E5A9DABF365 /* WritingCoachSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingCoachSupport.swift; sourceTree = "<group>"; };
 		EA9C5D9A20D47E1D5A0B997E /* LaunchAtLoginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginManager.swift; sourceTree = "<group>"; };
 		F479A47545C9BCF85C4025BA /* ShellRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRunnerTests.swift; sourceTree = "<group>"; };
 		F48762FEE0ADD0B53660C76D /* CorrectionHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionHistoryStore.swift; sourceTree = "<group>"; };
@@ -136,10 +144,12 @@
 				7472BEE4D60D247C3C5D0A8D /* HistoryCSVExporter.swift */,
 				FDB823432C740C6B3C712BC2 /* HistoryTableModel.swift */,
 				9C996DDEE9C8B3F039E6ABBE /* HotkeyManager.swift */,
+				B906B851893CA488140981F6 /* HotkeySupport.swift */,
 				EA9C5D9A20D47E1D5A0B997E /* LaunchAtLoginManager.swift */,
 				107C8005BF9B19116B7FD5BA /* main.swift */,
 				BC6C12DF332B64F2E5870B3A /* PersistentShellSession.swift */,
 				2D4EA327528B55DB5C2AD64D /* ShellRunner.swift */,
+				D73C78F2EF0D5E5A9DABF365 /* WritingCoachSupport.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -152,7 +162,9 @@
 				FD69B09E5A0F1173B476BD23 /* CorrectionHistoryStoreTests.swift */,
 				9777490B774BC665A96882DD /* HistoryCSVExporterTests.swift */,
 				416AEE28E691DC13F7713AA4 /* HistoryTableModelTests.swift */,
+				BDCC2504CAF8FAD1E28BA027 /* HotkeySupportTests.swift */,
 				F479A47545C9BCF85C4025BA /* ShellRunnerTests.swift */,
+				B25C010234BF1FE78E81978F /* WritingCoachSupportTests.swift */,
 			);
 			path = GhostEditTests;
 			sourceTree = "<group>";
@@ -287,9 +299,11 @@
 				B1EED691F16254A97CFA03D3 /* HistoryCSVExporter.swift in Sources */,
 				13F49DF808DEEFA0F50A3114 /* HistoryTableModel.swift in Sources */,
 				0C90930E75E434709A91E54F /* HotkeyManager.swift in Sources */,
+				C1AB2C3DBB5F800D48AFD07F /* HotkeySupport.swift in Sources */,
 				5A164E9FAA1017AE15ADD622 /* LaunchAtLoginManager.swift in Sources */,
 				28AC827911C8D4C36D0CF7EE /* PersistentShellSession.swift in Sources */,
 				63CA5F9E9DD8660BAF3991C1 /* ShellRunner.swift in Sources */,
+				BB802A688B4BB1E555C4EA31 /* WritingCoachSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -310,7 +324,9 @@
 				881B9C18CC53E0780479A082 /* CorrectionHistoryStoreTests.swift in Sources */,
 				C34640B7FB93D719302A58AA /* HistoryCSVExporterTests.swift in Sources */,
 				92262D1260E82CC716AD0016 /* HistoryTableModelTests.swift in Sources */,
+				B0CC55992319C9F6EB472543 /* HotkeySupportTests.swift in Sources */,
 				CE57FD81FB1D64587480FC67 /* ShellRunnerTests.swift in Sources */,
+				FBCE1963C331166177FA58C2 /* WritingCoachSupportTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -344,7 +360,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.2.0;
+				MARKETING_VERSION = 2.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};
@@ -384,7 +400,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 2.2.0;
+				MARKETING_VERSION = 2.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};

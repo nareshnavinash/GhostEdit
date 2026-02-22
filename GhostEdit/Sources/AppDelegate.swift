@@ -17,6 +17,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusMenuItem: NSMenuItem?
     private var runNowMenuItem: NSMenuItem?
     private var historyMenuItem: NSMenuItem?
+    private var writingCoachMenuItem: NSMenuItem?
 
     private var isProcessing = false
     private var isShowingAccessibilityAlert = false
@@ -113,6 +114,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         history.target = self
         menu.addItem(history)
         historyMenuItem = history
+
+        let writingCoach = NSMenuItem(
+            title: "Sharpen My Writing Style",
+            action: #selector(openWritingCoachAction),
+            keyEquivalent: ""
+        )
+        writingCoach.target = self
+        menu.addItem(writingCoach)
+        writingCoachMenuItem = writingCoach
 
         menu.addItem(.separator())
 
@@ -220,6 +230,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openHistoryAction() {
         statusMenu?.cancelTracking()
         showHistoryWindow()
+    }
+
+    @objc private func openWritingCoachAction() {
+        statusMenu?.cancelTracking()
+        runWritingCoach()
     }
 
     @objc private func openConfigFileAction() {
@@ -460,6 +475,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startProcessingIndicator() {
         runNowMenuItem?.isEnabled = false
+        writingCoachMenuItem?.isEnabled = false
         statusMenu?.cancelTracking()
         statusItem.menu = nil
         setMenuBarIcon(workingIcon)
@@ -467,6 +483,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopProcessingIndicator() {
         runNowMenuItem?.isEnabled = true
+        writingCoachMenuItem?.isEnabled = true
         statusItem.menu = statusMenu
         setMenuBarIcon(idleIcon)
     }
@@ -601,9 +618,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 let provider = config.resolvedProvider
                 let model = config.resolvedModel(for: provider)
                 let modelDisplay = model.isEmpty ? "provider default" : model
+                let hotkeyDisplay = HotkeySupport.displayString(
+                    keyCode: config.hotkeyKeyCode,
+                    modifiers: config.hotkeyModifiers
+                )
                 try? self.historyStore.trim(limit: config.historyLimit)
                 self.refreshHistoryWindowIfVisible()
-                self.setStatus("Settings saved (\(provider.executableName), model: \(modelDisplay))")
+                self.registerHotkey()
+                self.setStatus("Settings saved (\(provider.executableName), model: \(modelDisplay), hotkey: \(hotkeyDisplay))")
             }
         }
 
@@ -620,6 +642,136 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         historyWindowController?.showWindow(nil)
         historyWindowController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func runWritingCoach() {
+        guard !isProcessing else {
+            NSSound.beep()
+            setStatus("Already processing")
+            return
+        }
+
+        let originalSamples = historyOriginalSamples()
+        guard !originalSamples.isEmpty else {
+            NSSound.beep()
+            setStatus("No history available for writing coach")
+            showNoHistoryForWritingCoachAlert()
+            return
+        }
+
+        let config = configManager.loadConfig()
+        let provider = config.resolvedProvider
+        let model = config.resolvedModel(for: provider)
+        let modelDisplay = model.isEmpty ? "provider default" : model
+        let writingInput = WritingCoachSupport.buildInput(from: originalSamples)
+
+        isProcessing = true
+        startProcessingIndicator()
+        setStatus("Analyzing writing style with \(provider.executableName) (\(modelDisplay))...")
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+
+            do {
+                let response = try self.shellRunner.correctText(
+                    systemPrompt: WritingCoachSupport.systemPrompt,
+                    selectedText: writingInput
+                )
+                let insights = WritingCoachSupport.parseInsights(from: response)
+
+                DispatchQueue.main.async {
+                    if let insights {
+                        self.showWritingCoachInsights(insights, sampleCount: originalSamples.count)
+                    } else {
+                        self.showWritingCoachFallback(rawResponse: response, sampleCount: originalSamples.count)
+                    }
+
+                    let time = self.timeFormatter.string(from: Date())
+                    self.setStatus("Writing coach ready at \(time)")
+                    self.finishProcessing()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.handleWritingCoachError(error)
+                    self.finishProcessing()
+                }
+            }
+        }
+    }
+
+    private func historyOriginalSamples() -> [String] {
+        historyStore.load().compactMap { entry in
+            let trimmed = entry.originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+    }
+
+    private func showNoHistoryForWritingCoachAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Sharpen My Writing Style"
+        alert.informativeText = "No history samples found yet. Run a few corrections, then try again."
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    private func showWritingCoachInsights(_ insights: WritingCoachInsights, sampleCount: Int) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Sharpen My Writing Style"
+        alert.informativeText = WritingCoachSupport.popupText(for: insights, sampleCount: sampleCount)
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    private func showWritingCoachFallback(rawResponse: String, sampleCount: Int) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Sharpen My Writing Style"
+        alert.informativeText = """
+        Reviewed \(sampleCount) writing sample(s).
+
+        \(rawResponse)
+        """
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    private func handleWritingCoachError(_ error: Error) {
+        if case let ShellRunnerError.cliNotFound(provider) = error {
+            setStatus("\(provider.executableName) CLI not found; update config.json")
+            notifyFailure(body: "Writing Coach Failed. \(provider.displayName) CLI not found.")
+            showCLIPathAlert(provider: provider)
+            return
+        }
+
+        if case let ShellRunnerError.authenticationRequired(provider) = error {
+            setStatus("\(provider.executableName) authentication required")
+            notifyFailure(body: "Writing Coach Failed. \(provider.displayName) authentication expired. Run `\(provider.authCommand)` in Terminal.")
+            showCLIAuthAlert(provider: provider)
+            return
+        }
+
+        let shouldSuggestModelSwitch: Bool
+        if let shellError = error as? ShellRunnerError {
+            switch shellError {
+            case .processFailed, .timedOut, .emptyResponse:
+                shouldSuggestModelSwitch = true
+            default:
+                shouldSuggestModelSwitch = false
+            }
+        } else {
+            shouldSuggestModelSwitch = false
+        }
+
+        let message: String
+        if shouldSuggestModelSwitch {
+            message = "\(error.localizedDescription)\nTry switching model in Settings if the selected model is busy or unavailable."
+        } else {
+            message = error.localizedDescription
+        }
+        setStatus("Writing coach failed")
+        notifyFailure(body: "Writing Coach Failed. \(message)")
     }
 
     private func refreshHistoryWindowIfVisible() {
@@ -709,6 +861,12 @@ final class SettingsWindowController: NSWindowController {
     private let modelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let customModelField = NSTextField(string: "")
     private let customModelContainer = NSStackView()
+    private let hotkeyKeyPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let commandModifierCheckbox = NSButton(checkboxWithTitle: "Command", target: nil, action: nil)
+    private let optionModifierCheckbox = NSButton(checkboxWithTitle: "Option", target: nil, action: nil)
+    private let controlModifierCheckbox = NSButton(checkboxWithTitle: "Control", target: nil, action: nil)
+    private let shiftModifierCheckbox = NSButton(checkboxWithTitle: "Shift", target: nil, action: nil)
+    private let hotkeyPreviewLabel = NSTextField(labelWithString: "")
     private let launchAtLoginCheckbox = NSButton(
         checkboxWithTitle: "Start GhostEdit automatically when you log in",
         target: nil,
@@ -718,6 +876,7 @@ final class SettingsWindowController: NSWindowController {
     private let hintLabel = NSTextField(labelWithString: "")
 
     private let providerOptions: [CLIProvider] = [.claude, .codex, .gemini]
+    private let hotkeyKeyOptions = HotkeySupport.keyOptions
     private var modelOptions: [ModelOption] = []
 
     init(configManager: ConfigManager, onConfigSaved: @escaping (AppConfig) -> Void) {
@@ -725,7 +884,7 @@ final class SettingsWindowController: NSWindowController {
         self.onConfigSaved = onConfigSaved
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 360),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 500),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -763,7 +922,7 @@ final class SettingsWindowController: NSWindowController {
             rootStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -20)
         ])
 
-        let subtitle = NSTextField(labelWithString: "Choose provider/model and how many past corrections to keep.")
+        let subtitle = NSTextField(labelWithString: "Choose provider/model, hotkey, and how many past corrections to keep.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.lineBreakMode = .byWordWrapping
         subtitle.maximumNumberOfLines = 2
@@ -794,11 +953,47 @@ final class SettingsWindowController: NSWindowController {
         customModelContainer.addArrangedSubview(customModelField)
         rootStack.addArrangedSubview(customModelContainer)
 
+        let hotkeyKeyLabel = makeFieldLabel("Hotkey")
+        hotkeyKeyPopup.removeAllItems()
+        hotkeyKeyOptions.forEach { option in
+            hotkeyKeyPopup.addItem(withTitle: option.title)
+        }
+        hotkeyKeyPopup.target = self
+        hotkeyKeyPopup.action = #selector(hotkeyInputChanged)
+        let hotkeyKeyRow = makeRow(label: hotkeyKeyLabel, field: hotkeyKeyPopup)
+        rootStack.addArrangedSubview(hotkeyKeyRow)
+
+        commandModifierCheckbox.target = self
+        commandModifierCheckbox.action = #selector(hotkeyInputChanged)
+        optionModifierCheckbox.target = self
+        optionModifierCheckbox.action = #selector(hotkeyInputChanged)
+        controlModifierCheckbox.target = self
+        controlModifierCheckbox.action = #selector(hotkeyInputChanged)
+        shiftModifierCheckbox.target = self
+        shiftModifierCheckbox.action = #selector(hotkeyInputChanged)
+
+        let hotkeyModifiersStack = NSStackView()
+        hotkeyModifiersStack.orientation = .horizontal
+        hotkeyModifiersStack.spacing = 8
+        hotkeyModifiersStack.addArrangedSubview(commandModifierCheckbox)
+        hotkeyModifiersStack.addArrangedSubview(optionModifierCheckbox)
+        hotkeyModifiersStack.addArrangedSubview(controlModifierCheckbox)
+        hotkeyModifiersStack.addArrangedSubview(shiftModifierCheckbox)
+
+        let hotkeyModifiersLabel = makeFieldLabel("Modifiers")
+        let hotkeyModifiersRow = makeRow(label: hotkeyModifiersLabel, field: hotkeyModifiersStack)
+        rootStack.addArrangedSubview(hotkeyModifiersRow)
+
+        hotkeyPreviewLabel.textColor = .secondaryLabelColor
+        hotkeyPreviewLabel.maximumNumberOfLines = 2
+        hotkeyPreviewLabel.lineBreakMode = .byWordWrapping
+        rootStack.addArrangedSubview(hotkeyPreviewLabel)
+
         launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
         rootStack.addArrangedSubview(launchAtLoginCheckbox)
 
         let historyLimitLabel = makeFieldLabel("History N")
-        historyLimitField.placeholderString = "20"
+        historyLimitField.placeholderString = "200"
         historyLimitField.alignment = .left
         let historyLimitRow = makeRow(label: historyLimitLabel, field: historyLimitField)
         rootStack.addArrangedSubview(historyLimitRow)
@@ -853,6 +1048,7 @@ final class SettingsWindowController: NSWindowController {
         providerPopup.selectItem(at: providerIndex)
         launchAtLoginCheckbox.state = config.launchAtLogin ? .on : .off
         historyLimitField.stringValue = "\(config.historyLimit)"
+        loadHotkeyValues(from: config)
 
         let rawModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedModel = rawModel.isEmpty ? AppConfig.defaultModel(for: provider) : rawModel
@@ -866,6 +1062,10 @@ final class SettingsWindowController: NSWindowController {
 
     @objc private func modelPopupChanged() {
         refreshCustomFieldVisibility()
+    }
+
+    @objc private func hotkeyInputChanged() {
+        updateHotkeyPreview()
     }
 
     private func reloadModelOptions(for provider: CLIProvider, selectedModel: String) {
@@ -894,6 +1094,52 @@ final class SettingsWindowController: NSWindowController {
 
     private func updateHint(for provider: CLIProvider) {
         hintLabel.stringValue = "If a \(provider.displayName) model is busy or fails, switch models and retry. Default: \(provider.defaultModel)."
+    }
+
+    private func loadHotkeyValues(from config: AppConfig) {
+        if let index = hotkeyKeyOptions.firstIndex(where: { $0.keyCode == config.hotkeyKeyCode }) {
+            hotkeyKeyPopup.selectItem(at: index)
+        } else if let defaultIndex = hotkeyKeyOptions.firstIndex(where: { $0.keyCode == HotkeySupport.defaultKeyCode }) {
+            hotkeyKeyPopup.selectItem(at: defaultIndex)
+        } else {
+            hotkeyKeyPopup.selectItem(at: 0)
+        }
+
+        let split = HotkeySupport.splitModifiers(config.hotkeyModifiers)
+        commandModifierCheckbox.state = split.command ? .on : .off
+        optionModifierCheckbox.state = split.option ? .on : .off
+        controlModifierCheckbox.state = split.control ? .on : .off
+        shiftModifierCheckbox.state = split.shift ? .on : .off
+
+        updateHotkeyPreview()
+    }
+
+    private func selectedHotkeyKeyCode() -> UInt32? {
+        let index = hotkeyKeyPopup.indexOfSelectedItem
+        guard hotkeyKeyOptions.indices.contains(index) else {
+            return nil
+        }
+        return hotkeyKeyOptions[index].keyCode
+    }
+
+    private func selectedHotkeyModifiers() -> UInt32 {
+        HotkeySupport.makeModifiers(
+            command: commandModifierCheckbox.state == .on,
+            option: optionModifierCheckbox.state == .on,
+            control: controlModifierCheckbox.state == .on,
+            shift: shiftModifierCheckbox.state == .on
+        )
+    }
+
+    private func updateHotkeyPreview() {
+        guard let keyCode = selectedHotkeyKeyCode() else {
+            hotkeyPreviewLabel.stringValue = "Current hotkey: unavailable"
+            return
+        }
+
+        let modifiers = selectedHotkeyModifiers()
+        let display = HotkeySupport.displayString(keyCode: keyCode, modifiers: modifiers)
+        hotkeyPreviewLabel.stringValue = "Current hotkey: \(display)"
     }
 
     private func refreshCustomFieldVisibility() {
@@ -933,12 +1179,31 @@ final class SettingsWindowController: NSWindowController {
         let provider = selectedProvider()
         let model = selectedModel()
         let historyLimitText = historyLimitField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let hotkeyKeyCode = selectedHotkeyKeyCode() else {
+            NSSound.beep()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Hotkey key is required"
+            alert.informativeText = "Choose a hotkey key before saving."
+            alert.runModal()
+            return
+        }
+        let hotkeyModifiers = selectedHotkeyModifiers()
         if selectedOptionValue() == nil, model.isEmpty {
             NSSound.beep()
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "Model is required"
             alert.informativeText = "Choose a model or enter a custom model name."
+            alert.runModal()
+            return
+        }
+        if hotkeyModifiers == 0 {
+            NSSound.beep()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Hotkey modifiers are required"
+            alert.informativeText = "Select at least one modifier key (Command, Option, Control, or Shift)."
             alert.runModal()
             return
         }
@@ -955,6 +1220,8 @@ final class SettingsWindowController: NSWindowController {
         var config = configManager.loadConfig()
         config.provider = provider.rawValue
         config.model = model
+        config.hotkeyKeyCode = hotkeyKeyCode
+        config.hotkeyModifiers = hotkeyModifiers
         config.launchAtLogin = (launchAtLoginCheckbox.state == .on)
         config.historyLimit = historyLimit
 

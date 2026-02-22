@@ -5,6 +5,7 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
 ## Features
 
 - Global hotkey (`Command + E` by default)
+- Configurable global hotkey in **Settings...**
 - Works in background (no Dock icon)
 - Configurable prompt in `~/.ghostedit/prompt.txt`
 - Provider switch in **Settings...**: Claude, Codex, Gemini
@@ -13,8 +14,9 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
   - Codex: `gpt-5-codex`
   - Gemini: `gemini-2.5-flash-lite`
 - Launch at login toggle in **Settings...**
-- Configurable correction history size (`History N`) in **Settings...**
+- Configurable correction history size (`History N`, default `200`) in **Settings...**
 - History viewer (`History...`) uses a wrapped table with headers and supports per-cell copy (`Cmd+C`) and CSV export
+- Writing coach action: **Sharpen My Writing Style** analyzes your past originals and shows positives plus improvements
 - Busy/unavailable model guidance in notifications and settings hint
 - Menu bar state indicator:
   - `ⓖ` idle
@@ -65,7 +67,7 @@ Default `config.json`:
   "hotkeyModifiers": 256,
   "timeoutSeconds": 30,
   "launchAtLogin": false,
-  "historyLimit": 20
+  "historyLimit": 200
 }
 ```
 
@@ -94,6 +96,8 @@ This gate enforces:
   - `GhostEdit/Sources/CorrectionHistoryStore.swift`
   - `GhostEdit/Sources/HistoryTableModel.swift`
   - `GhostEdit/Sources/HistoryCSVExporter.swift`
+  - `GhostEdit/Sources/HotkeySupport.swift`
+  - `GhostEdit/Sources/WritingCoachSupport.swift`
 
 The same gate is wired into:
 - `.githooks/pre-commit`
