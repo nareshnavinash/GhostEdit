@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Build artifacts
+build/
+DerivedData/
+
+# Xcode user and transient files
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# SwiftPM cache
+.swiftpm/
+
+# Release artifacts
+*.dmg
+*.zip

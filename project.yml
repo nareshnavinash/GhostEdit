@@ -1,0 +1,31 @@
+name: GrammarFixer
+options:
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    MACOSX_DEPLOYMENT_TARGET: 13.0
+    PRODUCT_BUNDLE_IDENTIFIER: com.grammarfixer.app
+targets:
+  GrammarFixer:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: GrammarFixer/Sources
+    resources:
+      - path: GrammarFixer/Assets.xcassets
+    settings:
+      base:
+        INFOPLIST_FILE: GrammarFixer/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: 3
+        MARKETING_VERSION: 1.2
+        ENABLE_HARDENED_RUNTIME: YES
+schemes:
+  GrammarFixer:
+    build:
+      targets:
+        GrammarFixer: all
+    run:
+      config: Debug
