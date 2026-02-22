@@ -2,6 +2,7 @@ import Foundation
 
 enum ShellRunnerError: LocalizedError {
     case claudeNotFound
+    case authenticationRequired
     case launchFailed(String)
     case processFailed(exitCode: Int32, stderr: String)
     case timedOut(seconds: Int)
@@ -11,6 +12,8 @@ enum ShellRunnerError: LocalizedError {
         switch self {
         case .claudeNotFound:
             return "The claude CLI could not be found. Set an absolute path in ~/.grammarfixer/config.json."
+        case .authenticationRequired:
+            return "Claude authentication has expired. Run `claude auth login` in Terminal, then try again."
         case let .launchFailed(message):
             return "Failed to start claude: \(message)"
         case let .processFailed(exitCode, stderr):
@@ -34,7 +37,7 @@ final class ShellRunner {
     private let discoveredPathLock = NSLock()
     private var discoveredClaudePath: String?
     private let sessionLock = NSLock()
-    private var preferSession = true
+    private var preferSession = false
 
     init(configManager: ConfigManager) {
         self.configManager = configManager
@@ -46,13 +49,6 @@ final class ShellRunner {
 
             let config = self.configManager.loadConfig()
             _ = try? self.resolveClaudePath(preferredPath: config.resolvedClaudePath)
-            do {
-                try self.shellSession.prewarm()
-                self.setPreferSession(true)
-            } catch {
-                self.shellSession.markUnhealthy()
-                self.setPreferSession(false)
-            }
         }
     }
 
@@ -89,25 +85,9 @@ final class ShellRunner {
         }
         discoveredPathLock.unlock()
 
-        let standardPaths = [
-            "/opt/homebrew/bin/claude",
-            "/usr/local/bin/claude",
-            "/usr/bin/claude"
-        ]
-
-        for path in standardPaths where isExecutable(path) {
+        for path in claudeSearchPaths() where isExecutable(path) {
             cacheDiscoveredPath(path)
             return path
-        }
-
-        if let zshPath = lookupClaudeViaShell(shellPath: "/bin/zsh") {
-            cacheDiscoveredPath(zshPath)
-            return zshPath
-        }
-
-        if let bashPath = lookupClaudeViaShell(shellPath: "/bin/bash") {
-            cacheDiscoveredPath(bashPath)
-            return bashPath
         }
 
         throw ShellRunnerError.claudeNotFound
@@ -123,41 +103,138 @@ final class ShellRunner {
         fileManager.isExecutableFile(atPath: path)
     }
 
-    private func lookupClaudeViaShell(shellPath: String) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: shellPath)
-        process.arguments = ["-lc", "command -v claude"]
+    private func claudeSearchPaths() -> [String] {
+        var paths: [String] = []
+        var seen = Set<String>()
 
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-        } catch {
-            return nil
+        func appendUnique(_ path: String) {
+            guard !path.isEmpty else { return }
+            let expanded = NSString(string: path).expandingTildeInPath
+            guard !expanded.isEmpty, !seen.contains(expanded) else {
+                return
+            }
+            seen.insert(expanded)
+            paths.append(expanded)
         }
 
-        process.waitUntilExit()
+        let home = fileManager.homeDirectoryForCurrentUser.path
+        appendUnique("\(home)/.local/bin/claude")
+        appendUnique("/opt/homebrew/bin/claude")
+        appendUnique("/usr/local/bin/claude")
+        appendUnique("/usr/bin/claude")
+        appendUnique("\(home)/bin/claude")
 
-        guard process.terminationStatus == 0 else {
-            return nil
+        if let envPath = ProcessInfo.processInfo.environment["PATH"] {
+            for directory in envPath.split(separator: ":") {
+                appendUnique("\(directory)/claude")
+            }
         }
 
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        guard
-            let rawPath = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !rawPath.isEmpty,
-            isExecutable(rawPath)
-        else {
-            return nil
+        return paths
+    }
+
+    private func runtimePathValue() -> String {
+        var components: [String] = []
+        var seen = Set<String>()
+
+        func appendUnique(_ value: String) {
+            guard !value.isEmpty, !seen.contains(value) else { return }
+            seen.insert(value)
+            components.append(value)
         }
 
-        return rawPath
+        if let existingPath = ProcessInfo.processInfo.environment["PATH"] {
+            for path in existingPath.split(separator: ":") {
+                appendUnique(String(path))
+            }
+        }
+
+        let home = fileManager.homeDirectoryForCurrentUser.path
+        appendUnique("\(home)/.local/bin")
+        appendUnique("/opt/homebrew/bin")
+        appendUnique("/usr/local/bin")
+        appendUnique("/usr/bin")
+        appendUnique("/bin")
+        appendUnique("/usr/sbin")
+        appendUnique("/sbin")
+
+        return components.joined(separator: ":")
+    }
+
+    private func classifyProcessFailure(
+        exitCode: Int32,
+        stdout: String,
+        stderr: String
+    ) -> ShellRunnerError {
+        let combined = "\(stdout)\n\(stderr)".lowercased()
+        let normalized = combined
+        if normalized.contains("failed to authenticate")
+            || normalized.contains("authentication_error")
+            || normalized.contains("token has expired")
+            || normalized.contains("oauth token")
+            || normalized.contains("claude auth login")
+            || normalized.contains("api error: 401")
+            || normalized.contains("unauthorized")
+        {
+            return .authenticationRequired
+        }
+
+        let preferredDetails = stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? stdout
+            : stderr
+        return .processFailed(exitCode: exitCode, stderr: preferredDetails)
+    }
+
+    private func claudeArguments(prompt: String, model: String) -> [String] {
+        var args = [
+            "-p",
+            prompt,
+            // Avoid project/local config side effects while keeping user auth/settings.
+            "--setting-sources",
+            "user",
+            // GrammarFixer only needs text generation, not tool/file access.
+            "--tools",
+            ""
+        ]
+
+        let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedModel.isEmpty {
+            args.append(contentsOf: ["--model", trimmedModel])
+        }
+
+        return args
     }
 
     private func runClaude(
+        executablePath: String,
+        model: String,
+        prompt: String,
+        timeoutSeconds: Int
+    ) throws -> String {
+        let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        do {
+            return try runClaudePreferredPath(
+                executablePath: executablePath,
+                model: trimmedModel,
+                prompt: prompt,
+                timeoutSeconds: timeoutSeconds
+            )
+        } catch let error as ShellRunnerError {
+            // Some CLI versions reject aliases like "haiku". Retry once with default model.
+            if case .processFailed = error, !trimmedModel.isEmpty {
+                return try runClaudePreferredPath(
+                    executablePath: executablePath,
+                    model: "",
+                    prompt: prompt,
+                    timeoutSeconds: timeoutSeconds
+                )
+            }
+            throw error
+        }
+    }
+
+    private func runClaudePreferredPath(
         executablePath: String,
         model: String,
         prompt: String,
@@ -192,27 +269,17 @@ final class ShellRunner {
         prompt: String,
         timeoutSeconds: Int
     ) throws -> String {
-        var args = ["-p", prompt]
-        let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedModel.isEmpty {
-            args.append(contentsOf: ["--model", trimmedModel])
-        }
+        let args = claudeArguments(prompt: prompt, model: model)
 
-        let pathValue = [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/usr/bin",
-            "/bin",
-            "/usr/sbin",
-            "/sbin"
-        ].joined(separator: ":")
+        let pathValue = runtimePathValue()
 
         let command = "PATH=\(shellQuote(pathValue)); export PATH; \(shellQuote(executablePath)) \(args.map(shellQuote).joined(separator: " "))"
         let result = try shellSession.run(command: command, timeoutSeconds: timeoutSeconds)
 
         guard result.exitCode == 0 else {
-            throw ShellRunnerError.processFailed(
+            throw classifyProcessFailure(
                 exitCode: result.exitCode,
+                stdout: result.stdout,
                 stderr: result.stderr
             )
         }
@@ -228,23 +295,11 @@ final class ShellRunner {
     ) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
-
-        var args = ["-p", prompt]
-        let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedModel.isEmpty {
-            args.append(contentsOf: ["--model", trimmedModel])
-        }
-        process.arguments = args
+        process.currentDirectoryURL = configManager.baseDirectoryURL
+        process.arguments = claudeArguments(prompt: prompt, model: model)
 
         var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/usr/bin",
-            "/bin",
-            "/usr/sbin",
-            "/sbin"
-        ].joined(separator: ":")
+        environment["PATH"] = runtimePathValue()
         process.environment = environment
 
         let outputPipe = Pipe()
@@ -276,8 +331,9 @@ final class ShellRunner {
         let errorText = String(data: errorData, encoding: .utf8) ?? ""
 
         guard process.terminationStatus == 0 else {
-            throw ShellRunnerError.processFailed(
+            throw classifyProcessFailure(
                 exitCode: process.terminationStatus,
+                stdout: outputText,
                 stderr: errorText
             )
         }

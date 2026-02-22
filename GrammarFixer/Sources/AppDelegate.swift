@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var isProcessing = false
     private var isShowingAccessibilityAlert = false
+    private var didShowAccessibilityGuidance = false
     private var clipboardSnapshot: ClipboardManager.Snapshot?
     private var targetAppAtTrigger: NSRunningApplication?
     private var lastExternalActiveApp: NSRunningApplication?
@@ -45,11 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         startObservingActiveApplication()
-        requestNotificationPermission()
         _ = ensureAccessibilityPermission(promptSystemDialog: true, showGuidanceAlert: false)
         registerHotkey()
         setStatus("Idle")
-        shellRunner.prewarm()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -201,6 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func checkAccessibilityAction() {
         statusMenu?.cancelTracking()
+        didShowAccessibilityGuidance = false
         _ = ensureAccessibilityPermission(promptSystemDialog: true, showGuidanceAlert: true)
     }
 
@@ -381,6 +381,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        if case ShellRunnerError.authenticationRequired = error {
+            setStatus("claude auth required; run claude auth login")
+            notifyFailure(body: "Correction Failed. Claude authentication expired. Run `claude auth login` in Terminal.")
+            showClaudeAuthAlert()
+            return
+        }
+
         let message = error.localizedDescription
         setStatus("Correction failed")
         notifyFailure(body: "Correction Failed. \(message)")
@@ -414,7 +421,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let options = [promptKey: promptSystemDialog] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
 
-        if !trusted, showGuidanceAlert {
+        if !trusted, showGuidanceAlert, !didShowAccessibilityGuidance {
+            didShowAccessibilityGuidance = true
             showAccessibilityAlert()
         }
 
@@ -464,8 +472,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    private func showClaudeAuthAlert() {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Claude Authentication Required"
+            alert.informativeText = "Your Claude CLI session is expired.\n\nRun this command in Terminal:\nclaude auth login\n\nThen retry GrammarFixer."
+            alert.addButton(withTitle: "OK")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
     }
 
     private func notifyFailure(body: String) {
