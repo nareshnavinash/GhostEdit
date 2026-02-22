@@ -41,6 +41,36 @@ enum CLIProvider: String, Codable, CaseIterable {
             return "geminiPath"
         }
     }
+
+    var availableModels: [String] {
+        switch self {
+        case .claude:
+            return ["haiku", "sonnet", "opus"]
+        case .codex:
+            return ["gpt-5-codex", "gpt-5.3-codex", "gpt-5"]
+        case .gemini:
+            return [
+                "gemini-2.5-flash-lite",
+                "gemini-2.5-flash",
+                "gemini-2.5-pro",
+                "gemini-3-flash-preview",
+                "gemini-3-pro-preview",
+                "gemini-3.1-pro-preview",
+                "gemini-3.1-pro-preview-customtools"
+            ]
+        }
+    }
+
+    var defaultModel: String {
+        switch self {
+        case .claude:
+            return "haiku"
+        case .codex:
+            return "gpt-5-codex"
+        case .gemini:
+            return "gemini-2.5-flash-lite"
+        }
+    }
 }
 
 struct AppConfig: Codable {
@@ -53,6 +83,7 @@ struct AppConfig: Codable {
     var hotkeyKeyCode: UInt32
     var hotkeyModifiers: UInt32
     var launchAtLogin: Bool
+    var historyLimit: Int
 
     static let `default` = AppConfig(
         claudePath: "",
@@ -63,7 +94,8 @@ struct AppConfig: Codable {
         timeoutSeconds: 30,
         hotkeyKeyCode: 14,
         hotkeyModifiers: 256,
-        launchAtLogin: false
+        launchAtLogin: false,
+        historyLimit: 20
     )
 
     enum CodingKeys: String, CodingKey {
@@ -76,6 +108,7 @@ struct AppConfig: Codable {
         case hotkeyKeyCode
         case hotkeyModifiers
         case launchAtLogin
+        case historyLimit
     }
 
     init(
@@ -87,7 +120,8 @@ struct AppConfig: Codable {
         timeoutSeconds: Int,
         hotkeyKeyCode: UInt32,
         hotkeyModifiers: UInt32,
-        launchAtLogin: Bool
+        launchAtLogin: Bool,
+        historyLimit: Int
     ) {
         self.claudePath = claudePath
         self.codexPath = codexPath
@@ -98,6 +132,7 @@ struct AppConfig: Codable {
         self.hotkeyKeyCode = hotkeyKeyCode
         self.hotkeyModifiers = hotkeyModifiers
         self.launchAtLogin = launchAtLogin
+        self.historyLimit = historyLimit
     }
 
     init(from decoder: Decoder) throws {
@@ -112,6 +147,7 @@ struct AppConfig: Codable {
         hotkeyKeyCode = try container.decodeIfPresent(UInt32.self, forKey: .hotkeyKeyCode) ?? AppConfig.default.hotkeyKeyCode
         hotkeyModifiers = try container.decodeIfPresent(UInt32.self, forKey: .hotkeyModifiers) ?? AppConfig.default.hotkeyModifiers
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? AppConfig.default.launchAtLogin
+        historyLimit = try container.decodeIfPresent(Int.self, forKey: .historyLimit) ?? AppConfig.default.historyLimit
     }
 
     var resolvedClaudePath: String? {
@@ -156,12 +192,7 @@ struct AppConfig: Codable {
     }
 
     static func defaultModel(for provider: CLIProvider) -> String {
-        switch provider {
-        case .claude:
-            return "haiku"
-        case .codex, .gemini:
-            return ""
-        }
+        provider.defaultModel
     }
 }
 
@@ -172,6 +203,7 @@ final class ConfigManager {
     let legacyDirectoryURL: URL
     let promptURL: URL
     let configURL: URL
+    let historyURL: URL
 
     let defaultPrompt = "Please revise the following text by correcting grammar, spelling, and punctuation. Use polite, professional periphrasis while preserving the original meaning, intent, and message flow. Keep the tone natural to the writer. Return ONLY the revised text, with no preface or extra commentary."
     private let legacyDefaultPrompts: Set<String> = [
@@ -189,6 +221,7 @@ final class ConfigManager {
             .appendingPathComponent(".grammarfixer", isDirectory: true)
         promptURL = baseDirectoryURL.appendingPathComponent("prompt.txt")
         configURL = baseDirectoryURL.appendingPathComponent("config.json")
+        historyURL = baseDirectoryURL.appendingPathComponent("history.json")
     }
 
     func bootstrapIfNeeded() throws {
@@ -206,6 +239,10 @@ final class ConfigManager {
         if !fileManager.fileExists(atPath: configURL.path) {
             let data = try JSONEncoder.prettyEncoder.encode(AppConfig.default)
             try data.write(to: configURL)
+        }
+
+        if !fileManager.fileExists(atPath: historyURL.path) {
+            try "[]\n".write(to: historyURL, atomically: true, encoding: .utf8)
         }
     }
 
@@ -238,6 +275,7 @@ final class ConfigManager {
         let provider = config.resolvedProvider
         let model = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedModel = model.isEmpty ? AppConfig.defaultModel(for: provider) : model
+        let historyLimit = max(1, config.historyLimit)
 
         return AppConfig(
             claudePath: config.claudePath,
@@ -248,7 +286,8 @@ final class ConfigManager {
             timeoutSeconds: timeout,
             hotkeyKeyCode: config.hotkeyKeyCode,
             hotkeyModifiers: config.hotkeyModifiers,
-            launchAtLogin: config.launchAtLogin
+            launchAtLogin: config.launchAtLogin,
+            historyLimit: historyLimit
         )
     }
 

@@ -57,6 +57,7 @@ REQUIRED_FILES=(
   "$ROOT_DIR/GhostEdit/Sources/ConfigManager.swift"
   "$ROOT_DIR/GhostEdit/Sources/ShellRunner.swift"
   "$ROOT_DIR/GhostEdit/Sources/ClaudeRuntimeSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/CorrectionHistoryStore.swift"
 )
 
 xcrun llvm-cov report \

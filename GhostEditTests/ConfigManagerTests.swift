@@ -21,6 +21,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: manager.baseDirectoryURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: manager.promptURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: manager.configURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: manager.historyURL.path))
 
         let prompt = try String(contentsOf: manager.promptURL, encoding: .utf8)
         XCTAssertEqual(prompt, manager.defaultPrompt)
@@ -35,6 +36,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.codexPath, AppConfig.default.codexPath)
         XCTAssertEqual(config.geminiPath, AppConfig.default.geminiPath)
         XCTAssertEqual(config.launchAtLogin, AppConfig.default.launchAtLogin)
+        XCTAssertEqual(config.historyLimit, AppConfig.default.historyLimit)
     }
 
     func testBootstrapMigratesLegacyDirectory() throws {
@@ -58,7 +60,8 @@ final class ConfigManagerTests: XCTestCase {
             timeoutSeconds: 42,
             hotkeyKeyCode: 11,
             hotkeyModifiers: 256,
-            launchAtLogin: true
+            launchAtLogin: true,
+            historyLimit: 15
         )
         let legacyData = try JSONEncoder().encode(legacyConfig)
         try legacyData.write(to: legacyDirectory.appendingPathComponent("config.json"), options: .atomic)
@@ -81,6 +84,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(migratedConfig.hotkeyKeyCode, legacyConfig.hotkeyKeyCode)
         XCTAssertEqual(migratedConfig.hotkeyModifiers, legacyConfig.hotkeyModifiers)
         XCTAssertEqual(migratedConfig.launchAtLogin, legacyConfig.launchAtLogin)
+        XCTAssertEqual(migratedConfig.historyLimit, legacyConfig.historyLimit)
     }
 
     func testBootstrapPreservesExistingFiles() throws {
@@ -98,7 +102,8 @@ final class ConfigManagerTests: XCTestCase {
             timeoutSeconds: 60,
             hotkeyKeyCode: 7,
             hotkeyModifiers: 512,
-            launchAtLogin: true
+            launchAtLogin: true,
+            historyLimit: 50
         )
         try JSONEncoder().encode(customConfig).write(to: manager.configURL, options: .atomic)
 
@@ -112,11 +117,12 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(loaded.codexPath, customConfig.codexPath)
         XCTAssertEqual(loaded.geminiPath, customConfig.geminiPath)
         XCTAssertEqual(loaded.provider, customConfig.provider)
-        XCTAssertEqual(loaded.model, customConfig.model)
+        XCTAssertEqual(loaded.model, AppConfig.defaultModel(for: .codex))
         XCTAssertEqual(loaded.timeoutSeconds, customConfig.timeoutSeconds)
         XCTAssertEqual(loaded.hotkeyKeyCode, customConfig.hotkeyKeyCode)
         XCTAssertEqual(loaded.hotkeyModifiers, customConfig.hotkeyModifiers)
         XCTAssertEqual(loaded.launchAtLogin, customConfig.launchAtLogin)
+        XCTAssertEqual(loaded.historyLimit, customConfig.historyLimit)
     }
 
     func testBootstrapMigratesLegacyDefaultPromptToCurrentDefault() throws {
@@ -183,6 +189,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.codexPath, AppConfig.default.codexPath)
         XCTAssertEqual(config.geminiPath, AppConfig.default.geminiPath)
         XCTAssertEqual(config.launchAtLogin, AppConfig.default.launchAtLogin)
+        XCTAssertEqual(config.historyLimit, AppConfig.default.historyLimit)
     }
 
     func testLoadConfigAppliesDecoderDefaultsForMissingFields() throws {
@@ -201,6 +208,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.codexPath, AppConfig.default.codexPath)
         XCTAssertEqual(config.geminiPath, AppConfig.default.geminiPath)
         XCTAssertEqual(config.launchAtLogin, AppConfig.default.launchAtLogin)
+        XCTAssertEqual(config.historyLimit, AppConfig.default.historyLimit)
     }
 
     func testLoadConfigUsesDefaultTimeoutWhenTimeoutMissing() throws {
@@ -227,7 +235,8 @@ final class ConfigManagerTests: XCTestCase {
             timeoutSeconds: 1,
             hotkeyKeyCode: 33,
             hotkeyModifiers: 512,
-            launchAtLogin: true
+            launchAtLogin: true,
+            historyLimit: 0
         )
 
         try manager.saveConfig(raw)
@@ -242,6 +251,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(loaded.hotkeyKeyCode, raw.hotkeyKeyCode)
         XCTAssertEqual(loaded.hotkeyModifiers, raw.hotkeyModifiers)
         XCTAssertEqual(loaded.launchAtLogin, true)
+        XCTAssertEqual(loaded.historyLimit, 1)
     }
 
     func testAppConfigResolvedPropertiesForProviderPathModelAndFallbacks() {
@@ -254,7 +264,8 @@ final class ConfigManagerTests: XCTestCase {
             timeoutSeconds: 30,
             hotkeyKeyCode: 14,
             hotkeyModifiers: 256,
-            launchAtLogin: false
+            launchAtLogin: false,
+            historyLimit: 20
         )
 
         XCTAssertEqual(config.resolvedClaudePath, "/usr/local/bin/claude")
@@ -262,8 +273,8 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.resolvedGeminiPath, "/usr/local/bin/gemini")
         XCTAssertEqual(config.resolvedProvider, .gemini)
         XCTAssertEqual(config.resolvedModel(for: .claude), "haiku")
-        XCTAssertEqual(config.resolvedModel(for: .codex), "")
-        XCTAssertEqual(config.resolvedModel(for: .gemini), "")
+        XCTAssertEqual(config.resolvedModel(for: .codex), "gpt-5-codex")
+        XCTAssertEqual(config.resolvedModel(for: .gemini), "gemini-2.5-flash-lite")
     }
 
     func testAppConfigResolvedModelUsesResolvedProviderWhenArgumentIsNil() {
@@ -276,9 +287,10 @@ final class ConfigManagerTests: XCTestCase {
             timeoutSeconds: 30,
             hotkeyKeyCode: 14,
             hotkeyModifiers: 256,
-            launchAtLogin: false
+            launchAtLogin: false,
+            historyLimit: 20
         )
-        XCTAssertEqual(codexConfig.resolvedModel(), "")
+        XCTAssertEqual(codexConfig.resolvedModel(), "gpt-5-codex")
 
         let fallbackConfig = AppConfig(
             claudePath: "",
@@ -289,7 +301,8 @@ final class ConfigManagerTests: XCTestCase {
             timeoutSeconds: 30,
             hotkeyKeyCode: 14,
             hotkeyModifiers: 256,
-            launchAtLogin: false
+            launchAtLogin: false,
+            historyLimit: 20
         )
         XCTAssertEqual(fallbackConfig.resolvedModel(), "haiku")
     }
@@ -304,7 +317,8 @@ final class ConfigManagerTests: XCTestCase {
             timeoutSeconds: 30,
             hotkeyKeyCode: 14,
             hotkeyModifiers: 256,
-            launchAtLogin: false
+            launchAtLogin: false,
+            historyLimit: 20
         )
 
         XCTAssertEqual(config.resolvedProvider, .claude)
@@ -320,7 +334,8 @@ final class ConfigManagerTests: XCTestCase {
             timeoutSeconds: 30,
             hotkeyKeyCode: 14,
             hotkeyModifiers: 256,
-            launchAtLogin: false
+            launchAtLogin: false,
+            historyLimit: 20
         )
 
         XCTAssertNil(config.resolvedClaudePath)
@@ -342,6 +357,22 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(CLIProvider.claude.configPathKey, "claudePath")
         XCTAssertEqual(CLIProvider.codex.configPathKey, "codexPath")
         XCTAssertEqual(CLIProvider.gemini.configPathKey, "geminiPath")
+
+        XCTAssertEqual(CLIProvider.claude.defaultModel, "haiku")
+        XCTAssertEqual(CLIProvider.codex.defaultModel, "gpt-5-codex")
+        XCTAssertEqual(CLIProvider.gemini.defaultModel, "gemini-2.5-flash-lite")
+
+        XCTAssertEqual(CLIProvider.claude.availableModels, ["haiku", "sonnet", "opus"])
+        XCTAssertEqual(CLIProvider.codex.availableModels, ["gpt-5-codex", "gpt-5.3-codex", "gpt-5"])
+        XCTAssertEqual(CLIProvider.gemini.availableModels, [
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-3-flash-preview",
+            "gemini-3-pro-preview",
+            "gemini-3.1-pro-preview",
+            "gemini-3.1-pro-preview-customtools"
+        ])
     }
 
     func testDefaultInitializerUsesCurrentUserHomeDirectory() {
@@ -350,6 +381,13 @@ final class ConfigManagerTests: XCTestCase {
             .appendingPathComponent(".ghostedit", isDirectory: true)
             .path
         XCTAssertEqual(manager.baseDirectoryURL.path, expectedBase)
+        XCTAssertEqual(
+            manager.historyURL.path,
+            FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".ghostedit", isDirectory: true)
+                .appendingPathComponent("history.json")
+                .path
+        )
     }
 
     private func makeManager() -> (ConfigManager, URL) {

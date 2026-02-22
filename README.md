@@ -8,8 +8,13 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
 - Works in background (no Dock icon)
 - Configurable prompt in `~/.ghostedit/prompt.txt`
 - Provider switch in **Settings...**: Claude, Codex, Gemini
-- Model switch in **Settings...** (provider-specific presets + custom model)
+- Model switch in **Settings...** (full provider model lists + custom model)
+- Lowest-model defaults when switching providers:
+  - Codex: `gpt-5-codex`
+  - Gemini: `gemini-2.5-flash-lite`
 - Launch at login toggle in **Settings...**
+- Configurable correction history size (`History N`) in **Settings...**
+- History viewer (`History...`) shows original text, generated text, provider/model, status, and duration
 - Busy/unavailable model guidance in notifications and settings hint
 - Menu bar state indicator:
   - `ⓖ` idle
@@ -43,6 +48,7 @@ GhostEdit creates:
 
 - `~/.ghostedit/prompt.txt`
 - `~/.ghostedit/config.json`
+- `~/.ghostedit/history.json`
 
 If `~/.grammarfixer` exists from older builds, GhostEdit migrates it to `~/.ghostedit` automatically.
 
@@ -58,7 +64,8 @@ Default `config.json`:
   "hotkeyKeyCode": 14,
   "hotkeyModifiers": 256,
   "timeoutSeconds": 30,
-  "launchAtLogin": false
+  "launchAtLogin": false,
+  "historyLimit": 20
 }
 ```
 
@@ -68,6 +75,7 @@ Notes:
 - `claudePath`, `codexPath`, and `geminiPath` can be empty if auto-discovery works.
 - If auto-discovery fails, set an absolute path for that provider.
 - If a model is busy/fails, switch models in **Settings...** and retry.
+- `historyLimit` controls how many recent corrections are kept in `history.json`.
 
 ## Mandatory Tests and Coverage
 

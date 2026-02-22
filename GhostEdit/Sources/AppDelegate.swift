@@ -7,12 +7,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeyManager = HotkeyManager()
     private let clipboardManager = ClipboardManager()
     private let configManager = ConfigManager()
+    private lazy var historyStore = CorrectionHistoryStore(fileURL: configManager.historyURL)
     private lazy var shellRunner = ShellRunner(configManager: configManager)
     private var settingsWindowController: SettingsWindowController?
+    private var historyWindowController: HistoryWindowController?
 
     private var statusMenu: NSMenu?
     private var statusMenuItem: NSMenuItem?
     private var runNowMenuItem: NSMenuItem?
+    private var historyMenuItem: NSMenuItem?
 
     private var isProcessing = false
     private var isShowingAccessibilityAlert = false
@@ -45,6 +48,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try configManager.bootstrapIfNeeded()
+            try historyStore.bootstrapIfNeeded()
         } catch {
             showFatalAlert(
                 title: "GhostEdit Setup Failed",
@@ -99,6 +103,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         settings.target = self
         menu.addItem(settings)
+
+        let history = NSMenuItem(
+            title: "History...",
+            action: #selector(openHistoryAction),
+            keyEquivalent: ""
+        )
+        history.target = self
+        menu.addItem(history)
+        historyMenuItem = history
 
         menu.addItem(.separator())
 
@@ -201,6 +214,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openSettingsAction() {
         statusMenu?.cancelTracking()
         showSettingsWindow()
+    }
+
+    @objc private func openHistoryAction() {
+        statusMenu?.cancelTracking()
+        showHistoryWindow()
     }
 
     @objc private func openConfigFileAction() {
@@ -332,6 +350,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = configManager.loadConfig()
         let provider = config.resolvedProvider
         let model = config.resolvedModel(for: provider)
+        let startedAt = Date()
         do {
             prompt = try configManager.loadPrompt()
         } catch {
@@ -352,6 +371,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 let correctedText = try self.shellRunner.correctText(
                     systemPrompt: prompt,
                     selectedText: selectedText
+                )
+                self.recordHistoryEntry(
+                    originalText: selectedText,
+                    generatedText: correctedText,
+                    provider: provider,
+                    model: model,
+                    startedAt: startedAt,
+                    succeeded: true
                 )
 
                 DispatchQueue.main.async {
@@ -378,6 +405,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 DispatchQueue.main.async {
                     self.restoreClipboardSnapshot(after: 0)
+                    self.recordHistoryEntry(
+                        originalText: selectedText,
+                        generatedText: "",
+                        provider: provider,
+                        model: model,
+                        startedAt: startedAt,
+                        succeeded: false
+                    )
                     self.handleProcessingError(error)
                     self.finishProcessing()
                 }
@@ -565,6 +600,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 let provider = config.resolvedProvider
                 let model = config.resolvedModel(for: provider)
                 let modelDisplay = model.isEmpty ? "provider default" : model
+                try? self.historyStore.trim(limit: config.historyLimit)
+                self.refreshHistoryWindowIfVisible()
                 self.setStatus("Settings saved (\(provider.executableName), model: \(modelDisplay))")
             }
         }
@@ -572,6 +609,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindowController?.showWindow(nil)
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showHistoryWindow() {
+        if historyWindowController == nil {
+            historyWindowController = HistoryWindowController()
+        }
+        refreshHistoryWindowIfVisible()
+        historyWindowController?.showWindow(nil)
+        historyWindowController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func refreshHistoryWindowIfVisible() {
+        let entries = historyStore.load().reversed()
+        let snapshot = Array(entries)
+        DispatchQueue.main.async { [weak self] in
+            self?.historyWindowController?.update(entries: snapshot)
+        }
     }
 
     private func restoreClipboardSnapshot(after delay: TimeInterval) {
@@ -596,8 +651,38 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func syncLaunchAtLoginPreferenceSilently() {
-        let launchAtLogin = configManager.loadConfig().launchAtLogin
+        let config = configManager.loadConfig()
+        let launchAtLogin = config.launchAtLogin
+        try? historyStore.trim(limit: config.historyLimit)
         try? LaunchAtLoginManager.setEnabled(launchAtLogin)
+    }
+
+    private func recordHistoryEntry(
+        originalText: String,
+        generatedText: String,
+        provider: CLIProvider,
+        model: String,
+        startedAt: Date,
+        succeeded: Bool
+    ) {
+        let elapsed = Int(Date().timeIntervalSince(startedAt) * 1_000)
+        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let modelName = normalizedModel.isEmpty ? AppConfig.defaultModel(for: provider) : normalizedModel
+        let historyLimit = configManager.loadConfig().historyLimit
+
+        let entry = CorrectionHistoryEntry(
+            id: UUID(),
+            timestamp: Date(),
+            originalText: originalText,
+            generatedText: generatedText,
+            provider: provider.displayName,
+            model: modelName,
+            durationMilliseconds: max(0, elapsed),
+            succeeded: succeeded
+        )
+
+        try? historyStore.append(entry, limit: historyLimit)
+        refreshHistoryWindowIfVisible()
     }
 
     private func showFatalAlert(title: String, message: String) {
@@ -628,6 +713,7 @@ final class SettingsWindowController: NSWindowController {
         target: nil,
         action: nil
     )
+    private let historyLimitField = NSTextField(string: "")
     private let hintLabel = NSTextField(labelWithString: "")
 
     private let providerOptions: [CLIProvider] = [.claude, .codex, .gemini]
@@ -638,7 +724,7 @@ final class SettingsWindowController: NSWindowController {
         self.onConfigSaved = onConfigSaved
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 360),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -676,7 +762,7 @@ final class SettingsWindowController: NSWindowController {
             rootStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -20)
         ])
 
-        let subtitle = NSTextField(labelWithString: "Choose provider and model used for correction.")
+        let subtitle = NSTextField(labelWithString: "Choose provider/model and how many past corrections to keep.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.lineBreakMode = .byWordWrapping
         subtitle.maximumNumberOfLines = 2
@@ -709,6 +795,12 @@ final class SettingsWindowController: NSWindowController {
 
         launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
         rootStack.addArrangedSubview(launchAtLoginCheckbox)
+
+        let historyLimitLabel = makeFieldLabel("History N")
+        historyLimitField.placeholderString = "20"
+        historyLimitField.alignment = .left
+        let historyLimitRow = makeRow(label: historyLimitLabel, field: historyLimitField)
+        rootStack.addArrangedSubview(historyLimitRow)
 
         hintLabel.textColor = .secondaryLabelColor
         hintLabel.maximumNumberOfLines = 3
@@ -759,6 +851,7 @@ final class SettingsWindowController: NSWindowController {
         let providerIndex = providerOptions.firstIndex(of: provider) ?? 0
         providerPopup.selectItem(at: providerIndex)
         launchAtLoginCheckbox.state = config.launchAtLogin ? .on : .off
+        historyLimitField.stringValue = "\(config.historyLimit)"
 
         let rawModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedModel = rawModel.isEmpty ? AppConfig.defaultModel(for: provider) : rawModel
@@ -792,33 +885,14 @@ final class SettingsWindowController: NSWindowController {
     }
 
     private func modelOptionsForProvider(_ provider: CLIProvider) -> [ModelOption] {
-        switch provider {
-        case .claude:
-            return [
-                ModelOption(title: "Claude default (haiku)", value: "haiku"),
-                ModelOption(title: "Sonnet", value: "sonnet"),
-                ModelOption(title: "Opus", value: "opus"),
-                ModelOption(title: "Custom", value: nil)
-            ]
-        case .codex:
-            return [
-                ModelOption(title: "Codex provider default", value: ""),
-                ModelOption(title: "gpt-5.3-codex", value: "gpt-5.3-codex"),
-                ModelOption(title: "gpt-5-codex", value: "gpt-5-codex"),
-                ModelOption(title: "Custom", value: nil)
-            ]
-        case .gemini:
-            return [
-                ModelOption(title: "Gemini provider default", value: ""),
-                ModelOption(title: "gemini-2.5-flash", value: "gemini-2.5-flash"),
-                ModelOption(title: "gemini-2.5-pro", value: "gemini-2.5-pro"),
-                ModelOption(title: "Custom", value: nil)
-            ]
+        let predefined = provider.availableModels.map { modelName in
+            ModelOption(title: modelName, value: modelName)
         }
+        return predefined + [ModelOption(title: "Custom", value: nil)]
     }
 
     private func updateHint(for provider: CLIProvider) {
-        hintLabel.stringValue = "If a \(provider.displayName) model is busy or fails, switch to another model here and try again."
+        hintLabel.stringValue = "If a \(provider.displayName) model is busy or fails, switch models and retry. Default: \(provider.defaultModel)."
     }
 
     private func refreshCustomFieldVisibility() {
@@ -857,6 +931,7 @@ final class SettingsWindowController: NSWindowController {
     @objc private func saveClicked() {
         let provider = selectedProvider()
         let model = selectedModel()
+        let historyLimitText = historyLimitField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if selectedOptionValue() == nil, model.isEmpty {
             NSSound.beep()
             let alert = NSAlert()
@@ -866,11 +941,21 @@ final class SettingsWindowController: NSWindowController {
             alert.runModal()
             return
         }
+        guard let historyLimit = Int(historyLimitText), historyLimit > 0 else {
+            NSSound.beep()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "History size is invalid"
+            alert.informativeText = "Enter a whole number greater than 0 for History N."
+            alert.runModal()
+            return
+        }
 
         var config = configManager.loadConfig()
         config.provider = provider.rawValue
         config.model = model
         config.launchAtLogin = (launchAtLoginCheckbox.state == .on)
+        config.historyLimit = historyLimit
 
         do {
             try configManager.saveConfig(config)
@@ -896,5 +981,105 @@ final class SettingsWindowController: NSWindowController {
 
     @objc private func closeClicked() {
         close()
+    }
+}
+
+final class HistoryWindowController: NSWindowController {
+    private let textView = NSTextView(frame: .zero)
+    private let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter
+    }()
+
+    init() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 520),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "GhostEdit History"
+        window.isReleasedWhenClosed = false
+        window.center()
+
+        super.init(window: window)
+        buildUI()
+        update(entries: [])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(entries: [CorrectionHistoryEntry]) {
+        guard !entries.isEmpty else {
+            textView.string = "No corrections yet."
+            return
+        }
+
+        let blocks = entries.enumerated().map { index, entry in
+            let status = entry.succeeded ? "Succeeded" : "Failed"
+            let timestamp = timestampFormatter.string(from: entry.timestamp)
+            return [
+                "\(index + 1). \(timestamp)",
+                "Status: \(status)",
+                "Provider: \(entry.provider)",
+                "Model: \(entry.model)",
+                "Duration: \(entry.durationMilliseconds) ms",
+                "Original:",
+                entry.originalText,
+                "Generated:",
+                entry.generatedText,
+                String(repeating: "-", count: 72)
+            ].joined(separator: "\n")
+        }
+
+        textView.string = blocks.joined(separator: "\n")
+    }
+
+    private func buildUI() {
+        guard let contentView = window?.contentView else {
+            return
+        }
+
+        let rootStack = NSStackView()
+        rootStack.orientation = .vertical
+        rootStack.spacing = 12
+        rootStack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(rootStack)
+
+        NSLayoutConstraint.activate([
+            rootStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            rootStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            rootStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            rootStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16)
+        ])
+
+        let subtitle = NSTextField(labelWithString: "Latest corrections (newest first).")
+        subtitle.textColor = .secondaryLabelColor
+        rootStack.addArrangedSubview(subtitle)
+
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = true
+        scrollView.borderType = .bezelBorder
+
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.usesFontPanel = false
+        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.backgroundColor = .textBackgroundColor
+        textView.string = ""
+
+        scrollView.documentView = textView
+        scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        rootStack.addArrangedSubview(scrollView)
     }
 }

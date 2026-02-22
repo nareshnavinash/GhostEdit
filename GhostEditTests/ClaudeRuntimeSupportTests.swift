@@ -166,6 +166,8 @@ final class ClaudeRuntimeSupportTests: XCTestCase {
             "--skip-git-repo-check",
             "--sandbox",
             "read-only",
+            "-c",
+            "model_reasoning_effort='low'",
             "--model",
             "gpt-5-codex",
             "hello"
@@ -175,6 +177,8 @@ final class ClaudeRuntimeSupportTests: XCTestCase {
             "--skip-git-repo-check",
             "--sandbox",
             "read-only",
+            "-c",
+            "model_reasoning_effort='low'",
             "hello"
         ])
     }

@@ -110,7 +110,9 @@ enum ClaudeRuntimeSupport {
                 "exec",
                 "--skip-git-repo-check",
                 "--sandbox",
-                "read-only"
+                "read-only",
+                "-c",
+                "model_reasoning_effort='low'"
             ]
             if !trimmedModel.isEmpty {
                 args.append(contentsOf: ["--model", trimmedModel])

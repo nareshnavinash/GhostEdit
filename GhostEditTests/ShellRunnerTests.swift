@@ -81,6 +81,8 @@ final class ShellRunnerTests: XCTestCase {
             "--skip-git-repo-check",
             "--sandbox",
             "read-only",
+            "-c",
+            "model_reasoning_effort='low'",
             "--model",
             "gpt-5-codex",
             "p\n\nx"
@@ -488,7 +490,8 @@ private extension AppConfig {
             timeoutSeconds: timeoutSeconds ?? self.timeoutSeconds,
             hotkeyKeyCode: hotkeyKeyCode,
             hotkeyModifiers: hotkeyModifiers,
-            launchAtLogin: launchAtLogin
+            launchAtLogin: launchAtLogin,
+            historyLimit: historyLimit
         )
     }
 }
