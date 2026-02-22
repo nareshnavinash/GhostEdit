@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+<path d="M512 0C192.9 0 112.5 0 56.3 56.3S0 192.9 0 512s0 399.5 56.3 455.7S192.9 1024 512 1024s399.5 0 455.7-56.3S1024 831.1 1024 512s0-399.5-56.3-455.7S831.1 0 512 0z" fill="none" stroke="#000000" stroke-width="24" /><text x="512" y="580" text-anchor="middle" dominant-baseline="central" font-family="'Inter', sans-serif" font-weight="200" font-size="560" fill="#000000">g</text>
+</svg>

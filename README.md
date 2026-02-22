@@ -2,6 +2,14 @@
 
 GhostEdit is a native macOS menu bar app that fixes selected text in any app using a local CLI provider.
 
+![GhostEdit launch preview](remotion/out/GitHubSocialPreview.png)
+
+## Trailer
+
+<video src="remotion/out/LaunchTrailer.mp4" controls preload="metadata"></video>
+
+Direct download: [LaunchTrailer.mp4](remotion/out/LaunchTrailer.mp4)
+
 ## Features
 
 - Global hotkey (`Command + E` by default)
@@ -20,8 +28,8 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
 - Busy/unavailable model guidance in notifications and settings hint
 - Preserves static tokens during correction (mentions, emojis, URLs, emails, file paths, inline code) via placeholder protection + retry
 - Menu bar state indicator:
-  - `ⓖ` idle
-  - `🤓` processing
+  - ![Idle menubar icon](remotion/out/MenuBarIconIdle.png) idle
+  - ![Processing menubar icon](remotion/out/MenuBarIconProcessing.png) processing
 
 ## Build and Run (Local)
 

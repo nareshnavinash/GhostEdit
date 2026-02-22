@@ -27,8 +27,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastExternalActiveApp: NSRunningApplication?
 
     private let statusPrefix = "Status: "
-    private let idleIcon = "ⓖ"
-    private let workingIcon = "🤓"
+    private let idleIconName = NSImage.Name("MenuBarIconIdle")
+    private let workingIconName = NSImage.Name("MenuBarIconProcessing")
+    private let idleIconFallback = "ⓖ"
+    private let workingIconFallback = "🤓"
     private let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .medium
@@ -74,7 +76,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureStatusItem() {
         if let button = statusItem.button {
-            setMenuBarIcon(idleIcon)
+            setMenuBarIcon(named: idleIconName, fallback: idleIconFallback)
             button.toolTip = "GhostEdit"
         }
 
@@ -478,14 +480,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         writingCoachMenuItem?.isEnabled = false
         statusMenu?.cancelTracking()
         statusItem.menu = nil
-        setMenuBarIcon(workingIcon)
+        setMenuBarIcon(named: workingIconName, fallback: workingIconFallback)
     }
 
     private func stopProcessingIndicator() {
         runNowMenuItem?.isEnabled = true
         writingCoachMenuItem?.isEnabled = true
         statusItem.menu = statusMenu
-        setMenuBarIcon(idleIcon)
+        setMenuBarIcon(named: idleIconName, fallback: idleIconFallback)
     }
 
     private func finishProcessing() {
@@ -586,18 +588,26 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.toolTip = "GhostEdit\n\(text)"
     }
 
-    private func setMenuBarIcon(_ icon: String) {
+    private func setMenuBarIcon(named iconName: NSImage.Name, fallback: String) {
         guard let button = statusItem.button else {
+            return
+        }
+
+        if let iconImage = NSImage(named: iconName) {
+            iconImage.isTemplate = false
+            button.image = iconImage
+            button.imagePosition = .imageOnly
+            button.title = ""
+            button.attributedTitle = NSAttributedString(string: "")
             return
         }
 
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 14, weight: .regular)
         ]
-
         button.image = nil
-        button.title = icon
-        button.attributedTitle = NSAttributedString(string: icon, attributes: attrs)
+        button.title = fallback
+        button.attributedTitle = NSAttributedString(string: fallback, attributes: attrs)
     }
 
     private func appVersionText() -> String {

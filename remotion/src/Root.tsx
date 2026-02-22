@@ -1,78 +1,40 @@
 import "./index.css";
 import { Composition, Still } from "remotion";
-import { AppIconIdle } from "./compositions/AppIconIdle";
-import { AppIconProcessing } from "./compositions/AppIconProcessing";
-import { MenuBarIconIdle } from "./compositions/MenuBarIconIdle";
-import { MenuBarIconProcessing } from "./compositions/MenuBarIconProcessing";
-import { ProcessingAnimation } from "./compositions/ProcessingAnimation";
-import { TwitterHeader } from "./compositions/TwitterHeader";
-import { GitHubSocial } from "./compositions/GitHubSocial";
-import { OpenGraph } from "./compositions/OpenGraph";
-import { Generic16x9 } from "./compositions/Generic16x9";
+
+// Stills
+import { AppIcon1024 } from "./stills/AppIcon1024";
+import { MenuBarIconIdle } from "./stills/MenuBarIconIdle";
+import { MenuBarIconProcessing } from "./stills/MenuBarIconProcessing";
+import { TwitterBanner } from "./stills/TwitterBanner";
+import { OpenGraphImage } from "./stills/OpenGraphImage";
+import { GitHubSocialPreview } from "./stills/GitHubSocialPreview";
+import { InstagramPost } from "./stills/InstagramPost";
+import { ProductHuntThumbnail } from "./stills/ProductHuntThumbnail";
+
+// Video
+import { LaunchTrailer } from "./video/LaunchTrailer";
 
 export const RemotionRoot: React.FC = () => {
   return (
     <>
-      {/* App icons */}
-      <Still
-        id="AppIconIdle"
-        component={AppIconIdle}
-        width={1024}
-        height={1024}
-      />
-      <Still
-        id="AppIconProcessing"
-        component={AppIconProcessing}
-        width={1024}
-        height={1024}
-      />
+      {/* === App Icons === */}
+      <Still id="AppIcon1024" component={AppIcon1024} width={1024} height={1024} />
+      <Still id="MenuBarIconIdle" component={MenuBarIconIdle} width={44} height={44} />
+      <Still id="MenuBarIconProcessing" component={MenuBarIconProcessing} width={44} height={44} />
 
-      {/* Menu bar icons (@2x retina) */}
-      <Still
-        id="MenuBarIconIdle"
-        component={MenuBarIconIdle}
-        width={44}
-        height={44}
-      />
-      <Still
-        id="MenuBarIconProcessing"
-        component={MenuBarIconProcessing}
-        width={44}
-        height={44}
-      />
+      {/* === Social Media === */}
+      <Still id="TwitterBanner" component={TwitterBanner} width={1500} height={500} />
+      <Still id="OpenGraphImage" component={OpenGraphImage} width={1200} height={630} />
+      <Still id="GitHubSocialPreview" component={GitHubSocialPreview} width={1280} height={640} />
+      <Still id="InstagramPost" component={InstagramPost} width={1080} height={1080} />
+      <Still id="ProductHuntThumbnail" component={ProductHuntThumbnail} width={240} height={240} />
 
-      {/* Processing animation — 2s loop at 30fps */}
+      {/* === Launch Trailer === */}
       <Composition
-        id="ProcessingAnimation"
-        component={ProcessingAnimation}
-        durationInFrames={60}
+        id="LaunchTrailer"
+        component={LaunchTrailer}
+        durationInFrames={905}
         fps={30}
-        width={256}
-        height={256}
-      />
-
-      {/* Social banners */}
-      <Still
-        id="TwitterHeader"
-        component={TwitterHeader}
-        width={1500}
-        height={500}
-      />
-      <Still
-        id="GitHubSocial"
-        component={GitHubSocial}
-        width={1280}
-        height={640}
-      />
-      <Still
-        id="OpenGraph"
-        component={OpenGraph}
-        width={1200}
-        height={630}
-      />
-      <Still
-        id="Generic16x9"
-        component={Generic16x9}
         width={1920}
         height={1080}
       />
