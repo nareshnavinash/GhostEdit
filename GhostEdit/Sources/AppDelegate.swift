@@ -27,10 +27,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastExternalActiveApp: NSRunningApplication?
 
     private let statusPrefix = "Status: "
-    private let idleIconName = NSImage.Name("MenuBarIconIdle")
-    private let workingIconName = NSImage.Name("MenuBarIconProcessing")
-    private let idleIconFallback = "ⓖ"
-    private let workingIconFallback = "🤓"
+    private let idleMenuBarIcon = MenuBarIconSupport.descriptor(for: .idle)
+    private let workingMenuBarIcon = MenuBarIconSupport.descriptor(for: .processing)
     private let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .medium
@@ -76,7 +74,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureStatusItem() {
         if let button = statusItem.button {
-            setMenuBarIcon(named: idleIconName, fallback: idleIconFallback)
+            setMenuBarIcon(idleMenuBarIcon)
             button.toolTip = "GhostEdit"
         }
 
@@ -480,14 +478,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         writingCoachMenuItem?.isEnabled = false
         statusMenu?.cancelTracking()
         statusItem.menu = nil
-        setMenuBarIcon(named: workingIconName, fallback: workingIconFallback)
+        setMenuBarIcon(workingMenuBarIcon)
     }
 
     private func stopProcessingIndicator() {
         runNowMenuItem?.isEnabled = true
         writingCoachMenuItem?.isEnabled = true
         statusItem.menu = statusMenu
-        setMenuBarIcon(named: idleIconName, fallback: idleIconFallback)
+        setMenuBarIcon(idleMenuBarIcon)
     }
 
     private func finishProcessing() {
@@ -588,12 +586,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.toolTip = "GhostEdit\n\(text)"
     }
 
-    private func setMenuBarIcon(named iconName: NSImage.Name, fallback: String) {
+    private func setMenuBarIcon(_ descriptor: MenuBarIconDescriptor) {
         guard let button = statusItem.button else {
             return
         }
 
-        if let iconImage = NSImage(named: iconName) {
+        if let iconImage = MenuBarIconSupport.resolveImage(
+            named: NSImage.Name(descriptor.assetName)
+        ) {
             iconImage.isTemplate = false
             button.image = iconImage
             button.imagePosition = .imageOnly
@@ -606,8 +606,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             .font: NSFont.systemFont(ofSize: 14, weight: .regular)
         ]
         button.image = nil
-        button.title = fallback
-        button.attributedTitle = NSAttributedString(string: fallback, attributes: attrs)
+        button.title = descriptor.fallbackGlyph
+        button.attributedTitle = NSAttributedString(string: descriptor.fallbackGlyph, attributes: attrs)
     }
 
     private func appVersionText() -> String {

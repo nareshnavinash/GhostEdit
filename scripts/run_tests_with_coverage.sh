@@ -65,6 +65,7 @@ REQUIRED_FILES=(
   "$ROOT_DIR/GhostEdit/Sources/AccessibilitySupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/SettingsLayoutSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/TokenPreservationSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/MenuBarIconSupport.swift"
 )
 
 xcrun llvm-cov report \
