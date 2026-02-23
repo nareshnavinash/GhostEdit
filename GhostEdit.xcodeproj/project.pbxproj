@@ -23,6 +23,8 @@
 		5F4261F9E269578EC06C99E5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 107C8005BF9B19116B7FD5BA /* main.swift */; };
 		63CA5F9E9DD8660BAF3991C1 /* ShellRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4EA327528B55DB5C2AD64D /* ShellRunner.swift */; };
 		7128271958A6A80E9ED9455B /* WritingCoachLayoutSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E4999151E25E3611DF482A /* WritingCoachLayoutSupportTests.swift */; };
+		8460E68C246438137568B8C2 /* HUDOverlaySupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 147F68940A034561B6462123 /* HUDOverlaySupport.swift */; };
+		85227B0EDB53C4D9A6668582 /* HUDOverlaySupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B70C6164BA8909580C3C91A /* HUDOverlaySupportTests.swift */; };
 		881B9C18CC53E0780479A082 /* CorrectionHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD69B09E5A0F1173B476BD23 /* CorrectionHistoryStoreTests.swift */; };
 		8CB37049BD7E1673D42AEE8C /* GhostEditCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 33C90B5A383CE8E06047A674 /* GhostEditCore.framework */; };
 		91B7EA74641364F535A763AC /* CorrectionHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48762FEE0ADD0B53660C76D /* CorrectionHistoryStore.swift */; };
@@ -93,6 +95,7 @@
 /* Begin PBXFileReference section */
 		0803DDDD814098405BB07796 /* TokenPreservationSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenPreservationSupportTests.swift; sourceTree = "<group>"; };
 		107C8005BF9B19116B7FD5BA /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		147F68940A034561B6462123 /* HUDOverlaySupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDOverlaySupport.swift; sourceTree = "<group>"; };
 		19B0A3EBE89D97EEA6C99D23 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		19B6383DE91F2235C671C90C /* WritingCoachLayoutSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingCoachLayoutSupport.swift; sourceTree = "<group>"; };
 		2D4EA327528B55DB5C2AD64D /* ShellRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRunner.swift; sourceTree = "<group>"; };
@@ -101,6 +104,7 @@
 		427D8D18C179075A09FC7B82 /* GhostEditTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GhostEditTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		48F2DC407FC987FB7499B2ED /* SettingsLayoutSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsLayoutSupport.swift; sourceTree = "<group>"; };
 		4A3079211B444C4F0D1D416C /* ClaudeRuntimeSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeRuntimeSupport.swift; sourceTree = "<group>"; };
+		4B70C6164BA8909580C3C91A /* HUDOverlaySupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDOverlaySupportTests.swift; sourceTree = "<group>"; };
 		558C9C32C4669E55081895DB /* AccessibilityTextSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityTextSupport.swift; sourceTree = "<group>"; };
 		60A7425688D277A0486D28B0 /* ConfigManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigManager.swift; sourceTree = "<group>"; };
 		68A4F86B3D16DC119EF3D144 /* MenuBarIconSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconSupportTests.swift; sourceTree = "<group>"; };
@@ -174,6 +178,7 @@
 				FDB823432C740C6B3C712BC2 /* HistoryTableModel.swift */,
 				9C996DDEE9C8B3F039E6ABBE /* HotkeyManager.swift */,
 				B906B851893CA488140981F6 /* HotkeySupport.swift */,
+				147F68940A034561B6462123 /* HUDOverlaySupport.swift */,
 				EA9C5D9A20D47E1D5A0B997E /* LaunchAtLoginManager.swift */,
 				107C8005BF9B19116B7FD5BA /* main.swift */,
 				6A19352959464C2B26B64C91 /* MenuBarIconSupport.swift */,
@@ -198,6 +203,7 @@
 				9777490B774BC665A96882DD /* HistoryCSVExporterTests.swift */,
 				416AEE28E691DC13F7713AA4 /* HistoryTableModelTests.swift */,
 				BDCC2504CAF8FAD1E28BA027 /* HotkeySupportTests.swift */,
+				4B70C6164BA8909580C3C91A /* HUDOverlaySupportTests.swift */,
 				68A4F86B3D16DC119EF3D144 /* MenuBarIconSupportTests.swift */,
 				B7E061DD0958AC85DA7B2882 /* SettingsLayoutSupportTests.swift */,
 				F479A47545C9BCF85C4025BA /* ShellRunnerTests.swift */,
@@ -349,6 +355,7 @@
 				53BBE4927545377B3648D3AA /* ClipboardManager.swift in Sources */,
 				E84DD5B8C999394B5375C717 /* ConfigManager.swift in Sources */,
 				91B7EA74641364F535A763AC /* CorrectionHistoryStore.swift in Sources */,
+				8460E68C246438137568B8C2 /* HUDOverlaySupport.swift in Sources */,
 				B1EED691F16254A97CFA03D3 /* HistoryCSVExporter.swift in Sources */,
 				13F49DF808DEEFA0F50A3114 /* HistoryTableModel.swift in Sources */,
 				0C90930E75E434709A91E54F /* HotkeyManager.swift in Sources */,
@@ -381,6 +388,7 @@
 				9D48A6EC72F1A548B315C259 /* ClaudeRuntimeSupportTests.swift in Sources */,
 				CA780C7EE5E804CBF8103584 /* ConfigManagerTests.swift in Sources */,
 				881B9C18CC53E0780479A082 /* CorrectionHistoryStoreTests.swift in Sources */,
+				85227B0EDB53C4D9A6668582 /* HUDOverlaySupportTests.swift in Sources */,
 				C34640B7FB93D719302A58AA /* HistoryCSVExporterTests.swift in Sources */,
 				92262D1260E82CC716AD0016 /* HistoryTableModelTests.swift in Sources */,
 				B0CC55992319C9F6EB472543 /* HotkeySupportTests.swift in Sources */,
@@ -415,7 +423,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = GhostEdit/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -423,7 +431,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = "3.3.0-beta.1";
+				MARKETING_VERSION = 4.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};
@@ -455,7 +463,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 10;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = GhostEdit/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -463,7 +471,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = "3.3.0-beta.1";
+				MARKETING_VERSION = 4.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};

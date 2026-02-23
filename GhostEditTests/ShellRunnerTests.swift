@@ -13,6 +13,41 @@ final class ShellRunnerTests: XCTestCase {
         try super.tearDownWithError()
     }
 
+    func testCorrectTextStripsClaudeCodeEnvironmentVariables() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let envLog = testEnv.homeURL.appendingPathComponent("env.log")
+
+        let script = """
+        #!/bin/zsh
+        env > '\(envLog.path)'
+        print -r -- "ok"
+        """
+
+        let executable = try makeExecutableScript(named: "claude-env-check.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        // Create a new runner with CLAUDECODE and CLAUDE_CODE set in the environment.
+        let injectedEnv = [
+            "CLAUDECODE": "1",
+            "CLAUDE_CODE": "1",
+            "HOME": testEnv.homeURL.path,
+        ]
+        let runner = ShellRunner(
+            configManager: testEnv.manager,
+            environment: injectedEnv,
+            homeDirectoryPath: testEnv.homeURL.path
+        )
+
+        let output = try runner.correctText(systemPrompt: "p", selectedText: "x")
+        XCTAssertEqual(output, "ok")
+
+        let envOutput = try String(contentsOf: envLog, encoding: .utf8)
+        XCTAssertFalse(envOutput.contains("CLAUDECODE="), "CLAUDECODE should be stripped from the child process environment")
+        XCTAssertFalse(envOutput.contains("CLAUDE_CODE="), "CLAUDE_CODE should be stripped from the child process environment")
+    }
+
     func testCorrectTextPassesExpectedArgumentsAndWorkingDirectoryForClaude() throws {
         let testEnv = try makeRunnerEnvironment()
         let argsLog = testEnv.homeURL.appendingPathComponent("args.log")

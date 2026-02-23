@@ -212,6 +212,10 @@ final class ShellRunner {
             homeDirectoryPath: homeDirectoryPath,
             environment: environment
         )
+        // Remove CLAUDECODE env var to prevent "nested session" errors when
+        // GhostEdit is launched from within a Claude Code terminal session.
+        runtimeEnvironment.removeValue(forKey: "CLAUDE_CODE")
+        runtimeEnvironment.removeValue(forKey: "CLAUDECODE")
         process.environment = runtimeEnvironment
 
         let outputPipe = Pipe()

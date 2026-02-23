@@ -12,6 +12,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var shellRunner = ShellRunner(configManager: configManager)
     private var settingsWindowController: SettingsWindowController?
     private var historyWindowController: HistoryWindowController?
+    private var hudController: HUDOverlayController?
 
     private var statusMenu: NSMenu?
     private var statusMenuItem: NSMenuItem?
@@ -273,6 +274,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         isProcessing = true
         startProcessingIndicator()
+        showHUD(state: .working)
 
         targetAppAtTrigger = targetApp
 
@@ -414,27 +416,54 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
 
                 DispatchQueue.main.async {
-                    // Try accessibility-based text replacement first (fastest path).
-                    if let targetApp = self.targetAppAtTrigger,
-                       AccessibilityTextSupport.replaceSelectedText(
-                           appPID: targetApp.processIdentifier,
-                           with: correctedText
-                       ) {
-                        let time = self.timeFormatter.string(from: Date())
-                        self.setStatus("Last correction succeeded at \(time)")
-                        self.restoreClipboardSnapshot(after: 0)
+                    // Check if target app was terminated during processing.
+                    if let targetApp = self.targetAppAtTrigger, targetApp.isTerminated {
+                        self.clipboardManager.writePlainText(correctedText)
+                        self.clipboardSnapshot = nil
+                        self.dismissHUD()
+                        self.setStatus("Target app closed; corrected text on clipboard")
                         self.finishProcessing()
                         return
                     }
 
+                    // Try accessibility-based text replacement first (fastest path).
+                    // Works on background apps — no focus changes needed.
+                    if let targetApp = self.targetAppAtTrigger {
+                        let axReplaced = AccessibilityTextSupport.replaceSelectedText(
+                            appPID: targetApp.processIdentifier,
+                            with: correctedText
+                        )
+                        if axReplaced {
+                            // Verify the replacement actually took effect by reading back.
+                            // Some apps accept the AX call but don't update their text.
+                            let readBack = AccessibilityTextSupport.readSelectedText(
+                                appPID: targetApp.processIdentifier
+                            )
+                            let verified = (readBack == correctedText)
+
+                            if verified {
+                                let time = self.timeFormatter.string(from: Date())
+                                self.setStatus("Last correction succeeded at \(time)")
+                                self.restoreClipboardSnapshot(after: 0)
+                                self.updateHUD(state: .success)
+                                self.finishProcessing()
+                                return
+                            }
+                            // AX said success but text didn't change — fall through to clipboard.
+                        }
+                    }
+
                     // Fall back to clipboard-based paste.
+                    // Remember the user's current app so we can restore focus after pasting.
+                    let userCurrentApp = NSWorkspace.shared.frontmostApplication
+
                     if self.clipboardSnapshot == nil {
                         self.clipboardSnapshot = self.clipboardManager.snapshot()
                     }
                     self.clipboardManager.writePlainText(correctedText)
                     self.targetAppAtTrigger?.activate(options: [.activateAllWindows])
 
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                         let pasted = self.clipboardManager.simulatePasteShortcut(using: .annotatedSession)
                             || self.clipboardManager.simulatePasteShortcut(using: .hidSystem)
 
@@ -444,12 +473,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             self.notifyFailure(body: "Correction Failed. \(message)")
                             self.showFailureAlert(title: "Correction Failed", message: message)
                             self.setStatus("Paste failed")
+                            self.dismissHUD()
                         } else {
                             let time = self.timeFormatter.string(from: Date())
                             self.setStatus("Last correction succeeded at \(time)")
+                            self.updateHUD(state: .success)
+
+                            // Restore the user's focus if they switched away from the target app.
+                            if let userApp = userCurrentApp,
+                               let targetApp = self.targetAppAtTrigger,
+                               userApp.processIdentifier != targetApp.processIdentifier,
+                               !userApp.isTerminated {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+                                    userApp.activate()
+                                }
+                            }
                         }
 
-                        self.restoreClipboardSnapshot(after: 0.15)
+                        self.restoreClipboardSnapshot(after: 0.20)
                         self.finishProcessing()
                     }
                 }
@@ -465,6 +506,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         succeeded: false
                     )
                     self.handleProcessingError(error)
+                    self.dismissHUD()
                     self.finishProcessing()
                 }
             }
@@ -522,6 +564,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         writingCoachMenuItem?.isEnabled = true
         statusItem.menu = statusMenu
         setMenuBarIcon(idleMenuBarIcon)
+    }
+
+    private func showHUD(state: HUDOverlayState) {
+        if hudController == nil {
+            hudController = HUDOverlayController()
+        }
+        hudController?.show(state: state)
+    }
+
+    private func updateHUD(state: HUDOverlayState) {
+        hudController?.update(state: state)
+    }
+
+    private func dismissHUD() {
+        hudController?.dismiss()
     }
 
     private func finishProcessing() {
@@ -1847,5 +1904,309 @@ private final class HistoryCopyTableView: NSTableView {
             return
         }
         super.keyDown(with: event)
+    }
+}
+
+final class HUDOverlayController {
+    private var panel: NSPanel?
+    private var ghostImageView: NSImageView?
+    private var messageLabel: NSTextField?
+    private var dismissWorkItem: DispatchWorkItem?
+    private var ghostWithSpectacles: NSImage?
+    private var ghostWithoutSpectacles: NSImage?
+
+    func show(state: HUDOverlayState) {
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+
+        if panel == nil {
+            buildPanel()
+        }
+
+        applyContent(for: state)
+
+        guard let panel else { return }
+        panel.alphaValue = 0
+        panel.orderFrontRegardless()
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = TimeInterval(HUDOverlaySupport.fadeInDuration)
+            context.allowsImplicitAnimation = true
+            panel.animator().alphaValue = 1
+        }
+
+        scheduleAutoDismissIfNeeded(for: state)
+    }
+
+    func update(state: HUDOverlayState) {
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+
+        if panel == nil {
+            buildPanel()
+        }
+
+        applyContent(for: state)
+
+        guard let panel else { return }
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+
+        scheduleAutoDismissIfNeeded(for: state)
+    }
+
+    func dismiss() {
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+
+        guard let panel else { return }
+
+        let fadeDuration = TimeInterval(HUDOverlaySupport.fadeOutDuration)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = fadeDuration
+            context.allowsImplicitAnimation = true
+            panel.animator().alphaValue = 0
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + fadeDuration + 0.05) { [weak self] in
+            self?.panel?.orderOut(nil)
+            self?.panel?.alphaValue = 1
+        }
+    }
+
+    private func buildPanel() {
+        let width = HUDOverlaySupport.windowWidth
+        let height = HUDOverlaySupport.windowHeight
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+        let origin = HUDOverlaySupport.windowOrigin(screenSize: screenSize)
+
+        let newPanel = NSPanel(
+            contentRect: NSRect(x: origin.x, y: origin.y, width: width, height: height),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        newPanel.level = .floating
+        newPanel.backgroundColor = .clear
+        newPanel.isOpaque = false
+        newPanel.hasShadow = true
+        newPanel.hidesOnDeactivate = false
+        newPanel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
+        newPanel.isMovableByWindowBackground = false
+
+        let effectView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        effectView.material = .popover
+        effectView.state = .active
+        effectView.blendingMode = .behindWindow
+        effectView.wantsLayer = true
+        effectView.layer?.cornerRadius = HUDOverlaySupport.cornerRadius
+        effectView.layer?.masksToBounds = true
+        effectView.alphaValue = 0.92
+
+        let iconSize = HUDOverlaySupport.iconSize
+        let imageView = NSImageView(frame: .zero)
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.image = renderGhostImage(size: iconSize, spectacles: true)
+
+        let message = NSTextField(labelWithString: "")
+        message.font = NSFont.systemFont(ofSize: HUDOverlaySupport.messageFontSize, weight: .medium)
+        message.textColor = .white
+        message.alignment = .center
+        message.lineBreakMode = .byWordWrapping
+        message.maximumNumberOfLines = 2
+        message.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [imageView, message])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = HUDOverlaySupport.verticalSpacing
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        effectView.addSubview(stack)
+        NSLayoutConstraint.activate([
+            imageView.widthAnchor.constraint(equalToConstant: iconSize),
+            imageView.heightAnchor.constraint(equalToConstant: iconSize),
+            stack.centerXAnchor.constraint(equalTo: effectView.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: effectView.centerYAnchor),
+            stack.leadingAnchor.constraint(
+                greaterThanOrEqualTo: effectView.leadingAnchor,
+                constant: HUDOverlaySupport.contentInset
+            ),
+            stack.trailingAnchor.constraint(
+                lessThanOrEqualTo: effectView.trailingAnchor,
+                constant: -HUDOverlaySupport.contentInset
+            ),
+        ])
+
+        newPanel.contentView = effectView
+
+        self.panel = newPanel
+        self.ghostImageView = imageView
+        self.messageLabel = message
+    }
+
+    private func applyContent(for state: HUDOverlayState) {
+        let content = HUDOverlaySupport.content(for: state)
+        messageLabel?.stringValue = content.message
+
+        let spectacles = HUDOverlaySupport.showsSpectacles(for: state)
+        ghostImageView?.image = renderGhostImage(
+            size: HUDOverlaySupport.iconSize,
+            spectacles: spectacles
+        )
+    }
+
+    private func scheduleAutoDismissIfNeeded(for state: HUDOverlayState) {
+        guard let delay = HUDOverlaySupport.autoDismissDelay(for: state) else {
+            return
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.dismiss()
+        }
+        dismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func renderGhostImage(size: CGFloat, spectacles: Bool) -> NSImage {
+        if spectacles, let cached = ghostWithSpectacles { return cached }
+        if !spectacles, let cached = ghostWithoutSpectacles { return cached }
+
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: true) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+
+            let vbX = HUDOverlaySupport.ghostViewBoxOriginX
+            let vbY = HUDOverlaySupport.ghostViewBoxOriginY
+            let vbSize = HUDOverlaySupport.ghostViewBoxSize
+            let scale = size / vbSize
+
+            ctx.translateBy(x: -vbX * scale, y: -vbY * scale)
+            ctx.scaleBy(x: scale, y: scale)
+
+            let darkFill = CGColor(red: 0.10, green: 0.11, blue: 0.15, alpha: 1)
+
+            // Ghost body
+            if let bodyPath = CGPath.from(svgPath: HUDOverlaySupport.ghostBodyPath) {
+                ctx.addPath(bodyPath)
+                ctx.setFillColor(.white)
+                ctx.fillPath()
+            }
+
+            // Eyes (rotated ellipses)
+            for eye in [HUDOverlaySupport.ghostLeftEye, HUDOverlaySupport.ghostRightEye] {
+                ctx.saveGState()
+                ctx.translateBy(x: eye.cx, y: eye.cy)
+                ctx.rotate(by: eye.rotation * .pi / 180)
+                let eyeRect = CGRect(x: -eye.rx, y: -eye.ry, width: eye.rx * 2, height: eye.ry * 2)
+                ctx.addEllipse(in: eyeRect)
+                ctx.setFillColor(darkFill)
+                ctx.fillPath()
+                ctx.restoreGState()
+
+                // Highlight
+                let hlRect = CGRect(
+                    x: eye.highlightCX - eye.highlightR,
+                    y: eye.highlightCY - eye.highlightR,
+                    width: eye.highlightR * 2,
+                    height: eye.highlightR * 2
+                )
+                ctx.addEllipse(in: hlRect)
+                ctx.setFillColor(.white)
+                ctx.fillPath()
+
+                // Spectacle lens (only for working state)
+                if spectacles {
+                    let lensRect = CGRect(
+                        x: eye.cx - eye.lensR,
+                        y: eye.cy - eye.lensR,
+                        width: eye.lensR * 2,
+                        height: eye.lensR * 2
+                    )
+                    ctx.addEllipse(in: lensRect)
+                    ctx.setStrokeColor(darkFill)
+                    ctx.setLineWidth(HUDOverlaySupport.ghostStrokeWidth)
+                    ctx.strokePath()
+                }
+            }
+
+            // Mouth
+            if let mouthPath = CGPath.from(svgPath: HUDOverlaySupport.ghostMouthPath) {
+                ctx.addPath(mouthPath)
+                ctx.setFillColor(darkFill)
+                ctx.fillPath()
+            }
+
+            // Spectacle bridge and arms (only for working state)
+            if spectacles {
+                let sw = HUDOverlaySupport.ghostStrokeWidth
+                for pathStr in [HUDOverlaySupport.ghostBridgePath,
+                                HUDOverlaySupport.ghostLeftArmPath,
+                                HUDOverlaySupport.ghostRightArmPath] {
+                    if let p = CGPath.from(svgPath: pathStr) {
+                        ctx.addPath(p)
+                        ctx.setStrokeColor(darkFill)
+                        ctx.setLineWidth(sw)
+                        ctx.setLineCap(.round)
+                        ctx.strokePath()
+                    }
+                }
+            }
+
+            return true
+        }
+
+        if spectacles {
+            ghostWithSpectacles = image
+        } else {
+            ghostWithoutSpectacles = image
+        }
+        return image
+    }
+}
+
+private extension CGPath {
+    static func from(svgPath: String) -> CGPath? {
+        let path = CGMutablePath()
+        let scanner = Scanner(string: svgPath)
+        scanner.charactersToBeSkipped = CharacterSet.whitespaces.union(CharacterSet(charactersIn: ","))
+
+        var currentCommand: Character = "M"
+
+        while !scanner.isAtEnd {
+            if let cmd = scanner.scanCharacter(), "MmLlCcQqZz".contains(cmd) {
+                currentCommand = cmd
+            }
+
+            switch currentCommand {
+            case "M":
+                guard let x = scanner.scanDouble(), let y = scanner.scanDouble() else { break }
+                path.move(to: CGPoint(x: x, y: y))
+                currentCommand = "L"
+            case "L":
+                guard let x = scanner.scanDouble(), let y = scanner.scanDouble() else { break }
+                path.addLine(to: CGPoint(x: x, y: y))
+            case "C":
+                guard let x1 = scanner.scanDouble(), let y1 = scanner.scanDouble(),
+                      let x2 = scanner.scanDouble(), let y2 = scanner.scanDouble(),
+                      let x = scanner.scanDouble(), let y = scanner.scanDouble() else { break }
+                path.addCurve(
+                    to: CGPoint(x: x, y: y),
+                    control1: CGPoint(x: x1, y: y1),
+                    control2: CGPoint(x: x2, y: y2)
+                )
+            case "Q":
+                guard let cx = scanner.scanDouble(), let cy = scanner.scanDouble(),
+                      let x = scanner.scanDouble(), let y = scanner.scanDouble() else { break }
+                path.addQuadCurve(to: CGPoint(x: x, y: y), control: CGPoint(x: cx, y: cy))
+            case "Z", "z":
+                path.closeSubpath()
+            default:
+                _ = scanner.scanDouble()
+            }
+        }
+
+        return path.isEmpty ? nil : path
     }
 }
