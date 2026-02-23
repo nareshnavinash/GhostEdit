@@ -2,7 +2,7 @@
 
 GhostEdit is a native macOS menu bar app that fixes selected text in any app using a local CLI provider.
 
-![GhostEdit launch preview](remotion/out/LaunchTrailer.gif)
+![GhostEdit launch preview](remotion/out/TwitterBanner.png)
 
 ## Trailer
 
