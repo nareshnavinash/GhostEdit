@@ -198,4 +198,136 @@ final class TokenPreservationSupportTests: XCTestCase {
         let emojiTokens = result.tokens.filter { $0.originalToken.hasPrefix(":") && $0.originalToken.hasSuffix(":") }
         XCTAssertTrue(emojiTokens.isEmpty)
     }
+
+    func testAppendTokenAwareInstructionExtendsPromptWithEmojiRule() {
+        let prompt = TokenPreservationSupport.appendTokenAwareInstruction(to: "Fix grammar.")
+        XCTAssertTrue(prompt.contains("Fix grammar."))
+        XCTAssertTrue(prompt.contains("Slack emoji codes"))
+        XCTAssertTrue(prompt.contains("@mentions"))
+        XCTAssertTrue(prompt.contains("MUST keep"))
+    }
+
+    // MARK: - splitAroundTokens
+
+    func testSplitAroundTokensReturnsWholeTextWhenNoTokens() {
+        let result = TokenPreservationSupport.splitAroundTokens(in: "No tokens here.")
+        XCTAssertEqual(result.textParts, ["No tokens here."])
+        XCTAssertTrue(result.tokens.isEmpty)
+    }
+
+    func testSplitAroundTokensSplitsAroundSingleEmoji() {
+        let result = TokenPreservationSupport.splitAroundTokens(in: "I am :sad: today.")
+        XCTAssertEqual(result.textParts, ["I am ", " today."])
+        XCTAssertEqual(result.tokens, [":sad:"])
+    }
+
+    func testSplitAroundTokensSplitsAroundMultipleEmojis() {
+        let result = TokenPreservationSupport.splitAroundTokens(in: "I am :sad: and :mad: about this.")
+        XCTAssertEqual(result.textParts, ["I am ", " and ", " about this."])
+        XCTAssertEqual(result.tokens, [":sad:", ":mad:"])
+    }
+
+    func testSplitAroundTokensSplitsAroundMixedTokenTypes() {
+        let result = TokenPreservationSupport.splitAroundTokens(in: "Ask @naresh about :hat: please.")
+        XCTAssertEqual(result.textParts, ["Ask ", " about ", " please."])
+        XCTAssertEqual(result.tokens, ["@naresh", ":hat:"])
+    }
+
+    func testSplitAroundTokensHandlesTokenAtStart() {
+        let result = TokenPreservationSupport.splitAroundTokens(in: ":wave: hello!")
+        XCTAssertEqual(result.textParts, ["", " hello!"])
+        XCTAssertEqual(result.tokens, [":wave:"])
+    }
+
+    func testSplitAroundTokensHandlesTokenAtEnd() {
+        let result = TokenPreservationSupport.splitAroundTokens(in: "Good job :thumbsup:")
+        XCTAssertEqual(result.textParts, ["Good job ", ""])
+        XCTAssertEqual(result.tokens, [":thumbsup:"])
+    }
+
+    func testSplitAroundTokensHandlesAdjacentTokens() {
+        let result = TokenPreservationSupport.splitAroundTokens(in: ":sad::mad:")
+        XCTAssertEqual(result.textParts, ["", "", ""])
+        XCTAssertEqual(result.tokens, [":sad:", ":mad:"])
+    }
+
+    // MARK: - reassemble
+
+    func testReassembleJoinsPartsAndTokens() {
+        let result = TokenPreservationSupport.reassemble(
+            correctedParts: ["I am ", " and ", " about this."],
+            tokens: [":sad:", ":mad:"]
+        )
+        XCTAssertEqual(result, "I am :sad: and :mad: about this.")
+    }
+
+    func testReassembleWithSingleToken() {
+        let result = TokenPreservationSupport.reassemble(
+            correctedParts: ["Hello ", " world."],
+            tokens: [":wave:"]
+        )
+        XCTAssertEqual(result, "Hello :wave: world.")
+    }
+
+    func testReassembleWithNoTokens() {
+        let result = TokenPreservationSupport.reassemble(
+            correctedParts: ["Plain text."],
+            tokens: []
+        )
+        XCTAssertEqual(result, "Plain text.")
+    }
+
+    func testReassemblePreservesEmptyParts() {
+        let result = TokenPreservationSupport.reassemble(
+            correctedParts: ["", " hello ", ""],
+            tokens: [":wave:", ":smile:"]
+        )
+        XCTAssertEqual(result, ":wave: hello :smile:")
+    }
+
+    // MARK: - stripTokens
+
+    func testStripTokensReplacesTokensWithSpace() {
+        let result = TokenPreservationSupport.stripTokens(from: "I am :sad: and :mad: about this.")
+        XCTAssertEqual(result, "I am   and   about this.")
+    }
+
+    func testStripTokensReturnsOriginalWhenNoTokens() {
+        let result = TokenPreservationSupport.stripTokens(from: "No tokens here.")
+        XCTAssertEqual(result, "No tokens here.")
+    }
+
+    func testStripTokensHandlesMixedTokenTypes() {
+        let result = TokenPreservationSupport.stripTokens(from: "Ask @naresh about :hat: at /tmp/file.txt please.")
+        XCTAssertEqual(result, "Ask   about   at   please.")
+    }
+
+    func testStripTokensHandlesTokenAtStartAndEnd() {
+        let result = TokenPreservationSupport.stripTokens(from: ":wave: hello :smile:")
+        XCTAssertEqual(result, "  hello  ")
+    }
+
+    // MARK: - Round-trip: split → reassemble preserves original
+
+    func testSplitThenReassembleIsIdentity() {
+        let original = "I am :sad: and :mad: about :100: things at /tmp/log.txt please."
+        let split = TokenPreservationSupport.splitAroundTokens(in: original)
+        let reassembled = TokenPreservationSupport.reassemble(
+            correctedParts: split.textParts,
+            tokens: split.tokens
+        )
+        XCTAssertEqual(reassembled, original)
+    }
+
+    func testSplitThenReassembleWithCorrectedParts() {
+        let original = "i am :sad: and :mad: about the delay"
+        let split = TokenPreservationSupport.splitAroundTokens(in: original)
+        // Simulate AI correcting only the text parts
+        let correctedParts = ["I am ", " and ", " about the delay."]
+        let reassembled = TokenPreservationSupport.reassemble(
+            correctedParts: correctedParts,
+            tokens: split.tokens
+        )
+        XCTAssertEqual(reassembled, "I am :sad: and :mad: about the delay.")
+    }
 }

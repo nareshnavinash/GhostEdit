@@ -117,7 +117,22 @@ final class ShellRunner {
             }
         }
 
-        // Placeholders were modified by the AI — restore whatever survived.
+        // Placeholders were modified by the AI — retry with the original text
+        // and an explicit instruction to preserve emoji codes and other tokens.
+        let segments = TokenPreservationSupport.splitAroundTokens(in: selectedText)
+        let tokenAwarePrompt = TokenPreservationSupport.appendTokenAwareInstruction(to: systemPrompt)
+
+        let retryWithOriginal = try correctText(
+            systemPrompt: tokenAwarePrompt,
+            selectedText: selectedText
+        )
+
+        // If all original tokens survived in the retry, return it directly.
+        if segments.tokens.allSatisfy({ retryWithOriginal.contains($0) }) {
+            return retryWithOriginal
+        }
+
+        // Last resort: best-effort restoration on the placeholder-based attempt.
         return TokenPreservationSupport.bestEffortRestore(in: lastCandidate, tokens: protection.tokens)
     }
 

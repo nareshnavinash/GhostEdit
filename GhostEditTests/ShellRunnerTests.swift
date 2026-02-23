@@ -240,33 +240,124 @@ final class ShellRunnerTests: XCTestCase {
         XCTAssertEqual(attempts, "2")
     }
 
-    func testCorrectTextPreservingTokensFallsBackToBestEffortWhenPlaceholdersMissing() throws {
+    func testCorrectTextPreservingTokensRetryPreservesEmojisWithOriginalText() throws {
         let testEnv = try makeRunnerEnvironment()
+        let callsLog = testEnv.homeURL.appendingPathComponent("token-aware.log")
+        // With maxValidationRetries: 0:
+        //   Call 1: placeholder attempt — AI strips placeholders.
+        //   Call 2: token-aware retry with original text — AI preserves emojis.
         let script = """
         #!/bin/zsh
-        print -r -- "Always missing protected tokens."
+        count=0
+        if [[ -f '\(callsLog.path)' ]]; then
+          count=$(cat '\(callsLog.path)')
+        fi
+        count=$((count + 1))
+        print -r -- "$count" > '\(callsLog.path)'
+
+        if [[ "$count" -le 1 ]]; then
+          print -r -- "Placeholders stripped by AI."
+        else
+          print -r -- "Hello :sad: and :mad: about the delay."
+        fi
         """
-        let executable = try makeExecutableScript(named: "preserve-fail.sh", contents: script, homeURL: testEnv.homeURL)
+        let executable = try makeExecutableScript(named: "token-aware.sh", contents: script, homeURL: testEnv.homeURL)
         try testEnv.manager.saveConfig(
             AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
         )
 
-        // When placeholders are stripped by the AI, the method falls back to
-        // best-effort restoration instead of throwing.
         let result = try testEnv.runner.correctTextPreservingTokens(
             systemPrompt: "Fix grammar",
-            selectedText: "hello @<U1>",
+            selectedText: "hello :sad: and :mad: about the delay",
             maxValidationRetries: 0
         )
-        XCTAssertEqual(result, "Always missing protected tokens.")
+        XCTAssertEqual(result, "Hello :sad: and :mad: about the delay.")
+    }
+
+    func testCorrectTextPreservingTokensRetryPreservesAllTokenTypes() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let callsLog = testEnv.homeURL.appendingPathComponent("token-types.log")
+        let script = """
+        #!/bin/zsh
+        count=0
+        if [[ -f '\(callsLog.path)' ]]; then
+          count=$(cat '\(callsLog.path)')
+        fi
+        count=$((count + 1))
+        print -r -- "$count" > '\(callsLog.path)'
+
+        if [[ "$count" -le 1 ]]; then
+          print -r -- "Stripped all placeholders."
+        else
+          print -r -- "Please ask @naresh about :hat: at /tmp/report.txt."
+        fi
+        """
+        let executable = try makeExecutableScript(named: "token-types.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let result = try testEnv.runner.correctTextPreservingTokens(
+            systemPrompt: "Fix grammar",
+            selectedText: "pls ask @naresh about :hat: at /tmp/report.txt",
+            maxValidationRetries: 0
+        )
+        XCTAssertEqual(result, "Please ask @naresh about :hat: at /tmp/report.txt.")
+    }
+
+    func testCorrectTextPreservingTokensFallsBackToBestEffortWhenRetryAlsoFails() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let callsLog = testEnv.homeURL.appendingPathComponent("both-fail.log")
+        // Both placeholder and token-aware retry return text without tokens.
+        let script = """
+        #!/bin/zsh
+        count=0
+        if [[ -f '\(callsLog.path)' ]]; then
+          count=$(cat '\(callsLog.path)')
+        fi
+        count=$((count + 1))
+        print -r -- "$count" > '\(callsLog.path)'
+
+        if [[ "$count" -le 1 ]]; then
+          print -r -- "Completely rewritten text."
+        else
+          print -r -- "Totally different output."
+        fi
+        """
+        let executable = try makeExecutableScript(named: "both-fail.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        // When the token-aware retry also loses tokens, falls back to best-effort.
+        let result = try testEnv.runner.correctTextPreservingTokens(
+            systemPrompt: "Fix grammar",
+            selectedText: "hello :wave: world",
+            maxValidationRetries: 0
+        )
+        // bestEffortRestore on "Completely rewritten text." — no placeholders survive.
+        XCTAssertEqual(result, "Completely rewritten text.")
     }
 
     func testCorrectTextPreservingTokensRestoresPartialSurvivors() throws {
         let testEnv = try makeRunnerEnvironment()
-        // AI keeps placeholder 0 but strips placeholder 1.
+        let callsLog = testEnv.homeURL.appendingPathComponent("partial.log")
+        // Call 1: AI keeps placeholder 0 but strips placeholder 1.
+        // Call 2: token-aware retry — only one of two tokens survives.
         let script = """
         #!/bin/zsh
-        print -r -- "Hello __GHOSTEDIT_KEEP_0__ world."
+        count=0
+        if [[ -f '\(callsLog.path)' ]]; then
+          count=$(cat '\(callsLog.path)')
+        fi
+        count=$((count + 1))
+        print -r -- "$count" > '\(callsLog.path)'
+
+        if [[ "$count" -le 1 ]]; then
+          print -r -- "Hello __GHOSTEDIT_KEEP_0__ world."
+        else
+          print -r -- "Hello @<U1> world without emoji."
+        fi
         """
         let executable = try makeExecutableScript(named: "preserve-partial.sh", contents: script, homeURL: testEnv.homeURL)
         try testEnv.manager.saveConfig(
@@ -278,7 +369,8 @@ final class ShellRunnerTests: XCTestCase {
             selectedText: "hello @<U1> :sad:",
             maxValidationRetries: 0
         )
-        // @<U1> is restored via best-effort; :sad: is lost because AI removed its placeholder.
+        // Token-aware retry has @<U1> but not :sad: → allSatisfy fails.
+        // Falls back to best-effort on placeholder attempt: @<U1> restored, :sad: lost.
         XCTAssertEqual(result, "Hello @<U1> world.")
     }
 

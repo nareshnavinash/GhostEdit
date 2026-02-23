@@ -74,6 +74,17 @@ enum TokenPreservationSupport {
         "\(systemPrompt)\n\n\(promptInstruction)"
     }
 
+    private static let tokenAwareInstruction = """
+    CRITICAL: The text contains Slack emoji codes (e.g. :emoji_name:), @mentions, URLs, \
+    file paths, and inline code. You MUST keep every one of these tokens exactly as it \
+    appears — same spelling, punctuation, and position. Only fix the surrounding grammar \
+    and spelling. Return only the corrected text.
+    """
+
+    static func appendTokenAwareInstruction(to systemPrompt: String) -> String {
+        "\(systemPrompt)\n\n\(tokenAwareInstruction)"
+    }
+
     static func placeholdersAreIntact(in output: String, tokens: [ProtectedToken]) -> Bool {
         for token in tokens {
             let occurrences = output.components(separatedBy: token.placeholder).count - 1
@@ -102,6 +113,51 @@ enum TokenPreservationSupport {
             }
         }
         return restored
+    }
+
+    /// Splits text into alternating text segments and token strings at token boundaries.
+    /// Returns `textParts` (always one more than `tokens`) and the matched `tokens`.
+    /// Example: "I am :sad: ok" → textParts: ["I am ", " ok"], tokens: [":sad:"]
+    static func splitAroundTokens(in text: String) -> (textParts: [String], tokens: [String]) {
+        let matches = tokenMatches(in: text)
+        let nsText = text as NSString
+        var textParts: [String] = []
+        var tokenStrings: [String] = []
+        var lastEnd = 0
+
+        for match in matches {
+            textParts.append(nsText.substring(with: NSRange(location: lastEnd, length: match.location - lastEnd)))
+            tokenStrings.append(nsText.substring(with: match))
+            lastEnd = match.location + match.length
+        }
+        textParts.append(nsText.substring(from: lastEnd))
+
+        return (textParts: textParts, tokens: tokenStrings)
+    }
+
+    /// Reassembles corrected text parts with original tokens.
+    /// `correctedParts` must have exactly one more element than `tokens`.
+    static func reassemble(correctedParts: [String], tokens: [String]) -> String {
+        var result = ""
+        for i in 0..<tokens.count {
+            result += correctedParts[i]
+            result += tokens[i]
+        }
+        result += correctedParts[tokens.count]
+        return result
+    }
+
+    /// Builds a token-free version of the text by removing all matched tokens.
+    /// Each token is replaced by a single space to avoid merging surrounding words.
+    static func stripTokens(from text: String) -> String {
+        let matches = tokenMatches(in: text)
+        guard !matches.isEmpty else { return text }
+
+        let mutable = NSMutableString(string: text)
+        for match in matches.reversed() {
+            mutable.replaceCharacters(in: match, with: " ")
+        }
+        return mutable as String
     }
 
     private static func uniquePlaceholder(

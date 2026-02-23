@@ -441,13 +441,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                 let readBack = AccessibilityTextSupport.readSelectedText(
                                     appPID: targetApp.processIdentifier
                                 )
-                                if readBack == correctedText {
+                                if readBack == correctedText || readBack == nil {
+                                    // Verified: either text still selected and matches (TextEdit),
+                                    // or app deselected after successful replacement (Notes, Mail).
                                     let time = self.timeFormatter.string(from: Date())
                                     self.setStatus("Last correction succeeded at \(time)")
                                     self.restoreClipboardSnapshot(after: 0)
                                     self.updateHUD(state: .success)
                                     self.finishProcessing()
                                 } else {
+                                    // readBack is non-empty but different — AX accepted the call
+                                    // but didn't actually replace (Electron: Slack, Discord, VS Code).
                                     self.pasteViaClipboard(correctedText: correctedText)
                                 }
                             }
