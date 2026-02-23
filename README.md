@@ -1,6 +1,6 @@
 # GhostEdit
 
-**Free, open-source AI grammar checker for macOS. Fix grammar, spelling, and punctuation in any app with a single hotkey — powered by Claude, OpenAI Codex, or Gemini.**
+**Free, open-source AI grammar checker for macOS. Fix grammar, spelling, and punctuation in any app with a single hotkey powered by Claude, OpenAI Codex, or Gemini.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/Platform-macOS%2013%2B-black.svg)](https://github.com/nareshnavinash/GhostEdit/releases)
@@ -14,18 +14,18 @@
 
 ## Why GhostEdit?
 
-- **No account required** — uses AI CLIs you already have installed (Claude, Codex, Gemini). No sign-ups, no subscriptions.
-- **Privacy-first** — text never leaves your machine through a third-party service. Corrections run through your own local CLI. No telemetry, no data collection.
-- **Free and open source** — no premium tiers, no word limits, no feature gates. Full grammar correction, writing coaching, and history — all included.
-- **Works everywhere** — correct text in any macOS app: Slack, Notion, VS Code, Mail, Pages, or any text field. One hotkey, any app.
-- **Bring your own AI** — switch between Claude, OpenAI Codex, and Gemini from Settings. Pick the model that works best for you.
+- **No account required** uses AI CLIs you already have installed (Claude, Codex, Gemini). No sign-ups, no subscriptions.
+- **Privacy-first** text never leaves your machine through a third-party service. Corrections run through your own local CLI. No telemetry, no data collection.
+- **Free and open source** no premium tiers, no word limits, no feature gates. Full grammar correction, writing coaching, and history all included.
+- **Works everywhere** correct text in any macOS app: Slack, Notion, VS Code, Mail, Pages, or any text field. One hotkey, any app.
+- **Bring your own AI** switch between Claude, OpenAI Codex, and Gemini from Settings. Pick the model that works best for you.
 
 ## Features
 
-- **Fire-and-forget correction**: Press the hotkey, switch to any app — corrected text is pasted back automatically, even if the target app is in the background
+- **Fire-and-forget correction**: Press the hotkey, switch to any app corrected text is pasted back automatically, even if the target app is in the background
 - **Native HUD overlay**: A glossy floating ghost indicator shows "Working on it..." (with spectacles) and "Done!" (idle ghost), then fades away after 1 second
 - **Smart paste-back**: Uses accessibility (AX) text replacement for native apps (no focus change needed), with delayed verification and automatic clipboard fallback for Electron apps (Slack, Discord, VS Code)
-- **Multi-provider support**: Choose between Claude, OpenAI Codex, and Gemini — switch providers and models from Settings
+- **Multi-provider support**: Choose between Claude, OpenAI Codex, and Gemini switch providers and models from Settings
 - **Writing coach**: **Sharpen My Writing Style** analyzes your past corrections and shows what you do well plus areas to improve
 - **Token preservation**: Mentions, emojis, URLs, emails, file paths, and inline code are preserved during correction
 - **Correction history**: Browse, copy, and export past corrections as CSV
@@ -77,9 +77,9 @@ open GhostEdit.xcodeproj
 
 GhostEdit creates these files on first launch:
 
-- `~/.ghostedit/prompt.txt` — AI prompt (editable)
-- `~/.ghostedit/config.json` — settings
-- `~/.ghostedit/history.json` — correction history
+- `~/.ghostedit/prompt.txt` AI prompt (editable)
+- `~/.ghostedit/config.json` settings
+- `~/.ghostedit/history.json` correction history
 
 If `~/.grammarfixer` exists from older builds, GhostEdit migrates it to `~/.ghostedit` automatically.
 
@@ -124,7 +124,7 @@ Protected token types:
 
 Failure behavior:
 - If the model edits/removes placeholder tokens, GhostEdit retries once automatically.
-- If the retry still fails, GhostEdit performs a best-effort restoration — any placeholders the model preserved are restored, and the correction still succeeds.
+- If the retry still fails, GhostEdit performs a best-effort restoration any placeholders the model preserved are restored, and the correction still succeeds.
 
 Practical effect:
 - Grammar/spelling/punctuation are still corrected.
@@ -200,7 +200,7 @@ A workflow is included at `.github/workflows/release.yml`.
 ## Privacy
 
 - No accounts, no telemetry, no data collection.
-- Text is processed locally through your own AI CLI — nothing is sent to GhostEdit servers (there are none).
+- Text is processed locally through your own AI CLI nothing is sent to GhostEdit servers (there are none).
 - This repo does not store local user prompt/config files from `~/.ghostedit`.
 
 Before pushing, verify no local secrets were added:
