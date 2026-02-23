@@ -63,6 +63,7 @@ REQUIRED_FILES=(
   "$ROOT_DIR/GhostEdit/Sources/HotkeySupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/WritingCoachSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/AccessibilitySupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/AccessibilityTextSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/SettingsLayoutSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/TokenPreservationSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/MenuBarIconSupport.swift"

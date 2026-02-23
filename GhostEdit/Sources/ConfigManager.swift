@@ -198,6 +198,8 @@ struct AppConfig: Codable {
 
 final class ConfigManager {
     private let fileManager: FileManager
+    private var cachedConfig: AppConfig?
+    private var cachedPrompt: String?
 
     let baseDirectoryURL: URL
     let legacyDirectoryURL: URL
@@ -247,13 +249,23 @@ final class ConfigManager {
     }
 
     func loadPrompt() throws -> String {
+        if let cached = cachedPrompt {
+            return cached
+        }
+
         let prompt = try String(contentsOf: promptURL, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return prompt.isEmpty ? defaultPrompt : prompt
+        let result = prompt.isEmpty ? defaultPrompt : prompt
+        cachedPrompt = result
+        return result
     }
 
     func loadConfig() -> AppConfig {
+        if let cached = cachedConfig {
+            return cached
+        }
+
         guard
             let data = try? Data(contentsOf: configURL),
             let decoded = try? JSONDecoder().decode(AppConfig.self, from: data)
@@ -261,13 +273,22 @@ final class ConfigManager {
             return AppConfig.default
         }
 
-        return normalize(decoded)
+        let result = normalize(decoded)
+        cachedConfig = result
+        return result
     }
 
     func saveConfig(_ config: AppConfig) throws {
         let normalized = normalize(config)
         let data = try JSONEncoder.prettyEncoder.encode(normalized)
         try data.write(to: configURL, options: .atomic)
+        cachedConfig = nil
+        cachedPrompt = nil
+    }
+
+    func invalidateCache() {
+        cachedConfig = nil
+        cachedPrompt = nil
     }
 
     private func normalize(_ config: AppConfig) -> AppConfig {

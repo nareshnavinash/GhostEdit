@@ -63,6 +63,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: false)
         syncLaunchAtLoginPreferenceSilently()
         registerHotkey()
+        shellRunner.prewarm()
         setStatus("Idle")
     }
 
@@ -274,6 +275,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         startProcessingIndicator()
 
         targetAppAtTrigger = targetApp
+
+        // Try accessibility-based reading first (no clipboard round-trip needed).
+        if let selectedText = AccessibilityTextSupport.readSelectedText(
+            appPID: targetApp.processIdentifier
+        ) {
+            processSelectedText(selectedText)
+            return
+        }
+
+        // Fall back to clipboard-based copy.
         clipboardSnapshot = clipboardManager.snapshot()
 
         let sentinel = "__GHOSTEDIT_SENTINEL_\(UUID().uuidString)__"
@@ -313,7 +324,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         setStatus("Copying selected text... (\(strategy.displayName))")
 
         // Give the triggering key chord enough time to release.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
             guard let self else { return }
             self.targetAppAtTrigger?.activate(options: [.activateAllWindows])
 
@@ -340,6 +351,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         completion: @escaping (String?) -> Void
     ) {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
+        let startTime = Date()
 
         func poll() {
             if let candidate = clipboardManager.readBestText() {
@@ -355,7 +367,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: poll)
+            let elapsed = Date().timeIntervalSince(startTime)
+            let interval: TimeInterval = elapsed < 0.2 ? 0.02 : 0.06
+            DispatchQueue.main.asyncAfter(deadline: .now() + interval, execute: poll)
         }
 
         poll()
@@ -400,10 +414,27 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
 
                 DispatchQueue.main.async {
+                    // Try accessibility-based text replacement first (fastest path).
+                    if let targetApp = self.targetAppAtTrigger,
+                       AccessibilityTextSupport.replaceSelectedText(
+                           appPID: targetApp.processIdentifier,
+                           with: correctedText
+                       ) {
+                        let time = self.timeFormatter.string(from: Date())
+                        self.setStatus("Last correction succeeded at \(time)")
+                        self.restoreClipboardSnapshot(after: 0)
+                        self.finishProcessing()
+                        return
+                    }
+
+                    // Fall back to clipboard-based paste.
+                    if self.clipboardSnapshot == nil {
+                        self.clipboardSnapshot = self.clipboardManager.snapshot()
+                    }
                     self.clipboardManager.writePlainText(correctedText)
                     self.targetAppAtTrigger?.activate(options: [.activateAllWindows])
 
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
                         let pasted = self.clipboardManager.simulatePasteShortcut(using: .annotatedSession)
                             || self.clipboardManager.simulatePasteShortcut(using: .hidSystem)
 
@@ -418,7 +449,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             self.setStatus("Last correction succeeded at \(time)")
                         }
 
-                        self.restoreClipboardSnapshot(after: 0.25)
+                        self.restoreClipboardSnapshot(after: 0.15)
                         self.finishProcessing()
                     }
                 }

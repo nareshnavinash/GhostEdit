@@ -375,6 +375,108 @@ final class ConfigManagerTests: XCTestCase {
         ])
     }
 
+    func testLoadConfigReturnsCachedValueWithoutRereadingDisk() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        let first = manager.loadConfig()
+        XCTAssertEqual(first.model, AppConfig.default.model)
+
+        // Overwrite the config file on disk with a different model.
+        let altered = AppConfig(
+            claudePath: "",
+            codexPath: "",
+            geminiPath: "",
+            provider: "claude",
+            model: "opus",
+            timeoutSeconds: 60,
+            hotkeyKeyCode: 14,
+            hotkeyModifiers: 256,
+            launchAtLogin: false,
+            historyLimit: 200
+        )
+        try JSONEncoder().encode(altered).write(to: manager.configURL, options: .atomic)
+
+        // Second call should return the cached value, not the disk value.
+        let second = manager.loadConfig()
+        XCTAssertEqual(second.model, first.model)
+    }
+
+    func testLoadPromptReturnsCachedValueWithoutRereadingDisk() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        let first = try manager.loadPrompt()
+        XCTAssertEqual(first, manager.defaultPrompt)
+
+        // Overwrite the prompt file on disk.
+        try "completely different prompt".write(to: manager.promptURL, atomically: true, encoding: .utf8)
+
+        // Second call should return the cached value.
+        let second = try manager.loadPrompt()
+        XCTAssertEqual(second, first)
+    }
+
+    func testSaveConfigInvalidatesBothCaches() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        // Populate both caches.
+        _ = manager.loadConfig()
+        _ = try manager.loadPrompt()
+
+        // Save a new config (this should invalidate caches).
+        var config = manager.loadConfig()
+        config.model = "sonnet"
+        try manager.saveConfig(config)
+
+        // Overwrite prompt on disk after save.
+        try "fresh prompt after save".write(to: manager.promptURL, atomically: true, encoding: .utf8)
+
+        // loadConfig should re-read and get the saved value.
+        let reloaded = manager.loadConfig()
+        XCTAssertEqual(reloaded.model, "sonnet")
+
+        // loadPrompt should re-read and get the new disk value.
+        let reloadedPrompt = try manager.loadPrompt()
+        XCTAssertEqual(reloadedPrompt, "fresh prompt after save")
+    }
+
+    func testInvalidateCacheClearsBothCaches() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        // Populate both caches.
+        _ = manager.loadConfig()
+        _ = try manager.loadPrompt()
+
+        // Change files on disk.
+        let altered = AppConfig(
+            claudePath: "",
+            codexPath: "",
+            geminiPath: "",
+            provider: "claude",
+            model: "opus",
+            timeoutSeconds: 60,
+            hotkeyKeyCode: 14,
+            hotkeyModifiers: 256,
+            launchAtLogin: false,
+            historyLimit: 200
+        )
+        try JSONEncoder().encode(altered).write(to: manager.configURL, options: .atomic)
+        try "invalidated prompt".write(to: manager.promptURL, atomically: true, encoding: .utf8)
+
+        // Invalidate caches.
+        manager.invalidateCache()
+
+        // Now reads should reflect the on-disk changes.
+        let config = manager.loadConfig()
+        XCTAssertEqual(config.model, "opus")
+
+        let prompt = try manager.loadPrompt()
+        XCTAssertEqual(prompt, "invalidated prompt")
+    }
+
     func testDefaultInitializerUsesCurrentUserHomeDirectory() {
         let manager = ConfigManager()
         let expectedBase = FileManager.default.homeDirectoryForCurrentUser
