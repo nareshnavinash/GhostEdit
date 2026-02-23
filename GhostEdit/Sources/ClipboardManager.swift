@@ -115,6 +115,13 @@ final class ClipboardManager {
         return nil
     }
 
+    func readHTMLString() -> String? {
+        guard let data = pasteboard.data(forType: .html) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
     func writePlainText(_ text: String) {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)

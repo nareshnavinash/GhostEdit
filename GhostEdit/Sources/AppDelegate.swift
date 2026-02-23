@@ -279,9 +279,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         targetAppAtTrigger = targetApp
 
         // Try accessibility-based reading first (no clipboard round-trip needed).
+        // Skip if text contains U+FFFC (Object Replacement Character) — this means
+        // the source app rendered inline images (e.g. Slack custom emojis) that the
+        // AX API cannot represent as text. Fall through to clipboard which has HTML.
         if let selectedText = AccessibilityTextSupport.readSelectedText(
             appPID: targetApp.processIdentifier
-        ) {
+        ), !selectedText.contains(TokenPreservationSupport.objectReplacementCharacter) {
             processSelectedText(selectedText)
             return
         }
@@ -359,7 +362,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             if let candidate = clipboardManager.readBestText() {
                 let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty && trimmed != sentinel {
-                    completion(trimmed)
+                    // Recover Slack emoji codes from HTML clipboard if the plain text
+                    // contains U+FFFC (Object Replacement Characters from inline images).
+                    let recovered = TokenPreservationSupport.recoverObjectReplacements(
+                        in: trimmed,
+                        fromHTML: clipboardManager.readHTMLString()
+                    )
+                    completion(recovered)
                     return
                 }
             }

@@ -319,6 +319,97 @@ final class TokenPreservationSupportTests: XCTestCase {
         XCTAssertEqual(reassembled, original)
     }
 
+    // MARK: - recoverObjectReplacements
+
+    func testRecoverObjectReplacementsRecoversSlackEmojis() {
+        let plain = "Hello \u{FFFC} world \u{FFFC} done."
+        let html = """
+        Hello <img src="x" alt=":wave:"> world <img src="y" alt=":smile:"> done.
+        """
+        let result = TokenPreservationSupport.recoverObjectReplacements(in: plain, fromHTML: html)
+        XCTAssertEqual(result, "Hello :wave: world :smile: done.")
+    }
+
+    func testRecoverObjectReplacementsReturnsOriginalWhenNoFFFC() {
+        let plain = "No replacement chars here."
+        let html = "<p>No replacement chars here.</p>"
+        let result = TokenPreservationSupport.recoverObjectReplacements(in: plain, fromHTML: html)
+        XCTAssertEqual(result, plain)
+    }
+
+    func testRecoverObjectReplacementsReturnsOriginalWhenHTMLIsNil() {
+        let plain = "Has \u{FFFC} but no HTML."
+        let result = TokenPreservationSupport.recoverObjectReplacements(in: plain, fromHTML: nil)
+        XCTAssertEqual(result, plain)
+    }
+
+    func testRecoverObjectReplacementsReturnsOriginalWhenCountMismatch() {
+        let plain = "One \u{FFFC} two \u{FFFC} three."
+        let html = """
+        One <img src="x" alt=":wave:"> two three.
+        """
+        let result = TokenPreservationSupport.recoverObjectReplacements(in: plain, fromHTML: html)
+        // 2 U+FFFC but only 1 <img> — can't align, return original.
+        XCTAssertEqual(result, plain)
+    }
+
+    func testRecoverObjectReplacementsReturnsOriginalWhenNoImgTags() {
+        let plain = "Has \u{FFFC} char."
+        let html = "<p>Has something.</p>"
+        let result = TokenPreservationSupport.recoverObjectReplacements(in: plain, fromHTML: html)
+        XCTAssertEqual(result, plain)
+    }
+
+    func testRecoverObjectReplacementsHandlesSingleEmoji() {
+        let plain = "bug \u{FFFC} report"
+        let html = #"bug <img src="e" alt=":no-bugs:" class="emoji"> report"#
+        let result = TokenPreservationSupport.recoverObjectReplacements(in: plain, fromHTML: html)
+        XCTAssertEqual(result, "bug :no-bugs: report")
+    }
+
+    func testRecoverObjectReplacementsHandlesImgWithoutAlt() {
+        // When <img> has no alt attribute, extractImgAltValues won't find an alt
+        // for that tag, so count will mismatch → returns original.
+        let plain = "Has \u{FFFC} here."
+        let html = #"Has <img src="x"> here."#
+        let result = TokenPreservationSupport.recoverObjectReplacements(in: plain, fromHTML: html)
+        XCTAssertEqual(result, plain)
+    }
+
+    func testRecoverObjectReplacementsPreservesNonEmojiAltText() {
+        // Alt text that isn't an emoji code is still recovered (it's the
+        // best representation we have for the image).
+        let plain = "See \u{FFFC} here."
+        let html = #"See <img src="x" alt="screenshot"> here."#
+        let result = TokenPreservationSupport.recoverObjectReplacements(in: plain, fromHTML: html)
+        XCTAssertEqual(result, "See screenshot here.")
+    }
+
+    // MARK: - extractImgAltValues
+
+    func testExtractImgAltValuesFindsMultipleAlts() {
+        let html = #"<img alt=":wave:"><img src="x" alt=":smile:" class="c">"#
+        let result = TokenPreservationSupport.extractImgAltValues(from: html)
+        XCTAssertEqual(result, [":wave:", ":smile:"])
+    }
+
+    func testExtractImgAltValuesReturnsEmptyForNoImgs() {
+        let result = TokenPreservationSupport.extractImgAltValues(from: "<p>No images.</p>")
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testExtractImgAltValuesSkipsImgWithoutAlt() {
+        let html = #"<img src="x"><img src="y" alt=":ok:">"#
+        let result = TokenPreservationSupport.extractImgAltValues(from: html)
+        XCTAssertEqual(result, [":ok:"])
+    }
+
+    func testExtractImgAltValuesHandlesCaseInsensitive() {
+        let html = #"<IMG ALT=":wave:" SRC="x">"#
+        let result = TokenPreservationSupport.extractImgAltValues(from: html)
+        XCTAssertEqual(result, [":wave:"])
+    }
+
     func testSplitThenReassembleWithCorrectedParts() {
         let original = "i am :sad: and :mad: about the delay"
         let split = TokenPreservationSupport.splitAroundTokens(in: original)

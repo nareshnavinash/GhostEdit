@@ -160,6 +160,71 @@ enum TokenPreservationSupport {
         return mutable as String
     }
 
+    /// Unicode Object Replacement Character used by rich-text editors (Slack, etc.)
+    /// to represent inline images such as custom emojis.
+    static let objectReplacementCharacter: Character = "\u{FFFC}"
+
+    /// Recovers Slack emoji codes from HTML clipboard content.
+    ///
+    /// When Slack (and similar Electron apps) render custom emojis as inline images,
+    /// the plain-text representation contains U+FFFC (￼) where each image was.
+    /// The HTML clipboard preserves the emoji code in the `<img>` tag's `alt` attribute.
+    ///
+    /// This method extracts emoji codes from `<img>` tags in the HTML and replaces
+    /// corresponding U+FFFC characters in the plain text.
+    ///
+    /// Returns the original text unchanged if recovery is not possible (no HTML,
+    /// no U+FFFC, or count mismatch between U+FFFC and `<img>` tags).
+    static func recoverObjectReplacements(in plainText: String, fromHTML html: String?) -> String {
+        guard let html, plainText.contains(objectReplacementCharacter) else {
+            return plainText
+        }
+
+        let imgAltValues = extractImgAltValues(from: html)
+        let replacementCount = plainText.filter { $0 == objectReplacementCharacter }.count
+
+        guard !imgAltValues.isEmpty, imgAltValues.count == replacementCount else {
+            return plainText
+        }
+
+        var result = ""
+        var altIndex = 0
+        for char in plainText {
+            if char == objectReplacementCharacter, altIndex < imgAltValues.count {
+                result += imgAltValues[altIndex]
+                altIndex += 1
+            } else {
+                result.append(char)
+            }
+        }
+
+        return result
+    }
+
+    /// Extracts `alt` attribute values from `<img>` tags in HTML.
+    static func extractImgAltValues(from html: String) -> [String] {
+        let imgPattern = try! NSRegularExpression(pattern: #"<img\b[^>]*>"#, options: .caseInsensitive)
+        let altPattern = try! NSRegularExpression(pattern: #"alt\s*=\s*"([^"]*)""#, options: .caseInsensitive)
+
+        let nsHTML = html as NSString
+        let fullRange = NSRange(location: 0, length: nsHTML.length)
+        let imgMatches = imgPattern.matches(in: html, range: fullRange)
+
+        var altValues: [String] = []
+        for imgMatch in imgMatches {
+            let imgTag = nsHTML.substring(with: imgMatch.range)
+            let imgNS = imgTag as NSString
+            let imgRange = NSRange(location: 0, length: imgNS.length)
+
+            if let altMatch = altPattern.firstMatch(in: imgTag, range: imgRange),
+               altMatch.numberOfRanges > 1 {
+                altValues.append(imgNS.substring(with: altMatch.range(at: 1)))
+            }
+        }
+
+        return altValues
+    }
+
     private static func uniquePlaceholder(
         for index: Int,
         originalText: String,

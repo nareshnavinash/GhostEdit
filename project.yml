@@ -35,8 +35,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.ghostedit.app
         INFOPLIST_FILE: GhostEdit/Info.plist
         CODE_SIGN_STYLE: Automatic
-        CURRENT_PROJECT_VERSION: 13
-        MARKETING_VERSION: 4.0.3
+        CURRENT_PROJECT_VERSION: 14
+        MARKETING_VERSION: 4.1.0
         ENABLE_HARDENED_RUNTIME: YES
   GhostEditTests:
     type: bundle.unit-test
