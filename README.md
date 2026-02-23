@@ -1,6 +1,10 @@
 # GhostEdit
 
-GhostEdit is a native macOS menu bar app that fixes selected text in any app using a local CLI provider.
+**Free, open-source AI grammar checker for macOS. Fix grammar, spelling, and punctuation in any app with a single hotkey — powered by Claude, OpenAI Codex, or Gemini.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform: macOS](https://img.shields.io/badge/Platform-macOS%2013%2B-black.svg)](https://github.com/nareshnavinash/GhostEdit/releases)
+[![Latest Release](https://img.shields.io/github/v/release/nareshnavinash/GhostEdit)](https://github.com/nareshnavinash/GhostEdit/releases/latest)
 
 ![GhostEdit launch preview](remotion/out/TwitterBanner.png)
 
@@ -8,31 +12,46 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
 
 ![GhostEdit launch trailer](remotion/out/LaunchTrailer.gif)
 
+## Why GhostEdit?
+
+- **No account required** — uses AI CLIs you already have installed (Claude, Codex, Gemini). No sign-ups, no subscriptions.
+- **Privacy-first** — text never leaves your machine through a third-party service. Corrections run through your own local CLI. No telemetry, no data collection.
+- **Free and open source** — no premium tiers, no word limits, no feature gates. Full grammar correction, writing coaching, and history — all included.
+- **Works everywhere** — correct text in any macOS app: Slack, Notion, VS Code, Mail, Pages, or any text field. One hotkey, any app.
+- **Bring your own AI** — switch between Claude, OpenAI Codex, and Gemini from Settings. Pick the model that works best for you.
+
 ## Features
 
 - **Fire-and-forget correction**: Press the hotkey, switch to any app — corrected text is pasted back automatically, even if the target app is in the background
 - **Native HUD overlay**: A glossy floating ghost indicator shows "Working on it..." (with spectacles) and "Done!" (idle ghost), then fades away after 1 second
 - **Smart paste-back**: Uses accessibility (AX) text replacement for native apps (no focus change needed), with delayed verification and automatic clipboard fallback for Electron apps (Slack, Discord, VS Code)
-- Global hotkey (`Command + E` by default)
-- Configurable global hotkey in **Settings...**
+- **Multi-provider support**: Choose between Claude, OpenAI Codex, and Gemini — switch providers and models from Settings
+- **Writing coach**: **Sharpen My Writing Style** analyzes your past corrections and shows what you do well plus areas to improve
+- **Token preservation**: Mentions, emojis, URLs, emails, file paths, and inline code are preserved during correction
+- **Correction history**: Browse, copy, and export past corrections as CSV
+- **Customizable prompt**: Tailor the AI instructions in `~/.ghostedit/prompt.txt`
+- Global hotkey (`Command + E` by default), configurable in **Settings...**
 - Works in background (no Dock icon)
-- Configurable prompt in `~/.ghostedit/prompt.txt`
-- Provider switch in **Settings...**: Claude, Codex, Gemini
-- Model switch in **Settings...** (full provider model lists + custom model)
-- Lowest-model defaults when switching providers:
-  - Codex: `gpt-5-codex`
-  - Gemini: `gemini-2.5-flash-lite`
-- Launch at login toggle in **Settings...**
-- Configurable correction history size (`History N`, default `200`) in **Settings...**
-- History viewer (`History...`) uses a wrapped table with headers and supports per-cell copy (`Cmd+C`) and CSV export
-- Writing coach action: **Sharpen My Writing Style** analyzes your past originals and shows positives plus improvements
-- Busy/unavailable model guidance in notifications and settings hint
-- Preserves static tokens during correction (mentions, emojis, URLs, emails, file paths, inline code) via placeholder protection + best-effort restoration
+- Launch at login toggle
 - Menu bar state indicator:
   - ![Idle menubar icon](remotion/out/MenuBarIconIdle.png) idle
   - ![Processing menubar icon](remotion/out/MenuBarIconProcessing.png) processing
 
-## Build and Run (Local)
+## Install
+
+Download the latest `.dmg` from the [Releases page](https://github.com/nareshnavinash/GhostEdit/releases/latest), drag GhostEdit to Applications, and grant Accessibility permission.
+
+### Prerequisites
+
+You need at least one AI CLI installed:
+
+| Provider | Install | Auth |
+|----------|---------|------|
+| Claude | `brew install claude` or [download](https://claude.com/claude-code) | `claude auth login` |
+| OpenAI Codex | `npm install -g @openai/codex` | `codex login` |
+| Gemini | `npm install -g @anthropic-ai/gemini` | `gemini` |
+
+## Build from Source
 
 1. Install dependencies:
 
@@ -54,13 +73,13 @@ open GhostEdit.xcodeproj
 
 4. Set your signing team and run.
 
-## First Launch Files
+## Configuration
 
-GhostEdit creates:
+GhostEdit creates these files on first launch:
 
-- `~/.ghostedit/prompt.txt`
-- `~/.ghostedit/config.json`
-- `~/.ghostedit/history.json`
+- `~/.ghostedit/prompt.txt` — AI prompt (editable)
+- `~/.ghostedit/config.json` — settings
+- `~/.ghostedit/history.json` — correction history
 
 If `~/.grammarfixer` exists from older builds, GhostEdit migrates it to `~/.ghostedit` automatically.
 
@@ -111,7 +130,13 @@ Practical effect:
 - Grammar/spelling/punctuation are still corrected.
 - Static items are kept exactly as typed so links, mentions, emojis, and paths survive correction.
 
-## Mandatory Tests and Coverage
+## Accessibility Permission
+
+GhostEdit uses macOS Accessibility APIs to read/replace selected text directly and to send `Cmd+C`/`Cmd+V` as a fallback. Grant permission at:
+
+- System Settings > Privacy & Security > Accessibility
+
+## Testing
 
 Run the full test+coverage gate:
 
@@ -121,22 +146,7 @@ Run the full test+coverage gate:
 
 This gate enforces:
 - Unit tests must pass.
-- 100% line coverage on:
-  - `GhostEdit/Sources/ConfigManager.swift`
-  - `GhostEdit/Sources/ShellRunner.swift`
-  - `GhostEdit/Sources/ClaudeRuntimeSupport.swift`
-  - `GhostEdit/Sources/CorrectionHistoryStore.swift`
-  - `GhostEdit/Sources/HistoryTableModel.swift`
-  - `GhostEdit/Sources/HistoryCSVExporter.swift`
-  - `GhostEdit/Sources/HotkeySupport.swift`
-  - `GhostEdit/Sources/WritingCoachSupport.swift`
-  - `GhostEdit/Sources/AccessibilitySupport.swift`
-  - `GhostEdit/Sources/AccessibilityTextSupport.swift`
-  - `GhostEdit/Sources/SettingsLayoutSupport.swift`
-  - `GhostEdit/Sources/TokenPreservationSupport.swift`
-  - `GhostEdit/Sources/MenuBarIconSupport.swift`
-  - `GhostEdit/Sources/WritingCoachLayoutSupport.swift`
-  - `GhostEdit/Sources/HUDOverlaySupport.swift`
+- 100% line coverage on all core source files.
 
 The same gate is wired into:
 - `.githooks/pre-commit`
@@ -147,20 +157,6 @@ Enable repo hooks locally:
 ```bash
 git config core.hooksPath .githooks
 ```
-
-## Accessibility Permission
-
-GhostEdit uses macOS Accessibility APIs to read/replace selected text directly and to send `Cmd+C`/`Cmd+V` as a fallback. Grant permission at:
-
-- System Settings > Privacy & Security > Accessibility
-
-## Provider Authentication
-
-If authentication expires, GhostEdit will show a prompt with the command to run:
-
-- Claude: `claude auth login`
-- Codex: `codex login`
-- Gemini: `gemini`
 
 ## Create Installable Artifacts
 
@@ -201,12 +197,18 @@ A workflow is included at `.github/workflows/release.yml`.
 - Workflow builds and uploads `.zip` and `.dmg` to the GitHub Release
 - For notarized releases, add signing/notary steps and secrets to the workflow
 
-## Privacy and Repo Safety
+## Privacy
 
-This repo does not store local user prompt/config files from `~/.ghostedit`.
+- No accounts, no telemetry, no data collection.
+- Text is processed locally through your own AI CLI — nothing is sent to GhostEdit servers (there are none).
+- This repo does not store local user prompt/config files from `~/.ghostedit`.
 
 Before pushing, verify no local secrets were added:
 
 ```bash
 rg -n "(api[_-]?key|token|secret|password|PRIVATE KEY)" .
 ```
+
+## License
+
+MIT
