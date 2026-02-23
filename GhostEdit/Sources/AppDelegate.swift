@@ -734,9 +734,112 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = "Sharpen My Writing Style"
-        alert.informativeText = WritingCoachSupport.popupText(for: insights, sampleCount: sampleCount)
+        alert.informativeText = WritingCoachLayoutSupport.reviewedText(sampleCount: sampleCount)
+        alert.accessoryView = buildWritingCoachAccessoryView(insights)
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    private func buildWritingCoachAccessoryView(_ insights: WritingCoachInsights) -> NSView {
+        let width = WritingCoachLayoutSupport.accessoryWidth
+        let contentWidth = WritingCoachLayoutSupport.panelContentWidth()
+
+        let strengthItems = WritingCoachLayoutSupport.cappedItems(insights.positives)
+        let improvementItems = WritingCoachLayoutSupport.cappedItems(insights.improvements)
+
+        let strengthPanel = buildCoachPanel(
+            title: "Strengths",
+            items: strengthItems,
+            prefix: WritingCoachLayoutSupport.strengthPrefix,
+            accentColor: .systemGreen,
+            contentWidth: contentWidth,
+            emptyFallback: WritingCoachLayoutSupport.emptyStrengthsFallback
+        )
+
+        let improvementPanel = buildCoachPanel(
+            title: "Areas to Improve",
+            items: improvementItems,
+            prefix: WritingCoachLayoutSupport.improvementPrefix,
+            accentColor: .systemPink,
+            contentWidth: contentWidth,
+            emptyFallback: WritingCoachLayoutSupport.emptyImprovementsFallback
+        )
+
+        let stack = NSStackView(views: [strengthPanel, improvementPanel])
+        stack.orientation = .horizontal
+        stack.distribution = .fillEqually
+        stack.alignment = .top
+        stack.spacing = WritingCoachLayoutSupport.panelSpacing
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.widthAnchor.constraint(equalToConstant: width).isActive = true
+
+        let fittingSize = stack.fittingSize
+        stack.frame = NSRect(x: 0, y: 0, width: width, height: fittingSize.height)
+
+        return stack
+    }
+
+    private func buildCoachPanel(
+        title: String,
+        items: [String],
+        prefix: String,
+        accentColor: NSColor,
+        contentWidth: CGFloat,
+        emptyFallback: String
+    ) -> NSView {
+        let inset = WritingCoachLayoutSupport.panelInset
+
+        let panel = NSView()
+        panel.wantsLayer = true
+        panel.layer?.cornerRadius = WritingCoachLayoutSupport.cornerRadius
+        panel.layer?.borderWidth = 1
+        panel.layer?.borderColor = accentColor.withAlphaComponent(WritingCoachLayoutSupport.borderAlpha).cgColor
+        panel.layer?.backgroundColor = accentColor.withAlphaComponent(WritingCoachLayoutSupport.backgroundAlpha).cgColor
+
+        let headerField = NSTextField(labelWithString: title)
+        headerField.font = NSFont.systemFont(ofSize: WritingCoachLayoutSupport.headerFontSize, weight: .semibold)
+        headerField.textColor = accentColor
+
+        let displayItems = items.isEmpty ? [emptyFallback] : items
+        let itemFields: [NSTextField] = displayItems.map { text in
+            let attributed = NSMutableAttributedString()
+            let prefixAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: accentColor,
+                .font: NSFont.systemFont(ofSize: WritingCoachLayoutSupport.itemFontSize)
+            ]
+            let textAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: NSColor.labelColor,
+                .font: NSFont.systemFont(ofSize: WritingCoachLayoutSupport.itemFontSize)
+            ]
+            attributed.append(NSAttributedString(string: prefix, attributes: prefixAttrs))
+            attributed.append(NSAttributedString(string: text, attributes: textAttrs))
+
+            let field = NSTextField(wrappingLabelWithString: "")
+            field.attributedStringValue = attributed
+            field.preferredMaxLayoutWidth = contentWidth
+            return field
+        }
+
+        var views: [NSView] = [headerField]
+        views.append(contentsOf: itemFields)
+
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 6
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        panel.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: panel.topAnchor, constant: inset),
+            stack.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: inset),
+            stack.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -inset),
+            stack.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -inset),
+        ])
+
+        return panel
     }
 
     private func showWritingCoachFallback(rawResponse: String, sampleCount: Int) {

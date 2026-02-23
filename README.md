@@ -6,9 +6,7 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
 
 ## Trailer
 
-<video src="remotion/out/LaunchTrailer.mp4" controls preload="metadata"></video>
-
-Direct download: [LaunchTrailer.mp4](remotion/out/LaunchTrailer.mp4)
+![GhostEdit launch trailer](remotion/out/LaunchTrailer.gif)
 
 ## Features
 
@@ -132,6 +130,7 @@ This gate enforces:
   - `GhostEdit/Sources/AccessibilitySupport.swift`
   - `GhostEdit/Sources/SettingsLayoutSupport.swift`
   - `GhostEdit/Sources/TokenPreservationSupport.swift`
+  - `GhostEdit/Sources/WritingCoachLayoutSupport.swift`
 
 The same gate is wired into:
 - `.githooks/pre-commit`
