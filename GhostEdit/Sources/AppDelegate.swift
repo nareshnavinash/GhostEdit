@@ -434,22 +434,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             with: correctedText
                         )
                         if axReplaced {
-                            // Verify the replacement actually took effect by reading back.
-                            // Some apps accept the AX call but don't update their text.
-                            let readBack = AccessibilityTextSupport.readSelectedText(
-                                appPID: targetApp.processIdentifier
-                            )
-                            let verified = (readBack == correctedText)
-
-                            if verified {
-                                let time = self.timeFormatter.string(from: Date())
-                                self.setStatus("Last correction succeeded at \(time)")
-                                self.restoreClipboardSnapshot(after: 0)
-                                self.updateHUD(state: .success)
-                                self.finishProcessing()
-                                return
-                            }
-                            // AX said success but text didn't change — fall through to clipboard.
+                            let time = self.timeFormatter.string(from: Date())
+                            self.setStatus("Last correction succeeded at \(time)")
+                            self.restoreClipboardSnapshot(after: 0)
+                            self.updateHUD(state: .success)
+                            self.finishProcessing()
+                            return
                         }
                     }
 

@@ -92,6 +92,18 @@ enum TokenPreservationSupport {
         return restored
     }
 
+    /// Best-effort restoration: restores any placeholders that survived the AI round-trip.
+    /// Placeholders the AI removed are simply absent from the result.
+    static func bestEffortRestore(in output: String, tokens: [ProtectedToken]) -> String {
+        var restored = output
+        for token in tokens {
+            if restored.contains(token.placeholder) {
+                restored = restored.replacingOccurrences(of: token.placeholder, with: token.originalToken)
+            }
+        }
+        return restored
+    }
+
     private static func uniquePlaceholder(
         for index: Int,
         originalText: String,

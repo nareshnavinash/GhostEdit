@@ -240,7 +240,7 @@ final class ShellRunnerTests: XCTestCase {
         XCTAssertEqual(attempts, "2")
     }
 
-    func testCorrectTextPreservingTokensThrowsWhenPlaceholderStillMissingAfterRetries() throws {
+    func testCorrectTextPreservingTokensFallsBackToBestEffortWhenPlaceholdersMissing() throws {
         let testEnv = try makeRunnerEnvironment()
         let script = """
         #!/bin/zsh
@@ -251,17 +251,35 @@ final class ShellRunnerTests: XCTestCase {
             AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
         )
 
-        XCTAssertThrowsError(
-            try testEnv.runner.correctTextPreservingTokens(
-                systemPrompt: "Fix grammar",
-                selectedText: "hello @<U1>",
-                maxValidationRetries: 0
-            )
-        ) { error in
-            guard case ShellRunnerError.protectedTokensModified = error else {
-                return XCTFail("Expected protectedTokensModified, got: \(error)")
-            }
-        }
+        // When placeholders are stripped by the AI, the method falls back to
+        // best-effort restoration instead of throwing.
+        let result = try testEnv.runner.correctTextPreservingTokens(
+            systemPrompt: "Fix grammar",
+            selectedText: "hello @<U1>",
+            maxValidationRetries: 0
+        )
+        XCTAssertEqual(result, "Always missing protected tokens.")
+    }
+
+    func testCorrectTextPreservingTokensRestoresPartialSurvivors() throws {
+        let testEnv = try makeRunnerEnvironment()
+        // AI keeps placeholder 0 but strips placeholder 1.
+        let script = """
+        #!/bin/zsh
+        print -r -- "Hello __GHOSTEDIT_KEEP_0__ world."
+        """
+        let executable = try makeExecutableScript(named: "preserve-partial.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let result = try testEnv.runner.correctTextPreservingTokens(
+            systemPrompt: "Fix grammar",
+            selectedText: "hello @<U1> :sad:",
+            maxValidationRetries: 0
+        )
+        // @<U1> is restored via best-effort; :sad: is lost because AI removed its placeholder.
+        XCTAssertEqual(result, "Hello @<U1> world.")
     }
 
     func testCorrectTextClassifiesAuthenticationErrorFromStdout() throws {

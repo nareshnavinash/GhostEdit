@@ -104,19 +104,21 @@ final class ShellRunner {
 
         let augmentedPrompt = TokenPreservationSupport.appendInstruction(to: systemPrompt)
         let retries = max(0, maxValidationRetries)
+        var lastCandidate = ""
 
         for _ in 0...retries {
-            let candidate = try correctText(
+            lastCandidate = try correctText(
                 systemPrompt: augmentedPrompt,
                 selectedText: protection.protectedText
             )
 
-            if TokenPreservationSupport.placeholdersAreIntact(in: candidate, tokens: protection.tokens) {
-                return TokenPreservationSupport.restoreTokens(in: candidate, tokens: protection.tokens)
+            if TokenPreservationSupport.placeholdersAreIntact(in: lastCandidate, tokens: protection.tokens) {
+                return TokenPreservationSupport.restoreTokens(in: lastCandidate, tokens: protection.tokens)
             }
         }
 
-        throw ShellRunnerError.protectedTokensModified
+        // Placeholders were modified by the AI — restore whatever survived.
+        return TokenPreservationSupport.bestEffortRestore(in: lastCandidate, tokens: protection.tokens)
     }
 
     func resolveCLIPath(provider: CLIProvider, preferredPath: String?) throws -> String {

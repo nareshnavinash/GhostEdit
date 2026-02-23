@@ -117,4 +117,85 @@ final class TokenPreservationSupportTests: XCTestCase {
         )
         XCTAssertEqual(restored, "Hi @<U1> add :hat:.")
     }
+
+    // MARK: - bestEffortRestore
+
+    func testBestEffortRestoreRestoresSurvivingPlaceholders() {
+        let tokens = [
+            ProtectedToken(placeholder: "__GHOSTEDIT_KEEP_0__", originalToken: ":sad:"),
+            ProtectedToken(placeholder: "__GHOSTEDIT_KEEP_1__", originalToken: ":mad:"),
+            ProtectedToken(placeholder: "__GHOSTEDIT_KEEP_2__", originalToken: "@user")
+        ]
+        // AI kept placeholder 0 and 2 but removed 1.
+        let output = "I am __GHOSTEDIT_KEEP_0__ about __GHOSTEDIT_KEEP_2__ leaving."
+        let result = TokenPreservationSupport.bestEffortRestore(in: output, tokens: tokens)
+        XCTAssertEqual(result, "I am :sad: about @user leaving.")
+    }
+
+    func testBestEffortRestoreReturnsUnchangedWhenNoPlaceholdersSurvive() {
+        let tokens = [
+            ProtectedToken(placeholder: "__GHOSTEDIT_KEEP_0__", originalToken: ":hat:")
+        ]
+        let output = "All placeholders were removed by AI."
+        let result = TokenPreservationSupport.bestEffortRestore(in: output, tokens: tokens)
+        XCTAssertEqual(result, output)
+    }
+
+    func testBestEffortRestoreRestoresAllWhenAllSurvive() {
+        let tokens = [
+            ProtectedToken(placeholder: "__GHOSTEDIT_KEEP_0__", originalToken: ":sad:"),
+            ProtectedToken(placeholder: "__GHOSTEDIT_KEEP_1__", originalToken: ":mad:")
+        ]
+        let output = "Feeling __GHOSTEDIT_KEEP_0__ and __GHOSTEDIT_KEEP_1__."
+        let result = TokenPreservationSupport.bestEffortRestore(in: output, tokens: tokens)
+        XCTAssertEqual(result, "Feeling :sad: and :mad:.")
+    }
+
+    func testBestEffortRestoreWithEmptyTokensList() {
+        let result = TokenPreservationSupport.bestEffortRestore(in: "No tokens here.", tokens: [])
+        XCTAssertEqual(result, "No tokens here.")
+    }
+
+    // MARK: - Slack emoji protection
+
+    func testProtectTokensCatchesCommonSlackEmojis() {
+        let input = "Good job :thumbsup: but I am :sad: and :mad: about the delay."
+        let result = TokenPreservationSupport.protectTokens(in: input)
+
+        let emojiTokens = result.tokens.map(\.originalToken)
+        XCTAssertTrue(emojiTokens.contains(":thumbsup:"))
+        XCTAssertTrue(emojiTokens.contains(":sad:"))
+        XCTAssertTrue(emojiTokens.contains(":mad:"))
+        XCTAssertFalse(result.protectedText.contains(":sad:"))
+        XCTAssertFalse(result.protectedText.contains(":mad:"))
+        XCTAssertFalse(result.protectedText.contains(":thumbsup:"))
+    }
+
+    func testProtectTokensCatchesEmojiWithHyphensAndNumbers() {
+        let input = "Check :+1: and :100: and :e-mail:."
+        let result = TokenPreservationSupport.protectTokens(in: input)
+
+        let emojiTokens = result.tokens.map(\.originalToken)
+        XCTAssertTrue(emojiTokens.contains(":+1:"))
+        XCTAssertTrue(emojiTokens.contains(":100:"))
+        XCTAssertTrue(emojiTokens.contains(":e-mail:"))
+    }
+
+    func testProtectTokensCatchesEmojiWithUnderscores() {
+        let input = "Great :thumbs_up: work :heart_eyes:!"
+        let result = TokenPreservationSupport.protectTokens(in: input)
+
+        let emojiTokens = result.tokens.map(\.originalToken)
+        XCTAssertTrue(emojiTokens.contains(":thumbs_up:"))
+        XCTAssertTrue(emojiTokens.contains(":heart_eyes:"))
+    }
+
+    func testProtectTokensDoesNotMatchSingleColon() {
+        let input = "Time: 3:00 PM and ratio is 2:1."
+        let result = TokenPreservationSupport.protectTokens(in: input)
+
+        // None of these should match the emoji pattern.
+        let emojiTokens = result.tokens.filter { $0.originalToken.hasPrefix(":") && $0.originalToken.hasSuffix(":") }
+        XCTAssertTrue(emojiTokens.isEmpty)
+    }
 }
