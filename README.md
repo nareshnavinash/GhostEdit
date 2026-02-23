@@ -10,6 +10,9 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
 
 ## Features
 
+- **Fire-and-forget correction**: Press the hotkey, switch to any app — corrected text is pasted back automatically, even if the target app is in the background
+- **Native HUD overlay**: A glossy floating ghost indicator shows "Working on it..." (with spectacles) and "Done!" (idle ghost), then fades away after 1 second
+- **Smart paste-back**: Uses accessibility (AX) text replacement for native apps (no focus change needed), with delayed verification and automatic clipboard fallback for Electron apps (Slack, Discord, VS Code)
 - Global hotkey (`Command + E` by default)
 - Configurable global hotkey in **Settings...**
 - Works in background (no Dock icon)
@@ -24,7 +27,7 @@ GhostEdit is a native macOS menu bar app that fixes selected text in any app usi
 - History viewer (`History...`) uses a wrapped table with headers and supports per-cell copy (`Cmd+C`) and CSV export
 - Writing coach action: **Sharpen My Writing Style** analyzes your past originals and shows positives plus improvements
 - Busy/unavailable model guidance in notifications and settings hint
-- Preserves static tokens during correction (mentions, emojis, URLs, emails, file paths, inline code) via placeholder protection + retry
+- Preserves static tokens during correction (mentions, emojis, URLs, emails, file paths, inline code) via placeholder protection + best-effort restoration
 - Menu bar state indicator:
   - ![Idle menubar icon](remotion/out/MenuBarIconIdle.png) idle
   - ![Processing menubar icon](remotion/out/MenuBarIconProcessing.png) processing
@@ -102,7 +105,7 @@ Protected token types:
 
 Failure behavior:
 - If the model edits/removes placeholder tokens, GhostEdit retries once automatically.
-- If the retry still fails token validation, GhostEdit shows an explicit error and does not paste a corrupted result.
+- If the retry still fails, GhostEdit performs a best-effort restoration — any placeholders the model preserved are restored, and the correction still succeeds.
 
 Practical effect:
 - Grammar/spelling/punctuation are still corrected.
@@ -128,9 +131,12 @@ This gate enforces:
   - `GhostEdit/Sources/HotkeySupport.swift`
   - `GhostEdit/Sources/WritingCoachSupport.swift`
   - `GhostEdit/Sources/AccessibilitySupport.swift`
+  - `GhostEdit/Sources/AccessibilityTextSupport.swift`
   - `GhostEdit/Sources/SettingsLayoutSupport.swift`
   - `GhostEdit/Sources/TokenPreservationSupport.swift`
+  - `GhostEdit/Sources/MenuBarIconSupport.swift`
   - `GhostEdit/Sources/WritingCoachLayoutSupport.swift`
+  - `GhostEdit/Sources/HUDOverlaySupport.swift`
 
 The same gate is wired into:
 - `.githooks/pre-commit`
@@ -144,7 +150,7 @@ git config core.hooksPath .githooks
 
 ## Accessibility Permission
 
-GhostEdit sends `Cmd+C` and `Cmd+V` programmatically. Grant permission at:
+GhostEdit uses macOS Accessibility APIs to read/replace selected text directly and to send `Cmd+C`/`Cmd+V` as a fallback. Grant permission at:
 
 - System Settings > Privacy & Security > Accessibility
 
