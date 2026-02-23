@@ -434,55 +434,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             with: correctedText
                         )
                         if axReplaced {
-                            let time = self.timeFormatter.string(from: Date())
-                            self.setStatus("Last correction succeeded at \(time)")
-                            self.restoreClipboardSnapshot(after: 0)
-                            self.updateHUD(state: .success)
-                            self.finishProcessing()
+                            // Verify after a short delay — some apps (e.g. TextEdit) need
+                            // time to commit the AX change, while Electron apps (Slack,
+                            // Discord, VS Code) accept the call but never actually replace.
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                let readBack = AccessibilityTextSupport.readSelectedText(
+                                    appPID: targetApp.processIdentifier
+                                )
+                                if readBack == correctedText {
+                                    let time = self.timeFormatter.string(from: Date())
+                                    self.setStatus("Last correction succeeded at \(time)")
+                                    self.restoreClipboardSnapshot(after: 0)
+                                    self.updateHUD(state: .success)
+                                    self.finishProcessing()
+                                } else {
+                                    self.pasteViaClipboard(correctedText: correctedText)
+                                }
+                            }
                             return
                         }
                     }
 
-                    // Fall back to clipboard-based paste.
-                    // Remember the user's current app so we can restore focus after pasting.
-                    let userCurrentApp = NSWorkspace.shared.frontmostApplication
-
-                    if self.clipboardSnapshot == nil {
-                        self.clipboardSnapshot = self.clipboardManager.snapshot()
-                    }
-                    self.clipboardManager.writePlainText(correctedText)
-                    self.targetAppAtTrigger?.activate(options: [.activateAllWindows])
-
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        let pasted = self.clipboardManager.simulatePasteShortcut(using: .annotatedSession)
-                            || self.clipboardManager.simulatePasteShortcut(using: .hidSystem)
-
-                        if !pasted {
-                            NSSound.beep()
-                            let message = "Could not paste corrected text.\n\nMake sure your cursor is in the target field, then run GhostEdit again."
-                            self.notifyFailure(body: "Correction Failed. \(message)")
-                            self.showFailureAlert(title: "Correction Failed", message: message)
-                            self.setStatus("Paste failed")
-                            self.dismissHUD()
-                        } else {
-                            let time = self.timeFormatter.string(from: Date())
-                            self.setStatus("Last correction succeeded at \(time)")
-                            self.updateHUD(state: .success)
-
-                            // Restore the user's focus if they switched away from the target app.
-                            if let userApp = userCurrentApp,
-                               let targetApp = self.targetAppAtTrigger,
-                               userApp.processIdentifier != targetApp.processIdentifier,
-                               !userApp.isTerminated {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
-                                    userApp.activate()
-                                }
-                            }
-                        }
-
-                        self.restoreClipboardSnapshot(after: 0.20)
-                        self.finishProcessing()
-                    }
+                    // AX replacement not available — go straight to clipboard paste.
+                    self.pasteViaClipboard(correctedText: correctedText)
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -554,6 +528,47 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         writingCoachMenuItem?.isEnabled = true
         statusItem.menu = statusMenu
         setMenuBarIcon(idleMenuBarIcon)
+    }
+
+    private func pasteViaClipboard(correctedText: String) {
+        let userCurrentApp = NSWorkspace.shared.frontmostApplication
+
+        if clipboardSnapshot == nil {
+            clipboardSnapshot = clipboardManager.snapshot()
+        }
+        clipboardManager.writePlainText(correctedText)
+        targetAppAtTrigger?.activate(options: [.activateAllWindows])
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            let pasted = self.clipboardManager.simulatePasteShortcut(using: .annotatedSession)
+                || self.clipboardManager.simulatePasteShortcut(using: .hidSystem)
+
+            if !pasted {
+                NSSound.beep()
+                let message = "Could not paste corrected text.\n\nMake sure your cursor is in the target field, then run GhostEdit again."
+                self.notifyFailure(body: "Correction Failed. \(message)")
+                self.showFailureAlert(title: "Correction Failed", message: message)
+                self.setStatus("Paste failed")
+                self.dismissHUD()
+            } else {
+                let time = self.timeFormatter.string(from: Date())
+                self.setStatus("Last correction succeeded at \(time)")
+                self.updateHUD(state: .success)
+
+                // Restore the user's focus if they switched away from the target app.
+                if let userApp = userCurrentApp,
+                   let targetApp = self.targetAppAtTrigger,
+                   userApp.processIdentifier != targetApp.processIdentifier,
+                   !userApp.isTerminated {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+                        userApp.activate()
+                    }
+                }
+            }
+
+            self.restoreClipboardSnapshot(after: 0.20)
+            self.finishProcessing()
+        }
     }
 
     private func showHUD(state: HUDOverlayState) {
