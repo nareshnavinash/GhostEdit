@@ -37,6 +37,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.geminiPath, AppConfig.default.geminiPath)
         XCTAssertEqual(config.launchAtLogin, AppConfig.default.launchAtLogin)
         XCTAssertEqual(config.historyLimit, AppConfig.default.historyLimit)
+        XCTAssertEqual(config.developerMode, AppConfig.default.developerMode)
     }
 
     func testBootstrapMigratesLegacyDirectory() throws {
@@ -85,6 +86,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(migratedConfig.hotkeyModifiers, legacyConfig.hotkeyModifiers)
         XCTAssertEqual(migratedConfig.launchAtLogin, legacyConfig.launchAtLogin)
         XCTAssertEqual(migratedConfig.historyLimit, legacyConfig.historyLimit)
+        XCTAssertEqual(migratedConfig.developerMode, legacyConfig.developerMode)
     }
 
     func testBootstrapPreservesExistingFiles() throws {
@@ -123,6 +125,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(loaded.hotkeyModifiers, customConfig.hotkeyModifiers)
         XCTAssertEqual(loaded.launchAtLogin, customConfig.launchAtLogin)
         XCTAssertEqual(loaded.historyLimit, customConfig.historyLimit)
+        XCTAssertEqual(loaded.developerMode, customConfig.developerMode)
     }
 
     func testBootstrapMigratesLegacyDefaultPromptToCurrentDefault() throws {
@@ -190,6 +193,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.geminiPath, AppConfig.default.geminiPath)
         XCTAssertEqual(config.launchAtLogin, AppConfig.default.launchAtLogin)
         XCTAssertEqual(config.historyLimit, AppConfig.default.historyLimit)
+        XCTAssertEqual(config.developerMode, AppConfig.default.developerMode)
     }
 
     func testLoadConfigAppliesDecoderDefaultsForMissingFields() throws {
@@ -209,6 +213,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.geminiPath, AppConfig.default.geminiPath)
         XCTAssertEqual(config.launchAtLogin, AppConfig.default.launchAtLogin)
         XCTAssertEqual(config.historyLimit, AppConfig.default.historyLimit)
+        XCTAssertEqual(config.developerMode, AppConfig.default.developerMode)
     }
 
     func testLoadConfigUsesDefaultTimeoutWhenTimeoutMissing() throws {
@@ -490,6 +495,224 @@ final class ConfigManagerTests: XCTestCase {
                 .appendingPathComponent("history.json")
                 .path
         )
+    }
+
+    func testLanguageDefaultIsAuto() {
+        XCTAssertEqual(AppConfig.default.language, "auto")
+        XCTAssertEqual(AppConfig.default.resolvedLanguage, "auto")
+    }
+
+    func testResolvedLanguageNormalizesBlankToAuto() {
+        var config = AppConfig.default
+        config.language = "   "
+        XCTAssertEqual(config.resolvedLanguage, "auto")
+    }
+
+    func testResolvedLanguageLowercases() {
+        var config = AppConfig.default
+        config.language = " FR "
+        XCTAssertEqual(config.resolvedLanguage, "fr")
+    }
+
+    func testLanguageInstructionForAuto() {
+        let instruction = AppConfig.languageInstruction(for: "auto")
+        XCTAssertEqual(instruction, "Detect the language of the input text and respond in the same language.")
+    }
+
+    func testLanguageInstructionForEmpty() {
+        let instruction = AppConfig.languageInstruction(for: "")
+        XCTAssertEqual(instruction, "Detect the language of the input text and respond in the same language.")
+    }
+
+    func testLanguageInstructionForKnownLanguage() {
+        XCTAssertEqual(AppConfig.languageInstruction(for: "fr"), "Respond in French.")
+        XCTAssertEqual(AppConfig.languageInstruction(for: "ja"), "Respond in Japanese.")
+        XCTAssertEqual(AppConfig.languageInstruction(for: "ta"), "Respond in Tamil.")
+    }
+
+    func testLanguageInstructionForUnknownLanguageUsesRawValue() {
+        XCTAssertEqual(AppConfig.languageInstruction(for: "klingon"), "Respond in klingon.")
+    }
+
+    func testLanguageRoundTripsViaConfigManager() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        XCTAssertEqual(config.resolvedLanguage, "auto")
+
+        config.language = "es"
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+        XCTAssertEqual(manager.loadConfig().resolvedLanguage, "es")
+    }
+
+    func testLanguageDecodesFromJSON() throws {
+        let json = """
+        {"language": "de", "provider": "claude"}
+        """
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertEqual(config.resolvedLanguage, "de")
+    }
+
+    func testLanguageDefaultsWhenMissingFromJSON() throws {
+        let json = """
+        {"provider": "claude"}
+        """
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertEqual(config.resolvedLanguage, "auto")
+    }
+
+    func testSupportedLanguagesContainsAutoAndEnglish() {
+        let codes = AppConfig.supportedLanguages.map { $0.code }
+        XCTAssertTrue(codes.contains("auto"))
+        XCTAssertTrue(codes.contains("en"))
+        XCTAssertGreaterThan(codes.count, 10)
+    }
+
+    // MARK: - Sound Feedback Toggle Tests
+
+    func testSoundFeedbackEnabledDefaultIsTrue() {
+        XCTAssertTrue(AppConfig.default.soundFeedbackEnabled)
+    }
+
+    func testSoundFeedbackEnabledBackwardCompatJSON() throws {
+        let json = """
+        {"provider": "claude"}
+        """
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertTrue(config.soundFeedbackEnabled)
+    }
+
+    func testSoundFeedbackEnabledRoundTrip() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        XCTAssertTrue(config.soundFeedbackEnabled)
+
+        config.soundFeedbackEnabled = false
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+        XCTAssertFalse(manager.loadConfig().soundFeedbackEnabled)
+    }
+
+    // MARK: - Notification Center Integration Tests
+
+    func testNotifyOnSuccessDefaultIsFalse() {
+        XCTAssertFalse(AppConfig.default.notifyOnSuccess)
+    }
+
+    func testNotifyOnSuccessBackwardCompatJSON() throws {
+        let json = """
+        {"provider": "claude"}
+        """
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertFalse(config.notifyOnSuccess)
+    }
+
+    func testNotifyOnSuccessRoundTrip() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        XCTAssertFalse(config.notifyOnSuccess)
+
+        config.notifyOnSuccess = true
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+        XCTAssertTrue(manager.loadConfig().notifyOnSuccess)
+    }
+
+    // MARK: - Clipboard-Only Mode Tests
+
+    func testClipboardOnlyModeDefaultIsFalse() {
+        XCTAssertFalse(AppConfig.default.clipboardOnlyMode)
+    }
+
+    func testClipboardOnlyModeBackwardCompatJSON() throws {
+        let json = """
+        {"provider": "claude"}
+        """
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertFalse(config.clipboardOnlyMode)
+    }
+
+    func testClipboardOnlyModeRoundTrip() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        XCTAssertFalse(config.clipboardOnlyMode)
+
+        config.clipboardOnlyMode = true
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+        XCTAssertTrue(manager.loadConfig().clipboardOnlyMode)
+    }
+
+    // MARK: - Tone/Style Presets Tests
+
+    func testTonePresetDefaultIsDefault() {
+        XCTAssertEqual(AppConfig.default.tonePreset, "default")
+    }
+
+    func testTonePresetBackwardCompatJSON() throws {
+        let json = """
+        {"provider": "claude"}
+        """
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertEqual(config.tonePreset, "default")
+    }
+
+    func testTonePresetRoundTrip() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        XCTAssertEqual(config.tonePreset, "default")
+
+        config.tonePreset = "professional"
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+        XCTAssertEqual(manager.loadConfig().tonePreset, "professional")
+    }
+
+    func testSupportedPresetsContainsExpectedValues() {
+        let presets = AppConfig.supportedPresets
+        XCTAssertEqual(presets, ["default", "casual", "professional", "academic", "slack"])
+    }
+
+    func testPromptForPresetReturnsNilForDefault() {
+        XCTAssertNil(AppConfig.promptForPreset("default"))
+        XCTAssertNil(AppConfig.promptForPreset(""))
+    }
+
+    func testPromptForPresetReturnsPromptForKnownPresets() {
+        XCTAssertNotNil(AppConfig.promptForPreset("casual"))
+        XCTAssertNotNil(AppConfig.promptForPreset("professional"))
+        XCTAssertNotNil(AppConfig.promptForPreset("academic"))
+        XCTAssertNotNil(AppConfig.promptForPreset("slack"))
+    }
+
+    func testPromptForPresetReturnsNilForUnknown() {
+        XCTAssertNil(AppConfig.promptForPreset("unknown-preset"))
+    }
+
+    func testPromptForPresetIsCaseInsensitive() {
+        XCTAssertNotNil(AppConfig.promptForPreset("CASUAL"))
+        XCTAssertNotNil(AppConfig.promptForPreset(" Professional "))
+    }
+
+    func testTonePresetNormalizesToDefaultForInvalidValue() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        config.tonePreset = "invalid-tone"
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+        XCTAssertEqual(manager.loadConfig().tonePreset, "default")
     }
 
     private func makeManager() -> (ConfigManager, URL) {

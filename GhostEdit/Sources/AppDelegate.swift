@@ -13,12 +13,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindowController: SettingsWindowController?
     private var historyWindowController: HistoryWindowController?
     private var hudController: HUDOverlayController?
+    private var developerConsoleController: DeveloperConsoleController?
+    private var diffPreviewController: DiffPreviewController?
 
     private var statusMenu: NSMenu?
     private var statusMenuItem: NSMenuItem?
     private var runNowMenuItem: NSMenuItem?
+    private var undoMenuItem: NSMenuItem?
     private var historyMenuItem: NSMenuItem?
     private var writingCoachMenuItem: NSMenuItem?
+    private var developerModeMenuItem: NSMenuItem?
+    private var toneMenuItem: NSMenuItem?
 
     private var isProcessing = false
     private var isShowingAccessibilityAlert = false
@@ -98,6 +103,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(runNow)
         runNowMenuItem = runNow
 
+        let undo = NSMenuItem(
+            title: "Undo Last Correction",
+            action: #selector(undoLastCorrectionAction),
+            keyEquivalent: ""
+        )
+        undo.target = self
+        menu.addItem(undo)
+        undoMenuItem = undo
+
         menu.addItem(.separator())
 
         let settings = NSMenuItem(
@@ -126,6 +140,33 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(writingCoach)
         writingCoachMenuItem = writingCoach
 
+        let toneItem = NSMenuItem(title: "Tone", action: nil, keyEquivalent: "")
+        let toneSubmenu = NSMenu()
+        for preset in AppConfig.supportedPresets {
+            let item = NSMenuItem(
+                title: preset.capitalized,
+                action: #selector(tonePresetSelected(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = preset
+            toneSubmenu.addItem(item)
+        }
+        toneItem.submenu = toneSubmenu
+        menu.addItem(toneItem)
+        toneMenuItem = toneItem
+        refreshToneMenuState()
+
+        menu.addItem(.separator())
+
+        let statistics = NSMenuItem(
+            title: "Statistics...",
+            action: #selector(openStatisticsAction),
+            keyEquivalent: ""
+        )
+        statistics.target = self
+        menu.addItem(statistics)
+
         menu.addItem(.separator())
 
         let openPrompt = NSMenuItem(
@@ -144,6 +185,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         openConfig.target = self
         menu.addItem(openConfig)
 
+        let exportSettings = NSMenuItem(
+            title: "Export Settings...",
+            action: #selector(exportSettingsAction),
+            keyEquivalent: ""
+        )
+        exportSettings.target = self
+        menu.addItem(exportSettings)
+
+        let importSettings = NSMenuItem(
+            title: "Import Settings...",
+            action: #selector(importSettingsAction),
+            keyEquivalent: ""
+        )
+        importSettings.target = self
+        menu.addItem(importSettings)
+
         let checkAccessibility = NSMenuItem(
             title: "Check Accessibility Permission",
             action: #selector(checkAccessibilityAction),
@@ -154,9 +211,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        let developerMode = NSMenuItem(
+            title: "Developer Mode",
+            action: #selector(toggleDeveloperModeAction),
+            keyEquivalent: ""
+        )
+        developerMode.target = self
+        menu.addItem(developerMode)
+        developerModeMenuItem = developerMode
+        refreshDeveloperModeMenuState()
+
+        menu.addItem(.separator())
+
         let version = NSMenuItem(title: appVersionText(), action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
+
+        let checkUpdates = NSMenuItem(
+            title: "Check for Updates...",
+            action: #selector(checkForUpdatesAction),
+            keyEquivalent: ""
+        )
+        checkUpdates.target = self
+        menu.addItem(checkUpdates)
 
         menu.addItem(.separator())
 
@@ -220,6 +297,77 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         handleHotkeyTrigger()
     }
 
+    @objc private func undoLastCorrectionAction() {
+        statusMenu?.cancelTracking()
+
+        guard !isProcessing else {
+            playErrorSound()
+            setStatus("Already processing")
+            return
+        }
+
+        guard ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: true) else {
+            playErrorSound()
+            setStatus("Accessibility permission required")
+            return
+        }
+
+        guard let entry = historyStore.lastSuccessfulEntry() else {
+            playErrorSound()
+            setStatus("No correction to undo")
+            return
+        }
+
+        guard let targetApp = resolveTargetApplication() else {
+            playErrorSound()
+            setStatus("Could not determine target app; focus text app and retry")
+            return
+        }
+
+        devLog(.textCapture, "Undo: restoring original text (\(entry.originalText.count) chars)")
+
+        isProcessing = true
+        targetAppAtTrigger = targetApp
+        showHUD(state: .working)
+
+        // Try AX replacement first.
+        if AccessibilityTextSupport.replaceSelectedText(
+            appPID: targetApp.processIdentifier,
+            with: entry.originalText
+        ) {
+            devLog(.pasteBack, "Undo: AX replacement succeeded")
+            let time = timeFormatter.string(from: Date())
+            setStatus("Undo succeeded at \(time)")
+            updateHUD(state: .success)
+            finishProcessing()
+            return
+        }
+
+        // Fall back to clipboard paste.
+        devLog(.pasteBack, "Undo: falling back to clipboard paste")
+        clipboardSnapshot = clipboardManager.snapshot()
+        clipboardManager.writePlainText(entry.originalText)
+        targetApp.activate(options: [.activateAllWindows])
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self else { return }
+            let pasted = self.clipboardManager.simulatePasteShortcut(using: .annotatedSession)
+                || self.clipboardManager.simulatePasteShortcut(using: .hidSystem)
+
+            if pasted {
+                let time = self.timeFormatter.string(from: Date())
+                self.setStatus("Undo succeeded at \(time)")
+                self.updateHUD(state: .success)
+            } else {
+                self.playErrorSound()
+                self.setStatus("Undo paste failed")
+                self.dismissHUD()
+            }
+            self.restoreClipboardSnapshot(after: 0.20)
+            self.finishProcessing()
+        }
+    }
+
     @objc private func openPromptFileAction() {
         NSWorkspace.shared.open(configManager.promptURL)
     }
@@ -249,25 +397,108 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = ensureAccessibilityPermission(promptSystemDialog: true, showGuidanceAlert: true)
     }
 
+    @objc private func checkForUpdatesAction() {
+        statusMenu?.cancelTracking()
+        performUpdateCheck()
+    }
+
+    @objc private func openStatisticsAction() {
+        statusMenu?.cancelTracking()
+        showStatisticsWindow()
+    }
+
+    @objc private func exportSettingsAction() {
+        statusMenu?.cancelTracking()
+        performExportSettings()
+    }
+
+    @objc private func importSettingsAction() {
+        statusMenu?.cancelTracking()
+        performImportSettings()
+    }
+
+    @objc private func tonePresetSelected(_ sender: NSMenuItem) {
+        guard let preset = sender.representedObject as? String else { return }
+        var config = configManager.loadConfig()
+        config.tonePreset = preset
+        try? configManager.saveConfig(config)
+        refreshToneMenuState()
+    }
+
+    private func refreshToneMenuState() {
+        let config = configManager.loadConfig()
+        guard let submenu = toneMenuItem?.submenu else { return }
+        for item in submenu.items {
+            if let preset = item.representedObject as? String {
+                item.state = (preset == config.tonePreset) ? .on : .off
+            }
+        }
+    }
+
+    @objc private func toggleDeveloperModeAction() {
+        statusMenu?.cancelTracking()
+        var config = configManager.loadConfig()
+        config.developerMode = !config.developerMode
+        try? configManager.saveConfig(config)
+        refreshDeveloperModeMenuState()
+
+        if config.developerMode {
+            shellRunner.developerModeLogger = self
+            showDeveloperConsole()
+            devLog(.textCapture, "Developer mode enabled")
+        } else {
+            devLog(.textCapture, "Developer mode disabled")
+            shellRunner.developerModeLogger = nil
+        }
+    }
+
+    private func refreshDeveloperModeMenuState() {
+        let config = configManager.loadConfig()
+        developerModeMenuItem?.state = config.developerMode ? .on : .off
+
+        if config.developerMode {
+            shellRunner.developerModeLogger = self
+        }
+    }
+
+    private func showDeveloperConsole() {
+        if developerConsoleController == nil {
+            developerConsoleController = DeveloperConsoleController()
+        }
+        developerConsoleController?.showWindow(nil)
+        developerConsoleController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func isDeveloperModeEnabled() -> Bool {
+        configManager.loadConfig().developerMode
+    }
+
+    private func devLog(_ phase: DeveloperModeLogEntry.Phase, _ message: String) {
+        guard isDeveloperModeEnabled() else { return }
+        let entry = DeveloperModeLogEntry(phase: phase, message: message)
+        developerConsoleController?.appendEntry(entry)
+    }
+
     @objc private func quitAction() {
         NSApp.terminate(nil)
     }
 
     private func handleHotkeyTrigger() {
         guard ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: true) else {
-            NSSound.beep()
+            playErrorSound()
             setStatus("Accessibility permission required")
             return
         }
 
         guard !isProcessing else {
-            NSSound.beep()
+            playErrorSound()
             setStatus("Already processing")
             return
         }
 
         guard let targetApp = resolveTargetApplication() else {
-            NSSound.beep()
+            playErrorSound()
             setStatus("Could not determine target app; focus text app and retry")
             return
         }
@@ -277,6 +508,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         showHUD(state: .working)
 
         targetAppAtTrigger = targetApp
+        devLog(.textCapture, "Target app: \(targetApp.localizedName ?? targetApp.bundleIdentifier ?? "unknown") (PID \(targetApp.processIdentifier))")
 
         // Try accessibility-based reading first (no clipboard round-trip needed).
         // Skip if text contains U+FFFC (Object Replacement Character) — this means
@@ -285,9 +517,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         if let selectedText = AccessibilityTextSupport.readSelectedText(
             appPID: targetApp.processIdentifier
         ), !selectedText.contains(TokenPreservationSupport.objectReplacementCharacter) {
+            devLog(.textCapture, "Read via Accessibility (\(selectedText.count) chars): \(DeveloperModeSupport.truncate(selectedText))")
             processSelectedText(selectedText)
             return
         }
+        devLog(.textCapture, "Accessibility read failed or contained U+FFFC, falling back to clipboard")
 
         // Fall back to clipboard-based copy.
         clipboardSnapshot = clipboardManager.snapshot()
@@ -318,7 +552,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         index: Int
     ) {
         guard index < strategies.count else {
-            NSSound.beep()
+            playErrorSound()
             restoreClipboardSnapshot(after: 0)
             setStatus("No text selected")
             finishProcessing()
@@ -388,23 +622,44 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func processSelectedText(_ selectedText: String) {
         let prompt: String
-        let config = configManager.loadConfig()
+        let baseConfig = configManager.loadConfig()
+
+        // Apply per-app profile overrides if a matching profile exists.
+        let profiles = loadAppProfiles()
+        let targetBundleID = targetAppAtTrigger?.bundleIdentifier
+        let config = AppProfileSupport.resolvedConfig(
+            base: baseConfig,
+            profiles: profiles,
+            bundleIdentifier: targetBundleID
+        )
+
         let provider = config.resolvedProvider
         let model = config.resolvedModel(for: provider)
         let startedAt = Date()
-        do {
-            prompt = try configManager.loadPrompt()
-        } catch {
-            let message = "Could not read prompt file.\n\n\(error.localizedDescription)"
-            restoreClipboardSnapshot(after: 0)
-            notifyFailure(body: "Correction Failed. \(message)")
-            showFailureAlert(title: "Correction Failed", message: message)
-            setStatus("Failed to read prompt file")
-            finishProcessing()
-            return
+
+        if !profiles.isEmpty, let bundleID = targetBundleID {
+            devLog(.textCapture, "Per-app profile check for \(bundleID): \(profiles.contains(where: { $0.bundleIdentifier == bundleID }) ? "matched" : "no match")")
+        }
+
+        // If a tone preset is active, use its prompt instead of the file prompt.
+        if let presetPrompt = AppConfig.promptForPreset(config.tonePreset) {
+            prompt = presetPrompt
+        } else {
+            do {
+                prompt = try configManager.loadPrompt()
+            } catch {
+                let message = "Could not read prompt file.\n\n\(error.localizedDescription)"
+                restoreClipboardSnapshot(after: 0)
+                notifyFailure(body: "Correction Failed. \(message)")
+                showFailureAlert(title: "Correction Failed", message: message)
+                setStatus("Failed to read prompt file")
+                finishProcessing()
+                return
+            }
         }
 
         let modelDisplay = model.isEmpty ? "provider default" : model
+        devLog(.cliExecution, "Processing with \(provider.executableName) (\(modelDisplay))")
         setStatus("Processing with \(provider.executableName) (\(modelDisplay))...")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -425,19 +680,64 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
 
                 DispatchQueue.main.async {
+                    self.updateTooltip(
+                        original: selectedText,
+                        corrected: correctedText,
+                        provider: provider.displayName,
+                        model: model
+                    )
+
                     // Check if target app was terminated during processing.
                     if let targetApp = self.targetAppAtTrigger, targetApp.isTerminated {
                         self.clipboardManager.writePlainText(correctedText)
                         self.clipboardSnapshot = nil
                         self.dismissHUD()
                         self.setStatus("Target app closed; corrected text on clipboard")
+                        self.playSuccessSound()
+                        self.notifySuccessIfEnabled()
                         self.finishProcessing()
                         return
                     }
 
+                    // Clipboard-only mode: write to clipboard without pasting back.
+                    if config.clipboardOnlyMode {
+                        self.clipboardManager.writePlainText(correctedText)
+                        self.clipboardSnapshot = nil
+                        let time = self.timeFormatter.string(from: Date())
+                        self.setStatus("Corrected text copied to clipboard at \(time)")
+                        self.updateHUD(state: .success)
+                        self.playSuccessSound()
+                        self.notifySuccessIfEnabled()
+                        self.finishProcessing()
+                        return
+                    }
+
+                    // Diff preview mode: show changes before applying.
+                    if config.showDiffPreview {
+                        self.dismissHUD()
+                        self.stopProcessingIndicator()
+                        self.showDiffPreview(
+                            originalText: selectedText,
+                            correctedText: correctedText,
+                            onApply: { [weak self] in
+                                guard let self else { return }
+                                self.applyCorrectedText(correctedText)
+                            },
+                            onCancel: { [weak self] in
+                                guard let self else { return }
+                                self.restoreClipboardSnapshot(after: 0)
+                                self.setStatus("Correction cancelled")
+                                self.finishProcessing()
+                            }
+                        )
+                        return
+                    }
+
+                    self.devLog(.pasteBack, "Corrected text (\(correctedText.count) chars): \(DeveloperModeSupport.truncate(correctedText))")
                     // Try accessibility-based text replacement first (fastest path).
                     // Works on background apps — no focus changes needed.
                     if let targetApp = self.targetAppAtTrigger {
+                        self.devLog(.pasteBack, "Attempting AX text replacement")
                         let axReplaced = AccessibilityTextSupport.replaceSelectedText(
                             appPID: targetApp.processIdentifier,
                             with: correctedText
@@ -453,14 +753,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                 if readBack == correctedText || readBack == nil {
                                     // Verified: either text still selected and matches (TextEdit),
                                     // or app deselected after successful replacement (Notes, Mail).
+                                    self.devLog(.pasteBack, "AX replacement verified successfully")
                                     let time = self.timeFormatter.string(from: Date())
                                     self.setStatus("Last correction succeeded at \(time)")
                                     self.restoreClipboardSnapshot(after: 0)
                                     self.updateHUD(state: .success)
+                                    self.playSuccessSound()
+                                    self.notifySuccessIfEnabled()
                                     self.finishProcessing()
                                 } else {
                                     // readBack is non-empty but different — AX accepted the call
                                     // but didn't actually replace (Electron: Slack, Discord, VS Code).
+                                    self.devLog(.pasteBack, "AX replacement not verified, falling back to clipboard paste")
                                     self.pasteViaClipboard(correctedText: correctedText)
                                 }
                             }
@@ -472,6 +776,46 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.pasteViaClipboard(correctedText: correctedText)
                 }
             } catch {
+                // Try fallback model if the error is retriable.
+                if FallbackSupport.isRetriable(error),
+                   let fallbackModel = FallbackSupport.nextFallbackModel(
+                       currentModel: model,
+                       provider: provider
+                   ) {
+                    DispatchQueue.main.async {
+                        self.devLog(.cliExecution, "Retrying with fallback model: \(fallbackModel)")
+                        self.setStatus("Retrying with \(fallbackModel)...")
+                    }
+                    do {
+                        var retryConfig = config
+                        retryConfig.model = fallbackModel
+                        let correctedText = try self.shellRunner.correctTextPreservingTokens(
+                            systemPrompt: prompt,
+                            selectedText: selectedText
+                        )
+                        self.recordHistoryEntry(
+                            originalText: selectedText,
+                            generatedText: correctedText,
+                            provider: provider,
+                            model: fallbackModel,
+                            startedAt: startedAt,
+                            succeeded: true
+                        )
+                        DispatchQueue.main.async {
+                            self.updateTooltip(
+                                original: selectedText,
+                                corrected: correctedText,
+                                provider: provider.displayName,
+                                model: fallbackModel
+                            )
+                            self.pasteViaClipboard(correctedText: correctedText)
+                        }
+                        return
+                    } catch {
+                        // Fallback also failed — fall through to normal error handling.
+                    }
+                }
+
                 DispatchQueue.main.async {
                     self.restoreClipboardSnapshot(after: 0)
                     self.recordHistoryEntry(
@@ -530,6 +874,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startProcessingIndicator() {
         runNowMenuItem?.isEnabled = false
+        undoMenuItem?.isEnabled = false
         writingCoachMenuItem?.isEnabled = false
         statusMenu?.cancelTracking()
         statusItem.menu = nil
@@ -538,9 +883,48 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopProcessingIndicator() {
         runNowMenuItem?.isEnabled = true
+        undoMenuItem?.isEnabled = true
         writingCoachMenuItem?.isEnabled = true
         statusItem.menu = statusMenu
         setMenuBarIcon(idleMenuBarIcon)
+    }
+
+    private func applyCorrectedText(_ correctedText: String) {
+        devLog(.pasteBack, "Corrected text (\(correctedText.count) chars): \(DeveloperModeSupport.truncate(correctedText))")
+        showHUD(state: .working)
+        startProcessingIndicator()
+
+        if let targetApp = targetAppAtTrigger {
+            devLog(.pasteBack, "Attempting AX text replacement")
+            let axReplaced = AccessibilityTextSupport.replaceSelectedText(
+                appPID: targetApp.processIdentifier,
+                with: correctedText
+            )
+            if axReplaced {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                    guard let self else { return }
+                    let readBack = AccessibilityTextSupport.readSelectedText(
+                        appPID: targetApp.processIdentifier
+                    )
+                    if readBack == correctedText || readBack == nil {
+                        self.devLog(.pasteBack, "AX replacement verified successfully")
+                        let time = self.timeFormatter.string(from: Date())
+                        self.setStatus("Last correction succeeded at \(time)")
+                        self.restoreClipboardSnapshot(after: 0)
+                        self.updateHUD(state: .success)
+                        self.playSuccessSound()
+                        self.notifySuccessIfEnabled()
+                        self.finishProcessing()
+                    } else {
+                        self.devLog(.pasteBack, "AX replacement not verified, falling back to clipboard paste")
+                        self.pasteViaClipboard(correctedText: correctedText)
+                    }
+                }
+                return
+            }
+        }
+
+        pasteViaClipboard(correctedText: correctedText)
     }
 
     private func pasteViaClipboard(correctedText: String) {
@@ -557,7 +941,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 || self.clipboardManager.simulatePasteShortcut(using: .hidSystem)
 
             if !pasted {
-                NSSound.beep()
+                self.playErrorSound()
                 let message = "Could not paste corrected text.\n\nMake sure your cursor is in the target field, then run GhostEdit again."
                 self.notifyFailure(body: "Correction Failed. \(message)")
                 self.showFailureAlert(title: "Correction Failed", message: message)
@@ -567,6 +951,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 let time = self.timeFormatter.string(from: Date())
                 self.setStatus("Last correction succeeded at \(time)")
                 self.updateHUD(state: .success)
+                self.playSuccessSound()
+                self.notifySuccessIfEnabled()
 
                 // Restore the user's focus if they switched away from the target app.
                 if let userApp = userCurrentApp,
@@ -677,6 +1063,32 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func playErrorSound() {
+        guard configManager.loadConfig().soundFeedbackEnabled else { return }
+        NSSound.beep()
+    }
+
+    private func playSuccessSound() {
+        guard configManager.loadConfig().soundFeedbackEnabled else { return }
+        NSSound(named: "Glass")?.play()
+    }
+
+    private func notifySuccessIfEnabled() {
+        guard configManager.loadConfig().notifyOnSuccess else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "GhostEdit"
+        content.body = "Correction applied successfully."
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+
+        UNUserNotificationCenter.current().add(request)
+    }
+
     private func notifyFailure(body: String) {
         let content = UNMutableNotificationContent()
         content.title = "GhostEdit"
@@ -765,16 +1177,197 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    private func showStatisticsWindow() {
+        let entries = historyStore.load()
+        let stats = CorrectionStatisticsSupport.compute(from: entries)
+        let tokenEstimate = TokenEstimationSupport.estimateCumulativeTokens(entries: entries)
+        var summary = CorrectionStatisticsSupport.formattedSummary(stats)
+        summary += "\n\nEstimated tokens used:"
+        summary += "\n  Input: \(TokenEstimationSupport.formatTokenCount(tokenEstimate.inputTokens))"
+        summary += "\n  Output: \(TokenEstimationSupport.formatTokenCount(tokenEstimate.outputTokens))"
+        summary += "\n  Total: \(TokenEstimationSupport.formatTokenCount(tokenEstimate.totalTokens))"
+
+        let alert = NSAlert()
+        alert.messageText = "Correction Statistics"
+        alert.informativeText = summary
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Copy")
+        let response = alert.runModal()
+        if response == .alertSecondButtonReturn {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(summary, forType: .string)
+        }
+    }
+
+    private func performExportSettings() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = SettingsExportSupport.defaultFileName(appVersion: appVersionText())
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let config = configManager.loadConfig()
+            let prompt = (try? configManager.loadPrompt()) ?? ""
+            let data = try SettingsExportSupport.exportSettings(
+                config: config,
+                prompt: prompt,
+                appVersion: appVersionText()
+            )
+            try data.write(to: url, options: .atomic)
+            setStatus("Settings exported")
+        } catch {
+            showFailureAlert(title: "Export Failed", message: error.localizedDescription)
+        }
+    }
+
+    private func performImportSettings() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.urls.first else { return }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let imported = try SettingsExportSupport.importSettings(from: data)
+            try configManager.saveConfig(imported.config)
+            if !imported.prompt.isEmpty {
+                try imported.prompt.write(to: configManager.promptURL, atomically: true, encoding: .utf8)
+            }
+            configManager.invalidateCache()
+            refreshToneMenuState()
+            refreshDeveloperModeMenuState()
+            setStatus("Settings imported")
+        } catch {
+            showFailureAlert(title: "Import Failed", message: error.localizedDescription)
+        }
+    }
+
+    private func updateTooltip(original: String, corrected: String, provider: String, model: String) {
+        let tooltip = TooltipSupport.tooltip(
+            lastOriginal: original,
+            lastCorrected: corrected,
+            lastTime: Date(),
+            provider: provider,
+            model: model
+        )
+        statusItem.button?.toolTip = tooltip
+    }
+
+    private func performUpdateCheck() {
+        setStatus("Checking for updates...")
+
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let latestVersion = self.fetchLatestGitHubVersion()
+
+            DispatchQueue.main.async {
+                guard let latest = latestVersion else {
+                    self.setStatus("Idle")
+                    let alert = NSAlert()
+                    alert.messageText = "Update Check"
+                    alert.informativeText = "Could not reach GitHub to check for updates. Please check your internet connection."
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                    return
+                }
+
+                let info = UpdateCheckSupport.checkVersion(current: currentVersion, latest: latest)
+                self.setStatus("Idle")
+
+                let alert = NSAlert()
+                alert.messageText = "Update Check"
+                if info.isUpdateAvailable {
+                    alert.informativeText = "A new version is available!\n\nCurrent: \(info.current)\nLatest: \(info.latest)"
+                    alert.addButton(withTitle: "Open Downloads")
+                    alert.addButton(withTitle: "Later")
+                    let response = alert.runModal()
+                    if response == .alertFirstButtonReturn, let url = URL(string: UpdateCheckSupport.defaultReleaseURL) {
+                        NSWorkspace.shared.open(url)
+                    }
+                } else {
+                    alert.informativeText = "You're up to date!\n\nCurrent version: \(info.current)"
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    private func fetchLatestGitHubVersion() -> String? {
+        let apiURL = URL(string: "https://api.github.com/repos/nareshnavinash/GhostEdit/releases/latest")!
+        var request = URLRequest(url: apiURL)
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 10
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: String?
+
+        let task = URLSession.shared.dataTask(with: request) { data, _, _ in
+            defer { semaphore.signal() }
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tagName = json["tag_name"] as? String
+            else { return }
+            // Strip leading "v" from tag like "v4.3.0"
+            result = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+        }
+        task.resume()
+        semaphore.wait()
+        return result
+    }
+
+    private func showDiffPreview(
+        originalText: String,
+        correctedText: String,
+        onApply: @escaping () -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        let segments = DiffSupport.wordDiff(old: originalText, new: correctedText)
+        let summary = DiffSupport.changeSummary(segments: segments)
+
+        if DiffSupport.isIdentical(old: originalText, new: correctedText) {
+            // No changes — skip preview, just notify.
+            setStatus("No changes needed")
+            updateHUD(state: .success)
+            playSuccessSound()
+            finishProcessing()
+            return
+        }
+
+        let controller = DiffPreviewController(
+            segments: segments,
+            summary: summary,
+            onApply: onApply,
+            onCancel: onCancel
+        )
+        diffPreviewController = controller
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func loadAppProfiles() -> [AppProfile] {
+        AppProfileSupport.loadProfiles(from: configManager.profilesURL)
+    }
+
     private func runWritingCoach() {
         guard !isProcessing else {
-            NSSound.beep()
+            playErrorSound()
             setStatus("Already processing")
             return
         }
 
         let originalSamples = historyOriginalSamples()
         guard !originalSamples.isEmpty else {
-            NSSound.beep()
+            playErrorSound()
             setStatus("No history available for writing coach")
             showNoHistoryForWritingCoachAlert()
             return
@@ -1091,6 +1684,293 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+extension AppDelegate: DeveloperModeLogger {
+    func log(_ entry: DeveloperModeLogEntry) {
+        let append: () -> Void = { [weak self] in
+            self?.developerConsoleController?.appendEntry(entry)
+        }
+        if Thread.isMainThread {
+            append()
+        } else {
+            DispatchQueue.main.async(execute: append)
+        }
+    }
+}
+
+final class DeveloperConsoleController: NSWindowController {
+    private let textView = NSTextView()
+    private var entries: [DeveloperModeLogEntry] = []
+    private let logFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter
+    }()
+
+    init() {
+        let window = NSWindow(
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: DeveloperModeSupport.windowWidth,
+                height: DeveloperModeSupport.windowHeight
+            ),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "GhostEdit Developer Console"
+        window.isReleasedWhenClosed = false
+        window.center()
+
+        super.init(window: window)
+        buildUI()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func appendEntry(_ entry: DeveloperModeLogEntry) {
+        entries.append(entry)
+        if entries.count > DeveloperModeSupport.maxEntries {
+            entries.removeFirst(entries.count - DeveloperModeSupport.maxEntries)
+        }
+
+        let line = DeveloperModeSupport.formatEntry(entry, formatter: logFormatter) + "\n"
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: colorForPhase(entry.phase)
+        ]
+        textView.textStorage?.append(NSAttributedString(string: line, attributes: attrs))
+        textView.scrollToEndOfDocument(nil)
+    }
+
+    func clearLog() {
+        entries.removeAll()
+        textView.string = ""
+    }
+
+    private func buildUI() {
+        guard let contentView = window?.contentView else { return }
+
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        textView.backgroundColor = NSColor.textBackgroundColor
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+
+        scrollView.documentView = textView
+
+        let toolbar = NSStackView()
+        toolbar.orientation = .horizontal
+        toolbar.spacing = 8
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
+
+        let clearButton = NSButton(title: "Clear", target: self, action: #selector(clearClicked))
+        let copyButton = NSButton(title: "Copy All", target: self, action: #selector(copyAllClicked))
+
+        toolbar.addArrangedSubview(clearButton)
+        toolbar.addArrangedSubview(copyButton)
+        toolbar.addArrangedSubview(NSView()) // spacer
+
+        contentView.addSubview(toolbar)
+        contentView.addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            toolbar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            toolbar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
+            toolbar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            scrollView.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+        ])
+    }
+
+    private func colorForPhase(_ phase: DeveloperModeLogEntry.Phase) -> NSColor {
+        switch phase {
+        case .textCapture:
+            return .systemBlue
+        case .tokenProtection:
+            return .systemPurple
+        case .cliResolution:
+            return .systemOrange
+        case .cliExecution:
+            return .systemGreen
+        case .cliResponse:
+            return .systemTeal
+        case .tokenRestoration:
+            return .systemPurple
+        case .pasteBack:
+            return .systemIndigo
+        }
+    }
+
+    @objc private func clearClicked() {
+        clearLog()
+    }
+
+    @objc private func copyAllClicked() {
+        let allText = DeveloperModeSupport.formatAllEntries(entries, formatter: logFormatter)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(allText, forType: .string)
+    }
+}
+
+final class DiffPreviewController: NSWindowController {
+    private let segments: [DiffSegment]
+    private let summary: String
+    private let onApply: () -> Void
+    private let onCancel: () -> Void
+
+    init(
+        segments: [DiffSegment],
+        summary: String,
+        onApply: @escaping () -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.segments = segments
+        self.summary = summary
+        self.onApply = onApply
+        self.onCancel = onCancel
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 440),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Review Changes"
+        window.center()
+        window.minSize = NSSize(width: 400, height: 300)
+        super.init(window: window)
+        buildUI()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func buildUI() {
+        guard let window = window else { return }
+
+        let contentView = NSView(frame: window.contentView!.bounds)
+        contentView.autoresizingMask = [.width, .height]
+
+        // Summary label at top
+        let summaryLabel = NSTextField(labelWithString: summary)
+        summaryLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        summaryLabel.textColor = .secondaryLabelColor
+        summaryLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(summaryLabel)
+
+        // Scrollable attributed text view showing the diff
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.borderType = .bezelBorder
+
+        let textView = NSTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.font = .systemFont(ofSize: 13)
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.autoresizingMask = [.width]
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.widthTracksTextView = true
+
+        let attributed = buildAttributedDiff()
+        textView.textStorage?.setAttributedString(attributed)
+
+        scrollView.documentView = textView
+        contentView.addSubview(scrollView)
+
+        // Buttons
+        let applyButton = NSButton(title: "Apply", target: self, action: #selector(applyClicked))
+        applyButton.keyEquivalent = "\r"
+        applyButton.translatesAutoresizingMaskIntoConstraints = false
+
+        let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelClicked))
+        cancelButton.keyEquivalent = "\u{1b}"
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
+
+        contentView.addSubview(applyButton)
+        contentView.addSubview(cancelButton)
+
+        NSLayoutConstraint.activate([
+            summaryLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            summaryLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            summaryLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+
+            scrollView.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 8),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            scrollView.bottomAnchor.constraint(equalTo: applyButton.topAnchor, constant: -12),
+
+            applyButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            applyButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            applyButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 80),
+
+            cancelButton.trailingAnchor.constraint(equalTo: applyButton.leadingAnchor, constant: -8),
+            cancelButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            cancelButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 80),
+        ])
+
+        window.contentView = contentView
+    }
+
+    private func buildAttributedDiff() -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let baseFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+
+        for segment in segments {
+            let attrs: [NSAttributedString.Key: Any]
+            switch segment.kind {
+            case .equal:
+                attrs = [.font: baseFont, .foregroundColor: NSColor.labelColor]
+            case .insertion:
+                attrs = [
+                    .font: baseFont,
+                    .foregroundColor: NSColor.systemGreen,
+                    .backgroundColor: NSColor.systemGreen.withAlphaComponent(0.15),
+                    .underlineStyle: NSUnderlineStyle.single.rawValue
+                ]
+            case .deletion:
+                attrs = [
+                    .font: baseFont,
+                    .foregroundColor: NSColor.systemRed,
+                    .backgroundColor: NSColor.systemRed.withAlphaComponent(0.15),
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue
+                ]
+            }
+            result.append(NSAttributedString(string: segment.text, attributes: attrs))
+        }
+
+        return result
+    }
+
+    @objc private func applyClicked() {
+        window?.close()
+        onApply()
+    }
+
+    @objc private func cancelClicked() {
+        window?.close()
+        onCancel()
+    }
+}
+
 final class SettingsWindowController: NSWindowController {
     struct ModelOption {
         let title: String
@@ -1115,8 +1995,35 @@ final class SettingsWindowController: NSWindowController {
         target: nil,
         action: nil
     )
+    private let languagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let historyLimitField = NSTextField(string: "")
     private let timeoutField = NSTextField(string: "")
+    private let soundFeedbackCheckbox = NSButton(
+        checkboxWithTitle: "Play sound feedback on errors and corrections",
+        target: nil,
+        action: nil
+    )
+    private let notifyOnSuccessCheckbox = NSButton(
+        checkboxWithTitle: "Show notification on successful correction",
+        target: nil,
+        action: nil
+    )
+    private let clipboardOnlyModeCheckbox = NSButton(
+        checkboxWithTitle: "Clipboard-only mode (copy corrected text, do not paste back)",
+        target: nil,
+        action: nil
+    )
+    private let showDiffPreviewCheckbox = NSButton(
+        checkboxWithTitle: "Show diff preview before applying correction",
+        target: nil,
+        action: nil
+    )
+    private let tonePresetPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let developerModeCheckbox = NSButton(
+        checkboxWithTitle: "Enable Developer Mode (show behind-the-scenes log)",
+        target: nil,
+        action: nil
+    )
     private let hintLabel = NSTextField(labelWithString: "")
     private let rootStack = NSStackView()
 
@@ -1206,6 +2113,12 @@ final class SettingsWindowController: NSWindowController {
         customModelContainer.addArrangedSubview(customModelField)
         rootStack.addArrangedSubview(customModelContainer)
 
+        let languageLabel = makeFieldLabel("Language")
+        languagePopup.removeAllItems()
+        AppConfig.supportedLanguages.forEach { languagePopup.addItem(withTitle: $0.displayName) }
+        let languageRow = makeRow(label: languageLabel, field: languagePopup)
+        rootStack.addArrangedSubview(languageRow)
+
         let hotkeyKeyLabel = makeFieldLabel("Hotkey")
         hotkeyKeyPopup.removeAllItems()
         hotkeyKeyOptions.forEach { option in
@@ -1244,6 +2157,27 @@ final class SettingsWindowController: NSWindowController {
 
         launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
         rootStack.addArrangedSubview(launchAtLoginCheckbox)
+
+        soundFeedbackCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        rootStack.addArrangedSubview(soundFeedbackCheckbox)
+
+        notifyOnSuccessCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        rootStack.addArrangedSubview(notifyOnSuccessCheckbox)
+
+        clipboardOnlyModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        rootStack.addArrangedSubview(clipboardOnlyModeCheckbox)
+
+        showDiffPreviewCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        rootStack.addArrangedSubview(showDiffPreviewCheckbox)
+
+        let tonePresetLabel = makeFieldLabel("Tone")
+        tonePresetPopup.removeAllItems()
+        AppConfig.supportedPresets.forEach { tonePresetPopup.addItem(withTitle: $0.capitalized) }
+        let tonePresetRow = makeRow(label: tonePresetLabel, field: tonePresetPopup)
+        rootStack.addArrangedSubview(tonePresetRow)
+
+        developerModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        rootStack.addArrangedSubview(developerModeCheckbox)
 
         let historyLimitLabel = makeFieldLabel("History N")
         historyLimitField.placeholderString = "200"
@@ -1308,6 +2242,21 @@ final class SettingsWindowController: NSWindowController {
         let providerIndex = providerOptions.firstIndex(of: provider) ?? 0
         providerPopup.selectItem(at: providerIndex)
         launchAtLoginCheckbox.state = config.launchAtLogin ? .on : .off
+        soundFeedbackCheckbox.state = config.soundFeedbackEnabled ? .on : .off
+        notifyOnSuccessCheckbox.state = config.notifyOnSuccess ? .on : .off
+        clipboardOnlyModeCheckbox.state = config.clipboardOnlyMode ? .on : .off
+        showDiffPreviewCheckbox.state = config.showDiffPreview ? .on : .off
+        if let toneIndex = AppConfig.supportedPresets.firstIndex(of: config.tonePreset) {
+            tonePresetPopup.selectItem(at: toneIndex)
+        } else {
+            tonePresetPopup.selectItem(at: 0)
+        }
+        developerModeCheckbox.state = config.developerMode ? .on : .off
+        if let langIndex = AppConfig.supportedLanguages.firstIndex(where: { $0.code == config.resolvedLanguage }) {
+            languagePopup.selectItem(at: langIndex)
+        } else {
+            languagePopup.selectItem(at: 0) // auto
+        }
         historyLimitField.stringValue = "\(config.historyLimit)"
         timeoutField.stringValue = "\(config.timeoutSeconds)"
         loadHotkeyValues(from: config)
@@ -1508,6 +2457,19 @@ final class SettingsWindowController: NSWindowController {
         config.hotkeyKeyCode = hotkeyKeyCode
         config.hotkeyModifiers = hotkeyModifiers
         config.launchAtLogin = (launchAtLoginCheckbox.state == .on)
+        config.soundFeedbackEnabled = (soundFeedbackCheckbox.state == .on)
+        config.notifyOnSuccess = (notifyOnSuccessCheckbox.state == .on)
+        config.clipboardOnlyMode = (clipboardOnlyModeCheckbox.state == .on)
+        config.showDiffPreview = (showDiffPreviewCheckbox.state == .on)
+        let toneIndex = tonePresetPopup.indexOfSelectedItem
+        config.tonePreset = AppConfig.supportedPresets.indices.contains(toneIndex)
+            ? AppConfig.supportedPresets[toneIndex]
+            : "default"
+        config.developerMode = (developerModeCheckbox.state == .on)
+        let langIndex = languagePopup.indexOfSelectedItem
+        config.language = AppConfig.supportedLanguages.indices.contains(langIndex)
+            ? AppConfig.supportedLanguages[langIndex].code
+            : "auto"
         config.historyLimit = historyLimit
         config.timeoutSeconds = timeoutSeconds
 

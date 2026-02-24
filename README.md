@@ -25,11 +25,25 @@
 - **Fire-and-forget correction**: Press the hotkey, switch to any app corrected text is pasted back automatically, even if the target app is in the background
 - **Native HUD overlay**: A glossy floating ghost indicator shows "Working on it..." (with spectacles) and "Done!" (idle ghost), then fades away after 1 second
 - **Smart paste-back**: Uses accessibility (AX) text replacement for native apps (no focus change needed), with delayed verification and automatic clipboard fallback for Electron apps (Slack, Discord, VS Code)
-- **Multi-provider support**: Choose between Claude, OpenAI Codex, and Gemini switch providers and models from Settings
+- **Multi-provider support**: Choose between Claude, OpenAI Codex, and Gemini — switch providers and models from Settings
+- **Multi-language support**: Correct text in 30+ languages — auto-detect or pick a specific language in Settings
+- **Tone presets**: Switch between Default, Casual, Professional, Academic, and Slack tones from the menu bar
 - **Writing coach**: **Sharpen My Writing Style** analyzes your past corrections and shows what you do well plus areas to improve
 - **Token preservation**: Mentions, emojis, URLs, emails, file paths, and inline code are preserved during correction
 - **Correction history**: Browse, copy, and export past corrections as CSV
+- **Statistics dashboard**: View correction counts, success rates, provider/model breakdown, and estimated token usage
+- **Diff preview**: Optional word-level diff window with red/green highlights shows changes before applying — enable via Settings or `showDiffPreview` in config
+- **Undo last correction**: Revert the most recent correction via menu bar
+- **Auto-retry with fallback model**: If the selected model fails, GhostEdit automatically retries with the next available model
+- **Per-app profiles**: Configure different tone, model, or provider per application via `~/.ghostedit/profiles.json`
+- **Export/import settings**: Back up or transfer your full configuration (settings + prompt) as a single JSON file
 - **Customizable prompt**: Tailor the AI instructions in `~/.ghostedit/prompt.txt`
+- **Sound feedback**: Audio cues for success and error (configurable)
+- **Success notifications**: Optional system notifications on successful corrections
+- **Clipboard-only mode**: Correct text and place it on the clipboard without auto-pasting
+- **Menu bar tooltip**: Shows a summary of the last correction (time, text preview, provider)
+- **Token estimation**: Estimated cumulative token usage shown in Statistics
+- **Version check support**: Compare your version against the latest release
 - Global hotkey (`Command + E` by default), configurable in **Settings...**
 - Works in background (no Dock icon)
 - Launch at login toggle
@@ -96,7 +110,14 @@ Default `config.json`:
   "hotkeyModifiers": 256,
   "timeoutSeconds": 30,
   "launchAtLogin": false,
-  "historyLimit": 200
+  "historyLimit": 200,
+  "developerMode": false,
+  "language": "auto",
+  "tonePreset": "default",
+  "soundFeedbackEnabled": true,
+  "notifyOnSuccess": false,
+  "clipboardOnlyMode": false,
+  "showDiffPreview": false
 }
 ```
 
@@ -105,8 +126,34 @@ Notes:
 - `model` is shared and interpreted by the selected provider.
 - `claudePath`, `codexPath`, and `geminiPath` can be empty if auto-discovery works.
 - If auto-discovery fails, set an absolute path for that provider.
-- If a model is busy/fails, switch models in **Settings...** and retry.
+- If a model is busy/fails, GhostEdit automatically retries with the next available model.
 - `historyLimit` controls how many recent corrections are kept in `history.json`.
+- `language` can be `"auto"` (detect input language) or a specific code like `"en"`, `"es"`, `"fr"`, etc.
+- `tonePreset` can be `"default"`, `"casual"`, `"professional"`, `"academic"`, or `"slack"`.
+- `soundFeedbackEnabled` plays audio cues on success/error.
+- `notifyOnSuccess` sends a macOS notification when a correction completes.
+- `clipboardOnlyMode` places corrected text on the clipboard without pasting it back.
+- `showDiffPreview` shows a word-level diff preview window before applying the correction.
+
+### Per-App Profiles
+
+Create `~/.ghostedit/profiles.json` to customize settings per application:
+
+```json
+[
+  {
+    "bundleIdentifier": "com.tinyspeck.slackmacgap",
+    "tonePreset": "slack"
+  },
+  {
+    "bundleIdentifier": "com.apple.mail",
+    "tonePreset": "professional",
+    "model": "sonnet"
+  }
+]
+```
+
+Each profile can override `tonePreset`, `model`, and `provider` for a specific app (matched by bundle identifier).
 
 ## Protected Tokens During Correction
 
@@ -129,6 +176,32 @@ Failure behavior:
 Practical effect:
 - Grammar/spelling/punctuation are still corrected.
 - Static items are kept exactly as typed so links, mentions, emojis, and paths survive correction.
+
+## Developer Mode
+
+GhostEdit includes a **Developer Mode** that shows what happens behind the scenes during each text correction. When enabled, a live console window displays every step of the correction pipeline in real time.
+
+### How to enable
+
+- **Menu bar**: Click the GhostEdit menu bar icon > **Developer Mode** (toggles on/off)
+- **Settings**: Check **Enable Developer Mode** in the Settings window
+- **Config file**: Set `"developerMode": true` in `~/.ghostedit/config.json`
+
+### What you see
+
+The Developer Console shows timestamped, color-coded log entries for each phase:
+
+| Phase | Description |
+|-------|-------------|
+| `TEXT_CAPTURE` | Selected text read via Accessibility or clipboard |
+| `TOKEN_PROTECTION` | Mentions, emojis, URLs replaced with placeholders |
+| `CLI_RESOLUTION` | CLI executable path discovery |
+| `CLI_EXECUTION` | Full command with arguments, process lifecycle |
+| `CLI_RESPONSE` | AI response content and length |
+| `TOKEN_RESTORATION` | Placeholder replacement with original tokens |
+| `PASTE_BACK` | Text replacement via AX or clipboard paste |
+
+Use **Clear** to reset the log and **Copy All** to copy the full log to clipboard.
 
 ## Accessibility Permission
 

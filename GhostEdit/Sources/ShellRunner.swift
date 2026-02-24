@@ -37,6 +37,7 @@ final class ShellRunner {
     private let fileManager: FileManager
     private let environment: [String: String]
     private let homeDirectoryPath: String
+    weak var developerModeLogger: DeveloperModeLogger?
 
     private let discoveredPathLock = NSLock()
     private var discoveredCLIPaths: [CLIProvider: String] = [:]
@@ -69,13 +70,22 @@ final class ShellRunner {
     func correctText(systemPrompt: String, selectedText: String) throws -> String {
         let config = configManager.loadConfig()
         let provider = config.resolvedProvider
+        devLog(.cliResolution, "Resolving CLI path for provider: \(provider.displayName)")
         let executablePath = try resolveCLIPath(
             provider: provider,
             preferredPath: config.resolvedPath(for: provider)
         )
+        devLog(.cliResolution, "Resolved CLI path: \(executablePath)")
         let model = config.resolvedModel(for: provider)
-        let input = "\(systemPrompt)\n\n\(selectedText)"
 
+        var augmentedPrompt = systemPrompt
+        if let langInstruction = AppConfig.languageInstruction(for: config.resolvedLanguage) {
+            augmentedPrompt = "\(systemPrompt) \(langInstruction)"
+            devLog(.cliExecution, "Language: \(config.resolvedLanguage) → \(langInstruction)")
+        }
+        let input = "\(augmentedPrompt)\n\n\(selectedText)"
+
+        devLog(.cliExecution, "Launching \(provider.executableName) with model: \(model.isEmpty ? "(default)" : model), timeout: \(config.timeoutSeconds)s")
         let output = try runCLI(
             provider: provider,
             executablePath: executablePath,
@@ -86,9 +96,11 @@ final class ShellRunner {
 
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
+            devLog(.cliResponse, "CLI returned empty response")
             throw ShellRunnerError.emptyResponse
         }
 
+        devLog(.cliResponse, "CLI response (\(trimmed.count) chars): \(DeveloperModeSupport.truncate(trimmed))")
         return trimmed
     }
 
@@ -99,26 +111,32 @@ final class ShellRunner {
     ) throws -> String {
         let protection = TokenPreservationSupport.protectTokens(in: selectedText)
         guard protection.hasProtectedTokens else {
+            devLog(.tokenProtection, "No protected tokens found, using direct correction")
             return try correctText(systemPrompt: systemPrompt, selectedText: selectedText)
         }
 
+        devLog(.tokenProtection, "Protected \(protection.tokens.count) token(s): \(protection.tokens.map { "\($0.placeholder)=\(DeveloperModeSupport.truncate($0.originalToken, maxLength: 40))" }.joined(separator: ", "))")
         let augmentedPrompt = TokenPreservationSupport.appendInstruction(to: systemPrompt)
         let retries = max(0, maxValidationRetries)
         var lastCandidate = ""
 
-        for _ in 0...retries {
+        for attempt in 0...retries {
+            devLog(.cliExecution, "Token-preserving correction attempt \(attempt + 1)/\(retries + 1)")
             lastCandidate = try correctText(
                 systemPrompt: augmentedPrompt,
                 selectedText: protection.protectedText
             )
 
             if TokenPreservationSupport.placeholdersAreIntact(in: lastCandidate, tokens: protection.tokens) {
+                devLog(.tokenRestoration, "All placeholders intact, restoring tokens")
                 return TokenPreservationSupport.restoreTokens(in: lastCandidate, tokens: protection.tokens)
             }
+            devLog(.tokenRestoration, "Placeholders modified by AI on attempt \(attempt + 1)")
         }
 
         // Placeholders were modified by the AI — retry with the original text
         // and an explicit instruction to preserve emoji codes and other tokens.
+        devLog(.tokenRestoration, "Retrying with original text and token-aware instruction")
         let segments = TokenPreservationSupport.splitAroundTokens(in: selectedText)
         let tokenAwarePrompt = TokenPreservationSupport.appendTokenAwareInstruction(to: systemPrompt)
 
@@ -129,10 +147,12 @@ final class ShellRunner {
 
         // If all original tokens survived in the retry, return it directly.
         if segments.tokens.allSatisfy({ retryWithOriginal.contains($0) }) {
+            devLog(.tokenRestoration, "Token-aware retry preserved all tokens")
             return retryWithOriginal
         }
 
         // Last resort: best-effort restoration on the placeholder-based attempt.
+        devLog(.tokenRestoration, "Falling back to best-effort token restoration")
         return TokenPreservationSupport.bestEffortRestore(in: lastCandidate, tokens: protection.tokens)
     }
 
@@ -196,6 +216,7 @@ final class ShellRunner {
         } catch let error as ShellRunnerError {
             // Some CLI versions reject aliases like "haiku". Retry once with default model.
             if case .processFailed = error, !trimmedModel.isEmpty {
+                devLog(.cliExecution, "CLI failed with model '\(trimmedModel)', retrying without model flag")
                 return try runCLIDirect(
                     provider: provider,
                     executablePath: executablePath,
@@ -218,11 +239,14 @@ final class ShellRunner {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.currentDirectoryURL = configManager.baseDirectoryURL
-        process.arguments = ClaudeRuntimeSupport.cliArguments(
+        let args = ClaudeRuntimeSupport.cliArguments(
             provider: provider,
             prompt: prompt,
             model: model
         )
+        process.arguments = args
+
+        devLog(.cliExecution, "$ \(executablePath) \(args.map { $0.contains(" ") ? "\"\($0)\"" : $0 }.joined(separator: " "))")
 
         var runtimeEnvironment = environment
         runtimeEnvironment["PATH"] = ClaudeRuntimeSupport.runtimePathValue(
@@ -248,12 +272,14 @@ final class ShellRunner {
         do {
             try process.run()
         } catch {
+            devLog(.cliExecution, "Failed to launch process: \(error.localizedDescription)")
             throw ShellRunnerError.launchFailed(error.localizedDescription)
         }
 
         if completion.wait(timeout: .now() + .seconds(timeoutSeconds)) == .timedOut {
             process.terminate()
             _ = completion.wait(timeout: .now() + .seconds(2))
+            devLog(.cliExecution, "Process timed out after \(timeoutSeconds)s")
             throw ShellRunnerError.timedOut(seconds: timeoutSeconds)
         }
 
@@ -262,6 +288,11 @@ final class ShellRunner {
 
         let outputText = String(data: outputData, encoding: .utf8) ?? ""
         let errorText = String(data: errorData, encoding: .utf8) ?? ""
+
+        devLog(.cliExecution, "Process exited with code \(process.terminationStatus)")
+        if !errorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            devLog(.cliExecution, "stderr: \(DeveloperModeSupport.truncate(errorText))")
+        }
 
         guard process.terminationStatus == 0 else {
             throw ClaudeRuntimeSupport.classifyProcessFailure(
@@ -275,4 +306,7 @@ final class ShellRunner {
         return outputText
     }
 
+    private func devLog(_ phase: DeveloperModeLogEntry.Phase, _ message: String) {
+        developerModeLogger?.log(DeveloperModeLogEntry(phase: phase, message: message))
+    }
 }

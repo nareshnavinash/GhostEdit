@@ -74,6 +74,55 @@ final class CorrectionHistoryStoreTests: XCTestCase {
         XCTAssertEqual(loaded[0].originalText, "original-13")
     }
 
+    func testLastSuccessfulEntryReturnsNilWhenEmpty() throws {
+        let (store, _) = makeStore()
+        try store.bootstrapIfNeeded()
+
+        XCTAssertNil(store.lastSuccessfulEntry())
+    }
+
+    func testLastSuccessfulEntryReturnsNilWhenAllFailed() throws {
+        let (store, _) = makeStore()
+        try store.bootstrapIfNeeded()
+
+        // makeEntry with odd index has succeeded: false
+        try store.append(makeEntry(index: 1), limit: 100)
+        try store.append(makeEntry(index: 3), limit: 100)
+
+        XCTAssertNil(store.lastSuccessfulEntry())
+    }
+
+    func testLastSuccessfulEntryReturnsNewestSucceededEntry() throws {
+        let (store, _) = makeStore()
+        try store.bootstrapIfNeeded()
+
+        // index 2 → succeeded: true
+        // index 3 → succeeded: false
+        // index 4 → succeeded: true
+        try store.append(makeEntry(index: 2), limit: 100)
+        try store.append(makeEntry(index: 3), limit: 100)
+        try store.append(makeEntry(index: 4), limit: 100)
+
+        let entry = store.lastSuccessfulEntry()
+        XCTAssertNotNil(entry)
+        XCTAssertEqual(entry?.originalText, "original-4")
+        XCTAssertTrue(entry?.succeeded == true)
+    }
+
+    func testLastSuccessfulEntrySkipsTrailingFailures() throws {
+        let (store, _) = makeStore()
+        try store.bootstrapIfNeeded()
+
+        // index 2 → succeeded: true
+        // index 5 → succeeded: false
+        try store.append(makeEntry(index: 2), limit: 100)
+        try store.append(makeEntry(index: 5), limit: 100)
+
+        let entry = store.lastSuccessfulEntry()
+        XCTAssertNotNil(entry)
+        XCTAssertEqual(entry?.originalText, "original-2")
+    }
+
     private func makeStore() -> (CorrectionHistoryStore, URL) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ghostedit-history-tests-\(UUID().uuidString)", isDirectory: true)

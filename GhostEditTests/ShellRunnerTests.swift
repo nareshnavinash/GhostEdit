@@ -75,7 +75,8 @@ final class ShellRunnerTests: XCTestCase {
         let argsData = try Data(contentsOf: argsLog)
         let args = decodeNullSeparatedArguments(from: argsData)
         XCTAssertEqual(args[0], "-p")
-        XCTAssertEqual(args[1], "Fix grammar\n\nthis are wrong")
+        XCTAssertTrue(args[1].hasPrefix("Fix grammar"))
+        XCTAssertTrue(args[1].hasSuffix("\n\nthis are wrong"))
         XCTAssertEqual(args[2], "--setting-sources")
         XCTAssertEqual(args[3], "user")
         XCTAssertEqual(args[4], "--tools")
@@ -111,17 +112,16 @@ final class ShellRunnerTests: XCTestCase {
 
         let argsData = try Data(contentsOf: argsLog)
         let args = decodeNullSeparatedArguments(from: argsData)
-        XCTAssertEqual(args, [
-            "exec",
-            "--skip-git-repo-check",
-            "--sandbox",
-            "read-only",
-            "-c",
-            "model_reasoning_effort='low'",
-            "--model",
-            "gpt-5-codex",
-            "p\n\nx"
-        ])
+        XCTAssertEqual(args[0], "exec")
+        XCTAssertEqual(args[1], "--skip-git-repo-check")
+        XCTAssertEqual(args[2], "--sandbox")
+        XCTAssertEqual(args[3], "read-only")
+        XCTAssertEqual(args[4], "-c")
+        XCTAssertEqual(args[5], "model_reasoning_effort='low'")
+        XCTAssertEqual(args[6], "--model")
+        XCTAssertEqual(args[7], "gpt-5-codex")
+        XCTAssertTrue(args[8].hasPrefix("p"))
+        XCTAssertTrue(args[8].hasSuffix("\n\nx"))
     }
 
     func testCorrectTextPassesExpectedArgumentsForGemini() throws {
@@ -144,14 +144,13 @@ final class ShellRunnerTests: XCTestCase {
 
         let argsData = try Data(contentsOf: argsLog)
         let args = decodeNullSeparatedArguments(from: argsData)
-        XCTAssertEqual(args, [
-            "--prompt",
-            "p\n\nx",
-            "--output-format",
-            "text",
-            "--model",
-            "gemini-2.5-flash"
-        ])
+        XCTAssertEqual(args[0], "--prompt")
+        XCTAssertTrue(args[1].hasPrefix("p"))
+        XCTAssertTrue(args[1].hasSuffix("\n\nx"))
+        XCTAssertEqual(args[2], "--output-format")
+        XCTAssertEqual(args[3], "text")
+        XCTAssertEqual(args[4], "--model")
+        XCTAssertEqual(args[5], "gemini-2.5-flash")
     }
 
     func testCorrectTextPreservingTokensFallsBackToNormalFlowWhenNoProtectedTokens() throws {

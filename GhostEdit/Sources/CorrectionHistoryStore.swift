@@ -48,6 +48,12 @@ final class CorrectionHistoryStore {
         try writeLocked(normalized)
     }
 
+    func lastSuccessfulEntry() -> CorrectionHistoryEntry? {
+        lock.lock()
+        defer { lock.unlock() }
+        return readLocked().last(where: { $0.succeeded })
+    }
+
     func trim(limit: Int) throws {
         lock.lock()
         defer { lock.unlock() }

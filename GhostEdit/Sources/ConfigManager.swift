@@ -73,7 +73,7 @@ enum CLIProvider: String, Codable, CaseIterable {
     }
 }
 
-struct AppConfig: Codable {
+struct AppConfig: Codable, Equatable {
     var claudePath: String
     var codexPath: String
     var geminiPath: String
@@ -84,6 +84,13 @@ struct AppConfig: Codable {
     var hotkeyModifiers: UInt32
     var launchAtLogin: Bool
     var historyLimit: Int
+    var developerMode: Bool
+    var language: String
+    var soundFeedbackEnabled: Bool
+    var notifyOnSuccess: Bool
+    var clipboardOnlyMode: Bool
+    var tonePreset: String
+    var showDiffPreview: Bool
 
     static let `default` = AppConfig(
         claudePath: "",
@@ -95,8 +102,70 @@ struct AppConfig: Codable {
         hotkeyKeyCode: 14,
         hotkeyModifiers: 256,
         launchAtLogin: false,
-        historyLimit: 200
+        historyLimit: 200,
+        developerMode: false,
+        language: "auto",
+        soundFeedbackEnabled: true,
+        notifyOnSuccess: false,
+        clipboardOnlyMode: false,
+        tonePreset: "default",
+        showDiffPreview: false
     )
+
+    static let supportedPresets: [String] = [
+        "default", "casual", "professional", "academic", "slack"
+    ]
+
+    static func promptForPreset(_ preset: String) -> String? {
+        switch preset.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "default", "":
+            return nil
+        case "casual":
+            return "Revise the following text for grammar and spelling. Use a casual, friendly, and conversational tone. Keep it natural and relaxed. Return ONLY the revised text."
+        case "professional":
+            return "Revise the following text for grammar, spelling, and punctuation. Use a polished, professional tone suitable for business communication. Be concise and direct. Return ONLY the revised text."
+        case "academic":
+            return "Revise the following text for grammar, spelling, and punctuation. Use a formal academic tone with precise language. Maintain objectivity and clarity. Return ONLY the revised text."
+        case "slack":
+            return "Revise the following text for grammar and spelling. Keep a concise, upbeat Slack-message tone. Use short sentences. Return ONLY the revised text."
+        default:
+            return nil
+        }
+    }
+
+    static let supportedLanguages: [(code: String, displayName: String)] = [
+        ("auto", "Auto-detect"),
+        ("en", "English"),
+        ("es", "Spanish"),
+        ("fr", "French"),
+        ("de", "German"),
+        ("it", "Italian"),
+        ("pt", "Portuguese"),
+        ("nl", "Dutch"),
+        ("ja", "Japanese"),
+        ("ko", "Korean"),
+        ("zh", "Chinese"),
+        ("ar", "Arabic"),
+        ("hi", "Hindi"),
+        ("ta", "Tamil"),
+        ("ru", "Russian"),
+        ("pl", "Polish"),
+        ("sv", "Swedish"),
+        ("da", "Danish"),
+        ("no", "Norwegian"),
+        ("fi", "Finnish"),
+        ("tr", "Turkish"),
+        ("th", "Thai"),
+        ("vi", "Vietnamese"),
+        ("id", "Indonesian"),
+        ("ms", "Malay"),
+        ("uk", "Ukrainian"),
+        ("cs", "Czech"),
+        ("ro", "Romanian"),
+        ("hu", "Hungarian"),
+        ("el", "Greek"),
+        ("he", "Hebrew")
+    ]
 
     enum CodingKeys: String, CodingKey {
         case claudePath
@@ -109,6 +178,13 @@ struct AppConfig: Codable {
         case hotkeyModifiers
         case launchAtLogin
         case historyLimit
+        case developerMode
+        case language
+        case soundFeedbackEnabled
+        case notifyOnSuccess
+        case clipboardOnlyMode
+        case tonePreset
+        case showDiffPreview
     }
 
     init(
@@ -121,7 +197,14 @@ struct AppConfig: Codable {
         hotkeyKeyCode: UInt32,
         hotkeyModifiers: UInt32,
         launchAtLogin: Bool,
-        historyLimit: Int
+        historyLimit: Int,
+        developerMode: Bool = false,
+        language: String = "auto",
+        soundFeedbackEnabled: Bool = true,
+        notifyOnSuccess: Bool = false,
+        clipboardOnlyMode: Bool = false,
+        tonePreset: String = "default",
+        showDiffPreview: Bool = false
     ) {
         self.claudePath = claudePath
         self.codexPath = codexPath
@@ -133,6 +216,13 @@ struct AppConfig: Codable {
         self.hotkeyModifiers = hotkeyModifiers
         self.launchAtLogin = launchAtLogin
         self.historyLimit = historyLimit
+        self.developerMode = developerMode
+        self.language = language
+        self.soundFeedbackEnabled = soundFeedbackEnabled
+        self.notifyOnSuccess = notifyOnSuccess
+        self.clipboardOnlyMode = clipboardOnlyMode
+        self.tonePreset = tonePreset
+        self.showDiffPreview = showDiffPreview
     }
 
     init(from decoder: Decoder) throws {
@@ -148,6 +238,13 @@ struct AppConfig: Codable {
         hotkeyModifiers = try container.decodeIfPresent(UInt32.self, forKey: .hotkeyModifiers) ?? AppConfig.default.hotkeyModifiers
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? AppConfig.default.launchAtLogin
         historyLimit = try container.decodeIfPresent(Int.self, forKey: .historyLimit) ?? AppConfig.default.historyLimit
+        developerMode = try container.decodeIfPresent(Bool.self, forKey: .developerMode) ?? AppConfig.default.developerMode
+        language = try container.decodeIfPresent(String.self, forKey: .language) ?? AppConfig.default.language
+        soundFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundFeedbackEnabled) ?? AppConfig.default.soundFeedbackEnabled
+        notifyOnSuccess = try container.decodeIfPresent(Bool.self, forKey: .notifyOnSuccess) ?? AppConfig.default.notifyOnSuccess
+        clipboardOnlyMode = try container.decodeIfPresent(Bool.self, forKey: .clipboardOnlyMode) ?? AppConfig.default.clipboardOnlyMode
+        tonePreset = try container.decodeIfPresent(String.self, forKey: .tonePreset) ?? AppConfig.default.tonePreset
+        showDiffPreview = try container.decodeIfPresent(Bool.self, forKey: .showDiffPreview) ?? AppConfig.default.showDiffPreview
     }
 
     var resolvedClaudePath: String? {
@@ -194,6 +291,22 @@ struct AppConfig: Codable {
     static func defaultModel(for provider: CLIProvider) -> String {
         provider.defaultModel
     }
+
+    var resolvedLanguage: String {
+        let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed.isEmpty ? "auto" : trimmed
+    }
+
+    static func languageInstruction(for language: String) -> String? {
+        let code = language.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if code.isEmpty || code == "auto" {
+            return "Detect the language of the input text and respond in the same language."
+        }
+        guard let entry = supportedLanguages.first(where: { $0.code == code }) else {
+            return "Respond in \(language)."
+        }
+        return "Respond in \(entry.displayName)."
+    }
 }
 
 final class ConfigManager {
@@ -206,6 +319,7 @@ final class ConfigManager {
     let promptURL: URL
     let configURL: URL
     let historyURL: URL
+    let profilesURL: URL
 
     let defaultPrompt = "Please revise the following text by correcting grammar, spelling, and punctuation. Improve clarity and flow while preserving the original meaning, intent, and message flow. Keep the tone natural to the writer. Do not change the point of view. Return ONLY the revised text, with no preface or extra commentary."
     private let legacyDefaultPrompts: Set<String> = [
@@ -225,6 +339,7 @@ final class ConfigManager {
         promptURL = baseDirectoryURL.appendingPathComponent("prompt.txt")
         configURL = baseDirectoryURL.appendingPathComponent("config.json")
         historyURL = baseDirectoryURL.appendingPathComponent("history.json")
+        profilesURL = baseDirectoryURL.appendingPathComponent("profiles.json")
     }
 
     func bootstrapIfNeeded() throws {
@@ -298,6 +413,8 @@ final class ConfigManager {
         let model = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedModel = model.isEmpty ? AppConfig.defaultModel(for: provider) : model
         let historyLimit = max(1, config.historyLimit)
+        let normalizedTone = config.tonePreset.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let tonePreset = AppConfig.supportedPresets.contains(normalizedTone) ? normalizedTone : "default"
 
         return AppConfig(
             claudePath: config.claudePath,
@@ -309,7 +426,14 @@ final class ConfigManager {
             hotkeyKeyCode: config.hotkeyKeyCode,
             hotkeyModifiers: config.hotkeyModifiers,
             launchAtLogin: config.launchAtLogin,
-            historyLimit: historyLimit
+            historyLimit: historyLimit,
+            developerMode: config.developerMode,
+            language: config.resolvedLanguage,
+            soundFeedbackEnabled: config.soundFeedbackEnabled,
+            notifyOnSuccess: config.notifyOnSuccess,
+            clipboardOnlyMode: config.clipboardOnlyMode,
+            tonePreset: tonePreset,
+            showDiffPreview: config.showDiffPreview
         )
     }
 

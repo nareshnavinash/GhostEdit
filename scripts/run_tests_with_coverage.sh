@@ -69,6 +69,16 @@ REQUIRED_FILES=(
   "$ROOT_DIR/GhostEdit/Sources/MenuBarIconSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/WritingCoachLayoutSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/HUDOverlaySupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/DeveloperModeSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/DiffSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/SettingsExportSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/CorrectionStatisticsSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/TooltipSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/FallbackSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/TokenEstimationSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/PartialCorrectionSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/AppProfileSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/UpdateCheckSupport.swift"
 )
 
 xcrun llvm-cov report \
