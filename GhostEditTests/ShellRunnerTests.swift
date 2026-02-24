@@ -740,6 +740,18 @@ final class ShellRunnerTests: XCTestCase {
         XCTAssertEqual(result, "just text")
     }
 
+    func testTrimPreservingInternalNewlinesStripsEmDash() {
+        let input = "This is a sentence — with an em dash."
+        let result = ShellRunner.trimPreservingInternalNewlines(input)
+        XCTAssertEqual(result, "This is a sentence with an em dash.")
+    }
+
+    func testTrimPreservingInternalNewlinesStripsMultipleEmDashes() {
+        let input = "First — second — third"
+        let result = ShellRunner.trimPreservingInternalNewlines(input)
+        XCTAssertEqual(result, "First second third")
+    }
+
     func testCorrectTextPreservesBlankLinesBetweenParagraphs() throws {
         let testEnv = try makeRunnerEnvironment()
         let script = """

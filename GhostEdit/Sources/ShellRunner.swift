@@ -463,7 +463,14 @@ final class ShellRunner {
         let lastIdx = relevantLines.count - 1
         let trimmedLast = relevantLines[lastIdx].replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
         relevantLines[lastIdx] = Substring(trimmedLast)
-        return relevantLines.joined(separator: "\n")
+        var result = relevantLines.joined(separator: "\n")
+        // Strip em dashes (—) that models tend to insert
+        result = result.replacingOccurrences(of: "—", with: "")
+        // Collapse any double spaces left behind after removal
+        while result.contains("  ") {
+            result = result.replacingOccurrences(of: "  ", with: " ")
+        }
+        return result
     }
 
     private func devLog(_ phase: DeveloperModeLogEntry.Phase, _ message: String) {
