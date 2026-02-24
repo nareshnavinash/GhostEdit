@@ -2253,6 +2253,7 @@ final class StreamingPreviewController: NSWindowController {
         scrollView.borderType = .bezelBorder
         scrollView.drawsBackground = false
 
+        textView.frame = NSRect(x: 0, y: 0, width: 400, height: 400)
         textView.isEditable = false
         textView.isSelectable = true
         textView.font = .systemFont(ofSize: 13)
@@ -2260,6 +2261,9 @@ final class StreamingPreviewController: NSWindowController {
         textView.autoresizingMask = [.width]
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         textView.drawsBackground = false
 
