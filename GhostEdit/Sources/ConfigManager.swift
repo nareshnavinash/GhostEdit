@@ -121,13 +121,13 @@ struct AppConfig: Codable, Equatable {
         case "default", "":
             return nil
         case "casual":
-            return "Revise the following text for grammar and spelling. Use a casual, friendly, and conversational tone. Keep it natural and relaxed. Return ONLY the revised text."
+            return "Revise the following text for grammar and spelling. Use a casual, friendly, and conversational tone. Keep it natural and relaxed. Preserve all line breaks, blank lines, and paragraph spacing exactly as in the original. Return ONLY the revised text."
         case "professional":
-            return "Revise the following text for grammar, spelling, and punctuation. Use a polished, professional tone suitable for business communication. Be concise and direct. Return ONLY the revised text."
+            return "Revise the following text for grammar, spelling, and punctuation. Use a polished, professional tone suitable for business communication. Be concise and direct. Preserve all line breaks, blank lines, and paragraph spacing exactly as in the original. Return ONLY the revised text."
         case "academic":
-            return "Revise the following text for grammar, spelling, and punctuation. Use a formal academic tone with precise language. Maintain objectivity and clarity. Return ONLY the revised text."
+            return "Revise the following text for grammar, spelling, and punctuation. Use a formal academic tone with precise language. Maintain objectivity and clarity. Preserve all line breaks, blank lines, and paragraph spacing exactly as in the original. Return ONLY the revised text."
         case "slack":
-            return "Revise the following text for grammar and spelling. Keep a concise, upbeat Slack-message tone. Use short sentences. Return ONLY the revised text."
+            return "Revise the following text for grammar and spelling. Keep a concise, upbeat Slack-message tone. Use short sentences. Preserve all line breaks, blank lines, and paragraph spacing exactly as in the original. Return ONLY the revised text."
         default:
             return nil
         }
@@ -321,11 +321,12 @@ final class ConfigManager {
     let historyURL: URL
     let profilesURL: URL
 
-    let defaultPrompt = "Please revise the following text by correcting grammar, spelling, and punctuation. Improve clarity and flow while preserving the original meaning, intent, and message flow. Keep the tone natural to the writer. Do not change the point of view. Return ONLY the revised text, with no preface or extra commentary."
+    let defaultPrompt = "Please revise the following text by correcting grammar, spelling, and punctuation. Improve clarity and flow while preserving the original meaning, intent, and message flow. Keep the tone natural to the writer. Do not change the point of view. Preserve all line breaks, blank lines, and paragraph spacing exactly as in the original. Return ONLY the revised text, with no preface or extra commentary."
     private let legacyDefaultPrompts: Set<String> = [
         "Fix the grammar, spelling, and punctuation of the following text. Improve clarity and flow, but keep the tone authentic. Return ONLY the fixed text. Do not add introductory conversational filler.",
         "Edit the following text for grammar, spelling, and punctuation. Improve clarity and flow while preserving the original meaning, message sequence, and authentic tone. Keep the final writing absolutely professional, concise, and direct. Where natural, reflect these behaviors in tone: think big, deliver user value fast, own it, raise the bar, dive deep, learn and grow, and support each other. Return ONLY the revised text with no introductory or conversational filler.",
-        "Please revise the following text by correcting grammar, spelling, and punctuation. Use polite, professional periphrasis while preserving the original meaning, intent, and message flow. Keep the tone natural to the writer. Return ONLY the revised text, with no preface or extra commentary."
+        "Please revise the following text by correcting grammar, spelling, and punctuation. Use polite, professional periphrasis while preserving the original meaning, intent, and message flow. Keep the tone natural to the writer. Return ONLY the revised text, with no preface or extra commentary.",
+        "Please revise the following text by correcting grammar, spelling, and punctuation. Improve clarity and flow while preserving the original meaning, intent, and message flow. Keep the tone natural to the writer. Do not change the point of view. Return ONLY the revised text, with no preface or extra commentary."
     ]
 
     init(fileManager: FileManager = .default, homeDirectoryURL: URL? = nil) {

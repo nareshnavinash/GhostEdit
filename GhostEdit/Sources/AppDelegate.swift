@@ -15,6 +15,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hudController: HUDOverlayController?
     private var developerConsoleController: DeveloperConsoleController?
     private var diffPreviewController: DiffPreviewController?
+    private var streamingPreviewController: StreamingPreviewController?
 
     private var statusMenu: NSMenu?
     private var statusMenuItem: NSMenuItem?
@@ -662,6 +663,80 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         devLog(.cliExecution, "Processing with \(provider.executableName) (\(modelDisplay))")
         setStatus("Processing with \(provider.executableName) (\(modelDisplay))...")
 
+        // Streaming preview path: show a floating panel that updates in real-time.
+        if config.showDiffPreview {
+            dismissHUD()
+            stopProcessingIndicator()
+
+            let controller = StreamingPreviewController(
+                originalText: selectedText,
+                onAccept: { [weak self] correctedText in
+                    guard let self else { return }
+                    self.streamingPreviewController = nil
+                    self.applyCorrectedText(correctedText)
+                },
+                onCancel: { [weak self] in
+                    guard let self else { return }
+                    self.streamingPreviewController = nil
+                    self.restoreClipboardSnapshot(after: 0)
+                    self.setStatus("Correction cancelled")
+                    self.finishProcessing()
+                }
+            )
+            streamingPreviewController = controller
+            controller.showWindow(nil)
+            controller.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else { return }
+                do {
+                    let correctedText = try self.shellRunner.correctTextStreaming(
+                        systemPrompt: prompt,
+                        selectedText: selectedText,
+                        onChunk: { accumulated in
+                            // onChunk fires on main queue
+                            controller.updateStreaming(accumulatedText: accumulated)
+                        }
+                    )
+                    self.recordHistoryEntry(
+                        originalText: selectedText,
+                        generatedText: correctedText,
+                        provider: provider,
+                        model: model,
+                        startedAt: startedAt,
+                        succeeded: true
+                    )
+                    DispatchQueue.main.async {
+                        self.updateTooltip(
+                            original: selectedText,
+                            corrected: correctedText,
+                            provider: provider.displayName,
+                            model: model
+                        )
+                        controller.markComplete(correctedText: correctedText)
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        controller.window?.close()
+                        self.streamingPreviewController = nil
+                        self.restoreClipboardSnapshot(after: 0)
+                        self.recordHistoryEntry(
+                            originalText: selectedText,
+                            generatedText: "",
+                            provider: provider,
+                            model: model,
+                            startedAt: startedAt,
+                            succeeded: false
+                        )
+                        self.handleProcessingError(error)
+                        self.finishProcessing()
+                    }
+                }
+            }
+            return
+        }
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
 
@@ -709,27 +784,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         self.playSuccessSound()
                         self.notifySuccessIfEnabled()
                         self.finishProcessing()
-                        return
-                    }
-
-                    // Diff preview mode: show changes before applying.
-                    if config.showDiffPreview {
-                        self.dismissHUD()
-                        self.stopProcessingIndicator()
-                        self.showDiffPreview(
-                            originalText: selectedText,
-                            correctedText: correctedText,
-                            onApply: { [weak self] in
-                                guard let self else { return }
-                                self.applyCorrectedText(correctedText)
-                            },
-                            onCancel: { [weak self] in
-                                guard let self else { return }
-                                self.restoreClipboardSnapshot(after: 0)
-                                self.setStatus("Correction cancelled")
-                                self.finishProcessing()
-                            }
-                        )
                         return
                     }
 
@@ -1322,36 +1376,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         task.resume()
         semaphore.wait()
         return result
-    }
-
-    private func showDiffPreview(
-        originalText: String,
-        correctedText: String,
-        onApply: @escaping () -> Void,
-        onCancel: @escaping () -> Void
-    ) {
-        let segments = DiffSupport.wordDiff(old: originalText, new: correctedText)
-        let summary = DiffSupport.changeSummary(segments: segments)
-
-        if DiffSupport.isIdentical(old: originalText, new: correctedText) {
-            // No changes — skip preview, just notify.
-            setStatus("No changes needed")
-            updateHUD(state: .success)
-            playSuccessSound()
-            finishProcessing()
-            return
-        }
-
-        let controller = DiffPreviewController(
-            segments: segments,
-            summary: summary,
-            onApply: onApply,
-            onCancel: onCancel
-        )
-        diffPreviewController = controller
-        controller.showWindow(nil)
-        controller.window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func loadAppProfiles() -> [AppProfile] {
@@ -1971,6 +1995,191 @@ final class DiffPreviewController: NSWindowController {
     }
 }
 
+final class StreamingPreviewController: NSWindowController {
+    private let originalText: String
+    private let onAccept: (String) -> Void
+    private let onCancel: () -> Void
+
+    private let textView = NSTextView()
+    private let statusLabel = NSTextField(labelWithString: "")
+    private let acceptButton: NSButton
+    private let cancelButton: NSButton
+
+    private var latestCorrectedText = ""
+    private var isComplete = false
+
+    init(
+        originalText: String,
+        onAccept: @escaping (String) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.originalText = originalText
+        self.onAccept = onAccept
+        self.onCancel = onCancel
+        self.acceptButton = NSButton(title: "Accept (Tab)", target: nil, action: nil)
+        self.cancelButton = NSButton(title: "Cancel (Esc)", target: nil, action: nil)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 460),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Streaming Preview"
+        window.center()
+        window.minSize = NSSize(width: 400, height: 300)
+        super.init(window: window)
+        acceptButton.target = self
+        acceptButton.action = #selector(acceptClicked)
+        cancelButton.target = self
+        cancelButton.action = #selector(cancelClicked)
+        buildUI()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    func updateStreaming(accumulatedText: String) {
+        let charCount = accumulatedText.count
+        statusLabel.stringValue = StreamingPreviewSupport.streamingStatus(charCount: charCount)
+
+        // During streaming show plain text as it arrives
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .foregroundColor: NSColor.labelColor
+        ]
+        textView.textStorage?.setAttributedString(
+            NSAttributedString(string: accumulatedText, attributes: attrs)
+        )
+    }
+
+    func markComplete(correctedText: String) {
+        isComplete = true
+        latestCorrectedText = correctedText
+
+        let diff = DiffSupport.wordDiff(old: originalText, new: correctedText)
+        let changeCount = StreamingPreviewSupport.changeCount(from: diff)
+        statusLabel.stringValue = StreamingPreviewSupport.completedStatus(changeCount: changeCount)
+        acceptButton.isEnabled = changeCount > 0
+
+        // Render with underlines for changes
+        let attributed = buildStreamingDiff(from: diff)
+        textView.textStorage?.setAttributedString(attributed)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 48 && isComplete { // Tab key
+            acceptClicked()
+        } else if event.keyCode == 53 { // Esc key
+            cancelClicked()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    private func buildUI() {
+        guard let window = window else { return }
+
+        let contentView = NSView(frame: window.contentView!.bounds)
+        contentView.autoresizingMask = [.width, .height]
+
+        statusLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.stringValue = "Waiting for response..."
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(statusLabel)
+
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.borderType = .bezelBorder
+
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.autoresizingMask = [.width]
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.widthTracksTextView = true
+
+        scrollView.documentView = textView
+        contentView.addSubview(scrollView)
+
+        acceptButton.keyEquivalent = "\t"
+        acceptButton.isEnabled = false
+        acceptButton.translatesAutoresizingMaskIntoConstraints = false
+
+        cancelButton.keyEquivalent = "\u{1b}"
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
+
+        contentView.addSubview(acceptButton)
+        contentView.addSubview(cancelButton)
+
+        NSLayoutConstraint.activate([
+            statusLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            statusLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            statusLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+
+            scrollView.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            scrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
+
+            acceptButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            acceptButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            acceptButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
+
+            cancelButton.trailingAnchor.constraint(equalTo: acceptButton.leadingAnchor, constant: -8),
+            cancelButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            cancelButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
+        ])
+
+        window.contentView = contentView
+    }
+
+    private func buildStreamingDiff(from segments: [DiffSegment]) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let baseFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+
+        for segment in segments {
+            let attrs: [NSAttributedString.Key: Any]
+            switch segment.kind {
+            case .equal:
+                attrs = [.font: baseFont, .foregroundColor: NSColor.labelColor]
+            case .insertion:
+                attrs = [
+                    .font: baseFont,
+                    .foregroundColor: NSColor.systemGreen,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    .underlineColor: NSColor.systemGreen
+                ]
+            case .deletion:
+                attrs = [
+                    .font: baseFont,
+                    .foregroundColor: NSColor.systemRed,
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                    .strikethroughColor: NSColor.systemRed
+                ]
+            }
+            result.append(NSAttributedString(string: segment.text, attributes: attrs))
+        }
+
+        return result
+    }
+
+    @objc private func acceptClicked() {
+        guard isComplete else { return }
+        window?.close()
+        onAccept(latestCorrectedText)
+    }
+
+    @objc private func cancelClicked() {
+        window?.close()
+        onCancel()
+    }
+}
+
 final class SettingsWindowController: NSWindowController {
     struct ModelOption {
         let title: String
@@ -2014,7 +2223,7 @@ final class SettingsWindowController: NSWindowController {
         action: nil
     )
     private let showDiffPreviewCheckbox = NSButton(
-        checkboxWithTitle: "Show diff preview before applying correction",
+        checkboxWithTitle: "Show streaming preview before applying (Tab to accept, Esc to cancel)",
         target: nil,
         action: nil
     )

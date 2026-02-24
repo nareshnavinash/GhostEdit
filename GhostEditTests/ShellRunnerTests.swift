@@ -708,6 +708,348 @@ final class ShellRunnerTests: XCTestCase {
         return scriptURL
     }
 
+    // MARK: - trimPreservingInternalNewlines
+
+    func testTrimPreservingInternalNewlinesKeepsBlankLines() {
+        let input = "Hello\n\nWorld\n\nGoodbye"
+        let result = ShellRunner.trimPreservingInternalNewlines(input)
+        XCTAssertEqual(result, "Hello\n\nWorld\n\nGoodbye")
+    }
+
+    func testTrimPreservingInternalNewlinesStripsLeadingTrailingBlanks() {
+        let input = "\n\n  Hello\n\nWorld  \n\n"
+        let result = ShellRunner.trimPreservingInternalNewlines(input)
+        XCTAssertEqual(result, "Hello\n\nWorld")
+    }
+
+    func testTrimPreservingInternalNewlinesReturnsEmptyForBlankInput() {
+        XCTAssertEqual(ShellRunner.trimPreservingInternalNewlines(""), "")
+        XCTAssertEqual(ShellRunner.trimPreservingInternalNewlines("\n\n\n"), "")
+        XCTAssertEqual(ShellRunner.trimPreservingInternalNewlines("   \n   "), "")
+    }
+
+    func testTrimPreservingInternalNewlinesMultipleBlankLines() {
+        let input = "\nLine1\n\n\n\nLine2\n"
+        let result = ShellRunner.trimPreservingInternalNewlines(input)
+        XCTAssertEqual(result, "Line1\n\n\n\nLine2")
+    }
+
+    func testTrimPreservingInternalNewlinesSingleLine() {
+        let input = "  just text  "
+        let result = ShellRunner.trimPreservingInternalNewlines(input)
+        XCTAssertEqual(result, "just text")
+    }
+
+    func testCorrectTextPreservesBlankLinesBetweenParagraphs() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- "First paragraph."
+        print -r -- ""
+        print -r -- "Second paragraph."
+        print -r -- ""
+        print -r -- "Third paragraph."
+        """
+
+        let executable = try makeExecutableScript(named: "cli-newlines.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let output = try testEnv.runner.correctText(systemPrompt: "p", selectedText: "x")
+        XCTAssertEqual(output, "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.")
+    }
+
+    // MARK: - correctTextStreaming
+
+    func testCorrectTextStreamingReturnsFullOutput() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- "Hello world"
+        """
+
+        let executable = try makeExecutableScript(named: "claude-stream.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        var chunkSnapshots: [String] = []
+        let result = try testEnv.runner.correctTextStreaming(
+            systemPrompt: "Fix grammar",
+            selectedText: "hello wrold",
+            onChunk: { snapshot in
+                chunkSnapshots.append(snapshot)
+            }
+        )
+
+        XCTAssertEqual(result, "Hello world")
+    }
+
+    func testCorrectTextStreamingTrimsOutput() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- "  trimmed text  "
+        """
+
+        let executable = try makeExecutableScript(named: "claude-stream-trim.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let result = try testEnv.runner.correctTextStreaming(
+            systemPrompt: "p",
+            selectedText: "x",
+            onChunk: { _ in }
+        )
+
+        XCTAssertEqual(result, "trimmed text")
+    }
+
+    func testCorrectTextStreamingThrowsOnEmptyOutput() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- ""
+        """
+
+        let executable = try makeExecutableScript(named: "claude-stream-empty.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        XCTAssertThrowsError(try testEnv.runner.correctTextStreaming(
+            systemPrompt: "p",
+            selectedText: "x",
+            onChunk: { _ in }
+        )) { error in
+            guard case ShellRunnerError.emptyResponse = error else {
+                XCTFail("Expected emptyResponse, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testCorrectTextStreamingThrowsOnNonZeroExit() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- "partial" >&2
+        exit 1
+        """
+
+        let executable = try makeExecutableScript(named: "claude-stream-fail.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        XCTAssertThrowsError(try testEnv.runner.correctTextStreaming(
+            systemPrompt: "p",
+            selectedText: "x",
+            onChunk: { _ in }
+        )) { error in
+            guard case ShellRunnerError.processFailed = error else {
+                XCTFail("Expected processFailed, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testCorrectTextStreamingTimesOut() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        sleep 10
+        print -r -- "too late"
+        """
+
+        let executable = try makeExecutableScript(named: "claude-stream-timeout.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+                .withTimeout(1)
+        )
+
+        XCTAssertThrowsError(try testEnv.runner.correctTextStreaming(
+            systemPrompt: "p",
+            selectedText: "x",
+            onChunk: { _ in }
+        )) { error in
+            guard case ShellRunnerError.timedOut = error else {
+                XCTFail("Expected timedOut, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testCorrectTextStreamingPreservesNewlines() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = """
+        #!/bin/zsh
+        print -r -- "Line one."
+        print -r -- ""
+        print -r -- "Line two."
+        """
+
+        let executable = try makeExecutableScript(named: "claude-stream-nl.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let result = try testEnv.runner.correctTextStreaming(
+            systemPrompt: "p",
+            selectedText: "x",
+            onChunk: { _ in }
+        )
+
+        XCTAssertEqual(result, "Line one.\n\nLine two.")
+    }
+
+    func testCorrectTextStreamingWithLanguage() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let argsLog = testEnv.homeURL.appendingPathComponent("args-streaming.log")
+
+        let script = """
+        #!/bin/zsh
+        printf '%s\\0' "$@" > '\(argsLog.path)'
+        print -r -- "Corrected"
+        """
+
+        let executable = try makeExecutableScript(named: "claude-stream-lang.sh", contents: script, homeURL: testEnv.homeURL)
+        var config = AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        config.language = "fr"
+        try testEnv.manager.saveConfig(config)
+
+        let result = try testEnv.runner.correctTextStreaming(
+            systemPrompt: "Fix grammar",
+            selectedText: "test",
+            onChunk: { _ in }
+        )
+
+        XCTAssertEqual(result, "Corrected")
+
+        let argsData = try Data(contentsOf: argsLog)
+        let args = decodeNullSeparatedArguments(from: argsData)
+        // The prompt should contain language instruction
+        XCTAssertTrue(args[1].contains("French"), "Prompt should include language instruction")
+    }
+
+    func testCorrectTextStreamingLargeOutput() throws {
+        let testEnv = try makeRunnerEnvironment()
+        // Use printf without final newline — data may linger in the pipe buffer
+        // and be collected by readDataToEndOfFile after the handler is cleared.
+        let script = """
+        #!/bin/zsh
+        for i in {1..100}; do
+            printf '%s\\n' "Line $i of output text that is moderately long to generate buffered data."
+        done
+        printf 'final chunk without newline'
+        """
+
+        let executable = try makeExecutableScript(named: "claude-stream-large.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let result = try testEnv.runner.correctTextStreaming(
+            systemPrompt: "p",
+            selectedText: "x",
+            onChunk: { _ in }
+        )
+
+        XCTAssertTrue(result.contains("Line 1 of output"))
+        XCTAssertTrue(result.contains("Line 100 of output"))
+        XCTAssertTrue(result.contains("final chunk without newline"))
+    }
+
+    func testCorrectTextStreamingStripsClaudeCodeEnv() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let envLog = testEnv.homeURL.appendingPathComponent("env-streaming.log")
+
+        let script = """
+        #!/bin/zsh
+        env > '\(envLog.path)'
+        print -r -- "ok"
+        """
+
+        let executable = try makeExecutableScript(named: "claude-stream-env.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let injectedEnv = [
+            "CLAUDECODE": "1",
+            "CLAUDE_CODE": "1",
+            "HOME": testEnv.homeURL.path,
+        ]
+        let runner = ShellRunner(
+            configManager: testEnv.manager,
+            environment: injectedEnv,
+            homeDirectoryPath: testEnv.homeURL.path
+        )
+
+        let result = try runner.correctTextStreaming(
+            systemPrompt: "p",
+            selectedText: "x",
+            onChunk: { _ in }
+        )
+
+        XCTAssertEqual(result, "ok")
+
+        let envOutput = try String(contentsOf: envLog, encoding: .utf8)
+        XCTAssertFalse(envOutput.contains("CLAUDECODE="))
+        XCTAssertFalse(envOutput.contains("CLAUDE_CODE="))
+    }
+
+    func testCorrectTextStreamingCLINotFound() throws {
+        let testEnv = try makeRunnerEnvironment()
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: "/nonexistent/claude", model: "haiku")
+        )
+
+        let stubFS = StubExecutableFileManager(executablePaths: [])
+        let runner = ShellRunner(
+            configManager: testEnv.manager,
+            fileManager: stubFS,
+            homeDirectoryPath: testEnv.homeURL.path
+        )
+
+        XCTAssertThrowsError(try runner.correctTextStreaming(
+            systemPrompt: "p",
+            selectedText: "x",
+            onChunk: { _ in }
+        )) { error in
+            guard case ShellRunnerError.cliNotFound = error else {
+                XCTFail("Expected cliNotFound, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testCorrectTextStreamingLaunchFailed() throws {
+        let testEnv = try makeRunnerEnvironment()
+
+        // Create a file that exists and is marked executable but is not a valid binary.
+        let badBinary = testEnv.homeURL.appendingPathComponent("bad-binary")
+        try "this is not an executable".write(to: badBinary, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: badBinary.path)
+
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: badBinary.path, model: "haiku")
+        )
+
+        XCTAssertThrowsError(try testEnv.runner.correctTextStreaming(
+            systemPrompt: "p",
+            selectedText: "x",
+            onChunk: { _ in }
+        )) { error in
+            guard case ShellRunnerError.launchFailed = error else {
+                XCTFail("Expected launchFailed, got \(error)")
+                return
+            }
+        }
+    }
+
     private func decodeNullSeparatedArguments(from data: Data) -> [String] {
         var args = data
             .split(separator: 0, omittingEmptySubsequences: false)
@@ -751,6 +1093,12 @@ private extension AppConfig {
             launchAtLogin: launchAtLogin,
             historyLimit: historyLimit
         )
+    }
+
+    func withTimeout(_ seconds: Int) -> AppConfig {
+        var copy = self
+        copy.timeoutSeconds = seconds
+        return copy
     }
 }
 

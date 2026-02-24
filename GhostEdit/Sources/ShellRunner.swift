@@ -67,6 +67,49 @@ final class ShellRunner {
         }
     }
 
+    /// Correct text with streaming output. The `onChunk` callback fires on the main queue
+    /// each time new data arrives from stdout. Returns the final complete corrected text.
+    func correctTextStreaming(
+        systemPrompt: String,
+        selectedText: String,
+        onChunk: @escaping (String) -> Void
+    ) throws -> String {
+        let config = configManager.loadConfig()
+        let provider = config.resolvedProvider
+        devLog(.cliResolution, "Resolving CLI path for provider: \(provider.displayName)")
+        let executablePath = try resolveCLIPath(
+            provider: provider,
+            preferredPath: config.resolvedPath(for: provider)
+        )
+        devLog(.cliResolution, "Resolved CLI path: \(executablePath)")
+        let model = config.resolvedModel(for: provider)
+
+        var augmentedPrompt = systemPrompt
+        if let langInstruction = AppConfig.languageInstruction(for: config.resolvedLanguage) {
+            augmentedPrompt = "\(systemPrompt) \(langInstruction)"
+        }
+        let input = "\(augmentedPrompt)\n\n\(selectedText)"
+
+        devLog(.cliExecution, "Launching \(provider.executableName) (streaming) with model: \(model.isEmpty ? "(default)" : model)")
+        let output = try runCLIStreaming(
+            provider: provider,
+            executablePath: executablePath,
+            model: model,
+            prompt: input,
+            timeoutSeconds: config.timeoutSeconds,
+            onChunk: onChunk
+        )
+
+        let trimmed = ShellRunner.trimPreservingInternalNewlines(output)
+        guard !trimmed.isEmpty else {
+            devLog(.cliResponse, "CLI returned empty response")
+            throw ShellRunnerError.emptyResponse
+        }
+
+        devLog(.cliResponse, "Streaming CLI response (\(trimmed.count) chars)")
+        return trimmed
+    }
+
     func correctText(systemPrompt: String, selectedText: String) throws -> String {
         let config = configManager.loadConfig()
         let provider = config.resolvedProvider
@@ -94,7 +137,7 @@ final class ShellRunner {
             timeoutSeconds: config.timeoutSeconds
         )
 
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = ShellRunner.trimPreservingInternalNewlines(output)
         guard !trimmed.isEmpty else {
             devLog(.cliResponse, "CLI returned empty response")
             throw ShellRunnerError.emptyResponse
@@ -304,6 +347,123 @@ final class ShellRunner {
         }
 
         return outputText
+    }
+
+    private func runCLIStreaming(
+        provider: CLIProvider,
+        executablePath: String,
+        model: String,
+        prompt: String,
+        timeoutSeconds: Int,
+        onChunk: @escaping (String) -> Void
+    ) throws -> String {
+        let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.currentDirectoryURL = configManager.baseDirectoryURL
+        let args = ClaudeRuntimeSupport.cliArguments(
+            provider: provider,
+            prompt: prompt,
+            model: trimmedModel
+        )
+        process.arguments = args
+
+        var runtimeEnvironment = environment
+        runtimeEnvironment["PATH"] = ClaudeRuntimeSupport.runtimePathValue(
+            homeDirectoryPath: homeDirectoryPath,
+            environment: environment
+        )
+        runtimeEnvironment.removeValue(forKey: "CLAUDE_CODE")
+        runtimeEnvironment.removeValue(forKey: "CLAUDECODE")
+        process.environment = runtimeEnvironment
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        var accumulatedOutput = ""
+        let outputLock = NSLock()
+
+        outputPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
+            outputLock.lock()
+            accumulatedOutput += chunk
+            let snapshot = accumulatedOutput
+            outputLock.unlock()
+            DispatchQueue.main.async {
+                onChunk(snapshot)
+            }
+        }
+
+        let completion = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            completion.signal()
+        }
+
+        do {
+            try process.run()
+        } catch {
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            devLog(.cliExecution, "Failed to launch process: \(error.localizedDescription)")
+            throw ShellRunnerError.launchFailed(error.localizedDescription)
+        }
+
+        if completion.wait(timeout: .now() + .seconds(timeoutSeconds)) == .timedOut {
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            process.terminate()
+            _ = completion.wait(timeout: .now() + .seconds(2))
+            devLog(.cliExecution, "Process timed out after \(timeoutSeconds)s")
+            throw ShellRunnerError.timedOut(seconds: timeoutSeconds)
+        }
+
+        // Drain any data that arrived between the handler being cleared and now.
+        let remainingData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let remaining = String(decoding: remainingData, as: UTF8.self)
+        outputLock.lock()
+        accumulatedOutput += remaining
+        outputLock.unlock()
+
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorText = String(decoding: errorData, as: UTF8.self)
+
+        guard process.terminationStatus == 0 else {
+            throw ClaudeRuntimeSupport.classifyProcessFailure(
+                provider: provider,
+                exitCode: process.terminationStatus,
+                stdout: accumulatedOutput,
+                stderr: errorText
+            )
+        }
+
+        return accumulatedOutput
+    }
+
+    /// Trims leading/trailing whitespace and newlines from the CLI output
+    /// but preserves all internal blank lines and paragraph structure.
+    /// Matches the newline pattern of the input text when possible.
+    static func trimPreservingInternalNewlines(_ text: String) -> String {
+        // Drop leading blank lines/spaces and trailing blank lines/spaces
+        // but keep all internal newlines intact.
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+
+        // Find first and last non-blank lines
+        guard let firstNonBlank = lines.firstIndex(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
+              let lastNonBlank = lines.lastIndex(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+        else {
+            return ""
+        }
+
+        var relevantLines = Array(lines[firstNonBlank...lastNonBlank])
+        // Trim leading/trailing whitespace on the boundary lines only
+        relevantLines[0] = Substring(relevantLines[0].drop(while: { $0 == " " || $0 == "\t" }))
+        let lastIdx = relevantLines.count - 1
+        let trimmedLast = relevantLines[lastIdx].replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
+        relevantLines[lastIdx] = Substring(trimmedLast)
+        return relevantLines.joined(separator: "\n")
     }
 
     private func devLog(_ phase: DeveloperModeLogEntry.Phase, _ message: String) {
