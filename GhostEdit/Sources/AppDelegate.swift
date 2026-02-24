@@ -2142,10 +2142,7 @@ final class StreamingPreviewController: NSWindowController {
     }
 
     private func buildUI() {
-        guard let window = window else { return }
-
-        let contentView = NSView(frame: window.contentView!.bounds)
-        contentView.autoresizingMask = [.width, .height]
+        guard let window = window, let contentView = window.contentView else { return }
 
         // Status bar
         statusLabel.font = .systemFont(ofSize: 12, weight: .medium)
@@ -2220,6 +2217,7 @@ final class StreamingPreviewController: NSWindowController {
             leftScrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
             leftScrollView.trailingAnchor.constraint(equalTo: divider.leadingAnchor, constant: -4),
             leftScrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
+            leftScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 200),
 
             divider.topAnchor.constraint(equalTo: originalHeader.bottomAnchor, constant: 4),
             divider.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
@@ -2230,6 +2228,7 @@ final class StreamingPreviewController: NSWindowController {
             rightScrollView.leadingAnchor.constraint(equalTo: divider.trailingAnchor, constant: 4),
             rightScrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
             rightScrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
+            rightScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 200),
 
             acceptButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             acceptButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
@@ -2243,8 +2242,6 @@ final class StreamingPreviewController: NSWindowController {
             cancelButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
             cancelButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 110),
         ])
-
-        window.contentView = contentView
     }
 
     private func configureTextView(_ textView: NSTextView, in scrollView: NSScrollView) {
