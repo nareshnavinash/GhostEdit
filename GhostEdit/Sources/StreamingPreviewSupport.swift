@@ -46,9 +46,9 @@ enum StreamingPreviewSupport {
     /// Returns a status string for the completed state.
     static func completedStatus(changeCount: Int) -> String {
         if changeCount == 0 {
-            return "No changes detected"
+            return "No changes detected — press R to regenerate, Esc to cancel"
         }
-        return "\(changeCount) change\(changeCount == 1 ? "" : "s") — press Tab to accept, Esc to cancel"
+        return "\(changeCount) change\(changeCount == 1 ? "" : "s") — Tab to accept, R to regenerate, Esc to cancel"
     }
 
     /// Count the number of changed segments (insertions + deletions).

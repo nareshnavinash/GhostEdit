@@ -277,7 +277,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.resolvedCodexPath, "/usr/local/bin/codex")
         XCTAssertEqual(config.resolvedGeminiPath, "/usr/local/bin/gemini")
         XCTAssertEqual(config.resolvedProvider, .gemini)
-        XCTAssertEqual(config.resolvedModel(for: .claude), "haiku")
+        XCTAssertEqual(config.resolvedModel(for: .claude), "claude-haiku-4-5")
         XCTAssertEqual(config.resolvedModel(for: .codex), "gpt-5-codex")
         XCTAssertEqual(config.resolvedModel(for: .gemini), "gemini-2.5-flash-lite")
     }
@@ -309,7 +309,7 @@ final class ConfigManagerTests: XCTestCase {
             launchAtLogin: false,
             historyLimit: 20
         )
-        XCTAssertEqual(fallbackConfig.resolvedModel(), "haiku")
+        XCTAssertEqual(fallbackConfig.resolvedModel(), "claude-haiku-4-5")
     }
 
     func testAppConfigResolvedProviderFallsBackToDefaultWhenInvalid() {
@@ -363,11 +363,19 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(CLIProvider.codex.configPathKey, "codexPath")
         XCTAssertEqual(CLIProvider.gemini.configPathKey, "geminiPath")
 
-        XCTAssertEqual(CLIProvider.claude.defaultModel, "haiku")
+        XCTAssertEqual(CLIProvider.claude.defaultModel, "claude-haiku-4-5")
         XCTAssertEqual(CLIProvider.codex.defaultModel, "gpt-5-codex")
         XCTAssertEqual(CLIProvider.gemini.defaultModel, "gemini-2.5-flash-lite")
 
-        XCTAssertEqual(CLIProvider.claude.availableModels, ["haiku", "sonnet", "opus"])
+        XCTAssertEqual(CLIProvider.claude.availableModels, [
+            "claude-haiku-4-5",
+            "claude-sonnet-4-5",
+            "claude-sonnet-4-6",
+            "claude-opus-4-6",
+            "haiku",
+            "sonnet",
+            "opus"
+        ])
         XCTAssertEqual(CLIProvider.codex.availableModels, ["gpt-5-codex", "gpt-5.3-codex", "gpt-5"])
         XCTAssertEqual(CLIProvider.gemini.availableModels, [
             "gemini-2.5-flash-lite",

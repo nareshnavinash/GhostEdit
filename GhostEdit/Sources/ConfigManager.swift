@@ -45,7 +45,15 @@ enum CLIProvider: String, Codable, CaseIterable {
     var availableModels: [String] {
         switch self {
         case .claude:
-            return ["haiku", "sonnet", "opus"]
+            return [
+                "claude-haiku-4-5",
+                "claude-sonnet-4-5",
+                "claude-sonnet-4-6",
+                "claude-opus-4-6",
+                "haiku",
+                "sonnet",
+                "opus"
+            ]
         case .codex:
             return ["gpt-5-codex", "gpt-5.3-codex", "gpt-5"]
         case .gemini:
@@ -64,7 +72,7 @@ enum CLIProvider: String, Codable, CaseIterable {
     var defaultModel: String {
         switch self {
         case .claude:
-            return "haiku"
+            return "claude-haiku-4-5"
         case .codex:
             return "gpt-5-codex"
         case .gemini:
@@ -97,7 +105,7 @@ struct AppConfig: Codable, Equatable {
         codexPath: "",
         geminiPath: "",
         provider: CLIProvider.default.rawValue,
-        model: "haiku",
+        model: "claude-haiku-4-5",
         timeoutSeconds: 60,
         hotkeyKeyCode: 14,
         hotkeyModifiers: 256,

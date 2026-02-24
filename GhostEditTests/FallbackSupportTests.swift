@@ -26,7 +26,7 @@ final class FallbackSupportTests: XCTestCase {
 
     func testNextFallbackModelUnknownModelFallsToDefault() {
         let next = FallbackSupport.nextFallbackModel(currentModel: "unknown-model", provider: .claude)
-        XCTAssertEqual(next, "haiku")
+        XCTAssertEqual(next, "claude-haiku-4-5")
     }
 
     func testNextFallbackModelUnknownModelSameAsDefaultReturnsNil() {

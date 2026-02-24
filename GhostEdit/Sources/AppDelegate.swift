@@ -681,59 +681,31 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.restoreClipboardSnapshot(after: 0)
                     self.setStatus("Correction cancelled")
                     self.finishProcessing()
-                }
+                },
+                onRegenerate: { }
             )
+            controller.onRegenerate = { [weak self, weak controller] in
+                guard let self, let controller else { return }
+                self.launchStreamingRequest(
+                    controller: controller,
+                    prompt: prompt,
+                    selectedText: selectedText,
+                    provider: provider,
+                    model: model
+                )
+            }
             streamingPreviewController = controller
             controller.showWindow(nil)
             controller.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
 
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self else { return }
-                do {
-                    let correctedText = try self.shellRunner.correctTextStreaming(
-                        systemPrompt: prompt,
-                        selectedText: selectedText,
-                        onChunk: { accumulated in
-                            // onChunk fires on main queue
-                            controller.updateStreaming(accumulatedText: accumulated)
-                        }
-                    )
-                    self.recordHistoryEntry(
-                        originalText: selectedText,
-                        generatedText: correctedText,
-                        provider: provider,
-                        model: model,
-                        startedAt: startedAt,
-                        succeeded: true
-                    )
-                    DispatchQueue.main.async {
-                        self.updateTooltip(
-                            original: selectedText,
-                            corrected: correctedText,
-                            provider: provider.displayName,
-                            model: model
-                        )
-                        controller.markComplete(correctedText: correctedText)
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        controller.window?.close()
-                        self.streamingPreviewController = nil
-                        self.restoreClipboardSnapshot(after: 0)
-                        self.recordHistoryEntry(
-                            originalText: selectedText,
-                            generatedText: "",
-                            provider: provider,
-                            model: model,
-                            startedAt: startedAt,
-                            succeeded: false
-                        )
-                        self.handleProcessingError(error)
-                        self.finishProcessing()
-                    }
-                }
-            }
+            launchStreamingRequest(
+                controller: controller,
+                prompt: prompt,
+                selectedText: selectedText,
+                provider: provider,
+                model: model
+            )
             return
         }
 
@@ -882,6 +854,61 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     )
                     self.handleProcessingError(error)
                     self.dismissHUD()
+                    self.finishProcessing()
+                }
+            }
+        }
+    }
+
+    private func launchStreamingRequest(
+        controller: StreamingPreviewController,
+        prompt: String,
+        selectedText: String,
+        provider: CLIProvider,
+        model: String
+    ) {
+        let startedAt = Date()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            do {
+                let correctedText = try self.shellRunner.correctTextStreaming(
+                    systemPrompt: prompt,
+                    selectedText: selectedText,
+                    onChunk: { accumulated in
+                        controller.updateStreaming(accumulatedText: accumulated)
+                    }
+                )
+                self.recordHistoryEntry(
+                    originalText: selectedText,
+                    generatedText: correctedText,
+                    provider: provider,
+                    model: model,
+                    startedAt: startedAt,
+                    succeeded: true
+                )
+                DispatchQueue.main.async {
+                    self.updateTooltip(
+                        original: selectedText,
+                        corrected: correctedText,
+                        provider: provider.displayName,
+                        model: model
+                    )
+                    controller.markComplete(correctedText: correctedText)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    controller.window?.close()
+                    self.streamingPreviewController = nil
+                    self.restoreClipboardSnapshot(after: 0)
+                    self.recordHistoryEntry(
+                        originalText: selectedText,
+                        generatedText: "",
+                        provider: provider,
+                        model: model,
+                        startedAt: startedAt,
+                        succeeded: false
+                    )
+                    self.handleProcessingError(error)
                     self.finishProcessing()
                 }
             }
@@ -1190,8 +1217,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func appVersionText() -> String {
         let info = Bundle.main.infoDictionary
         let shortVersion = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "Version \(shortVersion) (\(build))"
+        return "Version \(shortVersion)"
     }
 
     private func showSettingsWindow() {
@@ -1999,38 +2025,48 @@ final class StreamingPreviewController: NSWindowController {
     private let originalText: String
     private let onAccept: (String) -> Void
     private let onCancel: () -> Void
+    var onRegenerate: () -> Void
 
-    private let textView = NSTextView()
+    private let leftTextView = NSTextView()
+    private let rightTextView = NSTextView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let acceptButton: NSButton
+    private let regenerateButton: NSButton
     private let cancelButton: NSButton
+    private let leftScrollView = NSScrollView()
+    private let rightScrollView = NSScrollView()
 
     private var latestCorrectedText = ""
-    private var isComplete = false
+    private(set) var isComplete = false
 
     init(
         originalText: String,
         onAccept: @escaping (String) -> Void,
-        onCancel: @escaping () -> Void
+        onCancel: @escaping () -> Void,
+        onRegenerate: @escaping () -> Void
     ) {
         self.originalText = originalText
         self.onAccept = onAccept
         self.onCancel = onCancel
+        self.onRegenerate = onRegenerate
         self.acceptButton = NSButton(title: "Accept (Tab)", target: nil, action: nil)
+        self.regenerateButton = NSButton(title: "Regenerate (R)", target: nil, action: nil)
         self.cancelButton = NSButton(title: "Cancel (Esc)", target: nil, action: nil)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 460),
+            contentRect: NSRect(x: 0, y: 0, width: 860, height: 500),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Streaming Preview"
         window.center()
-        window.minSize = NSSize(width: 400, height: 300)
+        window.minSize = NSSize(width: 600, height: 350)
         super.init(window: window)
         acceptButton.target = self
         acceptButton.action = #selector(acceptClicked)
+        regenerateButton.target = self
+        regenerateButton.action = #selector(regenerateClicked)
         cancelButton.target = self
         cancelButton.action = #selector(cancelClicked)
         buildUI()
@@ -2043,12 +2079,11 @@ final class StreamingPreviewController: NSWindowController {
         let charCount = accumulatedText.count
         statusLabel.stringValue = StreamingPreviewSupport.streamingStatus(charCount: charCount)
 
-        // During streaming show plain text as it arrives
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .font: NSFont.systemFont(ofSize: 13),
             .foregroundColor: NSColor.labelColor
         ]
-        textView.textStorage?.setAttributedString(
+        rightTextView.textStorage?.setAttributedString(
             NSAttributedString(string: accumulatedText, attributes: attrs)
         )
     }
@@ -2061,10 +2096,37 @@ final class StreamingPreviewController: NSWindowController {
         let changeCount = StreamingPreviewSupport.changeCount(from: diff)
         statusLabel.stringValue = StreamingPreviewSupport.completedStatus(changeCount: changeCount)
         acceptButton.isEnabled = changeCount > 0
+        regenerateButton.isEnabled = true
 
-        // Render with underlines for changes
-        let attributed = buildStreamingDiff(from: diff)
-        textView.textStorage?.setAttributedString(attributed)
+        // Side-by-side: left shows original with deletions highlighted,
+        // right shows corrected with insertions highlighted.
+        leftTextView.textStorage?.setAttributedString(buildOriginalSide(from: diff))
+        rightTextView.textStorage?.setAttributedString(buildCorrectedSide(from: diff))
+    }
+
+    func resetForRegeneration() {
+        isComplete = false
+        latestCorrectedText = ""
+        acceptButton.isEnabled = false
+        regenerateButton.isEnabled = false
+        statusLabel.stringValue = "Regenerating..."
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        rightTextView.textStorage?.setAttributedString(
+            NSAttributedString(string: "Waiting for response...", attributes: attrs)
+        )
+
+        // Reset the original side back to plain
+        let origAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: NSColor.labelColor
+        ]
+        leftTextView.textStorage?.setAttributedString(
+            NSAttributedString(string: originalText, attributes: origAttrs)
+        )
     }
 
     override func keyDown(with event: NSEvent) {
@@ -2072,6 +2134,8 @@ final class StreamingPreviewController: NSWindowController {
             acceptClicked()
         } else if event.keyCode == 53 { // Esc key
             cancelClicked()
+        } else if event.keyCode == 15 && isComplete { // R key
+            regenerateClicked()
         } else {
             super.keyDown(with: event)
         }
@@ -2083,88 +2147,170 @@ final class StreamingPreviewController: NSWindowController {
         let contentView = NSView(frame: window.contentView!.bounds)
         contentView.autoresizingMask = [.width, .height]
 
+        // Status bar
         statusLabel.font = .systemFont(ofSize: 12, weight: .medium)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.stringValue = "Waiting for response..."
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(statusLabel)
 
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.borderType = .bezelBorder
+        // Column headers
+        let originalHeader = NSTextField(labelWithString: "Original")
+        originalHeader.font = .systemFont(ofSize: 11, weight: .semibold)
+        originalHeader.textColor = .secondaryLabelColor
+        originalHeader.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(originalHeader)
 
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        textView.textContainerInset = NSSize(width: 8, height: 8)
-        textView.autoresizingMask = [.width]
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.textContainer?.widthTracksTextView = true
+        let correctedHeader = NSTextField(labelWithString: "Corrected")
+        correctedHeader.font = .systemFont(ofSize: 11, weight: .semibold)
+        correctedHeader.textColor = .secondaryLabelColor
+        correctedHeader.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(correctedHeader)
 
-        scrollView.documentView = textView
-        contentView.addSubview(scrollView)
+        // Left scroll view (original text)
+        configureTextView(leftTextView, in: leftScrollView)
+        contentView.addSubview(leftScrollView)
 
+        // Right scroll view (corrected text)
+        configureTextView(rightTextView, in: rightScrollView)
+        contentView.addSubview(rightScrollView)
+
+        // Populate left side with original text
+        let origAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: NSColor.labelColor
+        ]
+        leftTextView.textStorage?.setAttributedString(
+            NSAttributedString(string: originalText, attributes: origAttrs)
+        )
+
+        // Divider
+        let divider = NSBox()
+        divider.boxType = .separator
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(divider)
+
+        // Buttons
         acceptButton.keyEquivalent = "\t"
         acceptButton.isEnabled = false
         acceptButton.translatesAutoresizingMaskIntoConstraints = false
+
+        regenerateButton.isEnabled = false
+        regenerateButton.translatesAutoresizingMaskIntoConstraints = false
 
         cancelButton.keyEquivalent = "\u{1b}"
         cancelButton.translatesAutoresizingMaskIntoConstraints = false
 
         contentView.addSubview(acceptButton)
+        contentView.addSubview(regenerateButton)
         contentView.addSubview(cancelButton)
 
         NSLayoutConstraint.activate([
-            statusLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            statusLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
             statusLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             statusLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
 
-            scrollView.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            scrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
+            originalHeader.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
+            originalHeader.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+
+            correctedHeader.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
+            correctedHeader.leadingAnchor.constraint(equalTo: contentView.centerXAnchor, constant: 8),
+
+            leftScrollView.topAnchor.constraint(equalTo: originalHeader.bottomAnchor, constant: 4),
+            leftScrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            leftScrollView.trailingAnchor.constraint(equalTo: divider.leadingAnchor, constant: -4),
+            leftScrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
+
+            divider.topAnchor.constraint(equalTo: originalHeader.bottomAnchor, constant: 4),
+            divider.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            divider.widthAnchor.constraint(equalToConstant: 1),
+            divider.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
+
+            rightScrollView.topAnchor.constraint(equalTo: correctedHeader.bottomAnchor, constant: 4),
+            rightScrollView.leadingAnchor.constraint(equalTo: divider.trailingAnchor, constant: 4),
+            rightScrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
+            rightScrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
 
             acceptButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            acceptButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
-            acceptButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
+            acceptButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
+            acceptButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 110),
 
-            cancelButton.trailingAnchor.constraint(equalTo: acceptButton.leadingAnchor, constant: -8),
-            cancelButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
-            cancelButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
+            regenerateButton.trailingAnchor.constraint(equalTo: acceptButton.leadingAnchor, constant: -8),
+            regenerateButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
+            regenerateButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
+
+            cancelButton.trailingAnchor.constraint(equalTo: regenerateButton.leadingAnchor, constant: -8),
+            cancelButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
+            cancelButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 110),
         ])
 
         window.contentView = contentView
     }
 
-    private func buildStreamingDiff(from segments: [DiffSegment]) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        let baseFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+    private func configureTextView(_ textView: NSTextView, in scrollView: NSScrollView) {
+        scrollView.hasVerticalScroller = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.borderType = .bezelBorder
+        scrollView.drawsBackground = false
 
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.font = .systemFont(ofSize: 13)
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.autoresizingMask = [.width]
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.widthTracksTextView = true
+        textView.drawsBackground = false
+
+        scrollView.documentView = textView
+    }
+
+    private func buildOriginalSide(from segments: [DiffSegment]) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let baseFont = NSFont.systemFont(ofSize: 13)
         for segment in segments {
-            let attrs: [NSAttributedString.Key: Any]
             switch segment.kind {
             case .equal:
-                attrs = [.font: baseFont, .foregroundColor: NSColor.labelColor]
-            case .insertion:
-                attrs = [
+                result.append(NSAttributedString(string: segment.text, attributes: [
                     .font: baseFont,
-                    .foregroundColor: NSColor.systemGreen,
-                    .underlineStyle: NSUnderlineStyle.single.rawValue,
-                    .underlineColor: NSColor.systemGreen
-                ]
+                    .foregroundColor: NSColor.labelColor
+                ]))
             case .deletion:
-                attrs = [
+                result.append(NSAttributedString(string: segment.text, attributes: [
                     .font: baseFont,
                     .foregroundColor: NSColor.systemRed,
-                    .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                    .strikethroughColor: NSColor.systemRed
-                ]
+                    .backgroundColor: NSColor.systemRed.withAlphaComponent(0.12),
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue
+                ]))
+            case .insertion:
+                break // Don't show insertions on the original side
             }
-            result.append(NSAttributedString(string: segment.text, attributes: attrs))
         }
+        return result
+    }
 
+    private func buildCorrectedSide(from segments: [DiffSegment]) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let baseFont = NSFont.systemFont(ofSize: 13)
+        for segment in segments {
+            switch segment.kind {
+            case .equal:
+                result.append(NSAttributedString(string: segment.text, attributes: [
+                    .font: baseFont,
+                    .foregroundColor: NSColor.labelColor
+                ]))
+            case .insertion:
+                result.append(NSAttributedString(string: segment.text, attributes: [
+                    .font: baseFont,
+                    .foregroundColor: NSColor.systemGreen,
+                    .backgroundColor: NSColor.systemGreen.withAlphaComponent(0.12),
+                    .underlineStyle: NSUnderlineStyle.single.rawValue
+                ]))
+            case .deletion:
+                break // Don't show deletions on the corrected side
+            }
+        }
         return result
     }
 
@@ -2172,6 +2318,12 @@ final class StreamingPreviewController: NSWindowController {
         guard isComplete else { return }
         window?.close()
         onAccept(latestCorrectedText)
+    }
+
+    @objc private func regenerateClicked() {
+        guard isComplete else { return }
+        resetForRegeneration()
+        onRegenerate()
     }
 
     @objc private func cancelClicked() {
@@ -2278,65 +2430,79 @@ final class SettingsWindowController: NSWindowController {
             return
         }
 
+        // Use a scroll view so long settings don't clip
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(scrollView)
+
+        let clipView = NSClipView()
+        clipView.drawsBackground = false
+        scrollView.contentView = clipView
+
         rootStack.orientation = .vertical
-        rootStack.spacing = 14
+        rootStack.spacing = SettingsLayoutSupport.sectionSpacing
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
-        contentView.addSubview(rootStack)
+        let documentView = NSView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        documentView.addSubview(rootStack)
+        scrollView.documentView = documentView
 
         NSLayoutConstraint.activate([
-            rootStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            rootStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            rootStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
-            rootStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -20)
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+
+            rootStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 24),
+            rootStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -24),
+            rootStack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 20),
+            rootStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -20),
+
+            documentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
         ])
 
-        let subtitle = NSTextField(labelWithString: "Choose provider/model, hotkey, timeout, and how many past corrections to keep.")
-        subtitle.textColor = .secondaryLabelColor
-        subtitle.lineBreakMode = .byWordWrapping
-        subtitle.maximumNumberOfLines = 2
-        rootStack.addArrangedSubview(subtitle)
-
-        let providerLabel = makeFieldLabel("Provider")
-        let providerRow = makeRow(label: providerLabel, field: providerPopup)
-        rootStack.addArrangedSubview(providerRow)
-
+        // ── Provider & Model ──
         providerPopup.removeAllItems()
         providerOptions.forEach { providerPopup.addItem(withTitle: $0.displayName) }
         providerPopup.target = self
         providerPopup.action = #selector(providerPopupChanged)
-
-        let modelLabel = makeFieldLabel("Model")
-        let modelRow = makeRow(label: modelLabel, field: modelPopup)
-        rootStack.addArrangedSubview(modelRow)
-
         modelPopup.target = self
         modelPopup.action = #selector(modelPopupChanged)
 
-        let customLabel = makeFieldLabel("Custom")
         customModelField.placeholderString = "Enter custom model name"
         customModelContainer.orientation = .horizontal
-        customModelContainer.spacing = 12
+        customModelContainer.spacing = 8
         customModelContainer.alignment = .firstBaseline
-        customModelContainer.addArrangedSubview(customLabel)
+        customModelContainer.addArrangedSubview(makeFieldLabel("Custom"))
         customModelContainer.addArrangedSubview(customModelField)
-        rootStack.addArrangedSubview(customModelContainer)
 
-        let languageLabel = makeFieldLabel("Language")
+        let providerGroup = makeGroupBox(title: "Provider & Model", views: [
+            makeRow(label: makeFieldLabel("Provider"), field: providerPopup),
+            makeRow(label: makeFieldLabel("Model"), field: modelPopup),
+            customModelContainer,
+        ])
+        rootStack.addArrangedSubview(providerGroup)
+
+        // ── Language & Tone ──
         languagePopup.removeAllItems()
         AppConfig.supportedLanguages.forEach { languagePopup.addItem(withTitle: $0.displayName) }
-        let languageRow = makeRow(label: languageLabel, field: languagePopup)
-        rootStack.addArrangedSubview(languageRow)
+        tonePresetPopup.removeAllItems()
+        AppConfig.supportedPresets.forEach { tonePresetPopup.addItem(withTitle: $0.capitalized) }
 
-        let hotkeyKeyLabel = makeFieldLabel("Hotkey")
+        let langToneGroup = makeGroupBox(title: "Language & Tone", views: [
+            makeRow(label: makeFieldLabel("Language"), field: languagePopup),
+            makeRow(label: makeFieldLabel("Tone"), field: tonePresetPopup),
+        ])
+        rootStack.addArrangedSubview(langToneGroup)
+
+        // ── Hotkey ──
         hotkeyKeyPopup.removeAllItems()
-        hotkeyKeyOptions.forEach { option in
-            hotkeyKeyPopup.addItem(withTitle: option.title)
-        }
+        hotkeyKeyOptions.forEach { hotkeyKeyPopup.addItem(withTitle: $0.title) }
         hotkeyKeyPopup.target = self
         hotkeyKeyPopup.action = #selector(hotkeyInputChanged)
-        let hotkeyKeyRow = makeRow(label: hotkeyKeyLabel, field: hotkeyKeyPopup)
-        rootStack.addArrangedSubview(hotkeyKeyRow)
 
         commandModifierCheckbox.target = self
         commandModifierCheckbox.action = #selector(hotkeyInputChanged)
@@ -2347,69 +2513,61 @@ final class SettingsWindowController: NSWindowController {
         shiftModifierCheckbox.target = self
         shiftModifierCheckbox.action = #selector(hotkeyInputChanged)
 
-        let hotkeyModifiersStack = NSStackView()
-        hotkeyModifiersStack.orientation = .horizontal
-        hotkeyModifiersStack.spacing = 8
-        hotkeyModifiersStack.addArrangedSubview(commandModifierCheckbox)
-        hotkeyModifiersStack.addArrangedSubview(optionModifierCheckbox)
-        hotkeyModifiersStack.addArrangedSubview(controlModifierCheckbox)
-        hotkeyModifiersStack.addArrangedSubview(shiftModifierCheckbox)
+        let modStack = NSStackView()
+        modStack.orientation = .horizontal
+        modStack.spacing = 6
+        modStack.addArrangedSubview(commandModifierCheckbox)
+        modStack.addArrangedSubview(optionModifierCheckbox)
+        modStack.addArrangedSubview(controlModifierCheckbox)
+        modStack.addArrangedSubview(shiftModifierCheckbox)
 
-        let hotkeyModifiersLabel = makeFieldLabel("Modifiers")
-        let hotkeyModifiersRow = makeRow(label: hotkeyModifiersLabel, field: hotkeyModifiersStack)
-        rootStack.addArrangedSubview(hotkeyModifiersRow)
+        hotkeyPreviewLabel.textColor = .tertiaryLabelColor
+        hotkeyPreviewLabel.font = .systemFont(ofSize: 11)
 
-        hotkeyPreviewLabel.textColor = .secondaryLabelColor
-        hotkeyPreviewLabel.maximumNumberOfLines = 2
-        hotkeyPreviewLabel.lineBreakMode = .byWordWrapping
-        rootStack.addArrangedSubview(hotkeyPreviewLabel)
+        let hotkeyGroup = makeGroupBox(title: "Hotkey", views: [
+            makeRow(label: makeFieldLabel("Key"), field: hotkeyKeyPopup),
+            makeRow(label: makeFieldLabel("Modifiers"), field: modStack),
+            hotkeyPreviewLabel,
+        ])
+        rootStack.addArrangedSubview(hotkeyGroup)
 
-        launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
-        rootStack.addArrangedSubview(launchAtLoginCheckbox)
-
-        soundFeedbackCheckbox.setContentHuggingPriority(.required, for: .vertical)
-        rootStack.addArrangedSubview(soundFeedbackCheckbox)
-
-        notifyOnSuccessCheckbox.setContentHuggingPriority(.required, for: .vertical)
-        rootStack.addArrangedSubview(notifyOnSuccessCheckbox)
-
-        clipboardOnlyModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
-        rootStack.addArrangedSubview(clipboardOnlyModeCheckbox)
-
+        // ── Behavior ──
         showDiffPreviewCheckbox.setContentHuggingPriority(.required, for: .vertical)
-        rootStack.addArrangedSubview(showDiffPreviewCheckbox)
+        clipboardOnlyModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        soundFeedbackCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        notifyOnSuccessCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
 
-        let tonePresetLabel = makeFieldLabel("Tone")
-        tonePresetPopup.removeAllItems()
-        AppConfig.supportedPresets.forEach { tonePresetPopup.addItem(withTitle: $0.capitalized) }
-        let tonePresetRow = makeRow(label: tonePresetLabel, field: tonePresetPopup)
-        rootStack.addArrangedSubview(tonePresetRow)
+        let behaviorGroup = makeGroupBox(title: "Behavior", views: [
+            showDiffPreviewCheckbox,
+            clipboardOnlyModeCheckbox,
+            soundFeedbackCheckbox,
+            notifyOnSuccessCheckbox,
+            launchAtLoginCheckbox,
+        ])
+        rootStack.addArrangedSubview(behaviorGroup)
 
-        developerModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
-        rootStack.addArrangedSubview(developerModeCheckbox)
-
-        let historyLimitLabel = makeFieldLabel("History N")
+        // ── Advanced ──
         historyLimitField.placeholderString = "200"
         historyLimitField.alignment = .left
-        let historyLimitRow = makeRow(label: historyLimitLabel, field: historyLimitField)
-        rootStack.addArrangedSubview(historyLimitRow)
-
-        let timeoutLabel = makeFieldLabel("Timeout")
         timeoutField.placeholderString = "60"
         timeoutField.alignment = .left
-        let timeoutRow = makeRow(label: timeoutLabel, field: timeoutField)
-        rootStack.addArrangedSubview(timeoutRow)
+        developerModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
 
-        hintLabel.textColor = .secondaryLabelColor
+        hintLabel.textColor = .tertiaryLabelColor
+        hintLabel.font = .systemFont(ofSize: 11)
         hintLabel.maximumNumberOfLines = 3
         hintLabel.lineBreakMode = .byWordWrapping
-        hintLabel.setContentCompressionResistancePriority(.required, for: .vertical)
-        rootStack.addArrangedSubview(hintLabel)
 
-        let spacer = NSView()
-        spacer.setContentHuggingPriority(.defaultLow, for: .vertical)
-        rootStack.addArrangedSubview(spacer)
+        let advancedGroup = makeGroupBox(title: "Advanced", views: [
+            makeRow(label: makeFieldLabel("History limit"), field: historyLimitField),
+            makeRow(label: makeFieldLabel("Timeout (s)"), field: timeoutField),
+            developerModeCheckbox,
+            hintLabel,
+        ])
+        rootStack.addArrangedSubview(advancedGroup)
 
+        // ── Buttons ──
         let buttonRow = NSStackView()
         buttonRow.orientation = .horizontal
         buttonRow.spacing = 10
@@ -2420,6 +2578,9 @@ final class SettingsWindowController: NSWindowController {
         saveButton.bezelStyle = .rounded
         saveButton.keyEquivalent = "\r"
 
+        let buttonSpacer = NSView()
+        buttonSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        buttonRow.addArrangedSubview(buttonSpacer)
         buttonRow.addArrangedSubview(closeButton)
         buttonRow.addArrangedSubview(saveButton)
         rootStack.addArrangedSubview(buttonRow)
@@ -2427,18 +2588,55 @@ final class SettingsWindowController: NSWindowController {
         updateWindowHeightToFitContent()
     }
 
+    private func makeGroupBox(title: String, views: [NSView]) -> NSView {
+        let container = NSView()
+        container.wantsLayer = true
+        container.layer?.cornerRadius = SettingsLayoutSupport.groupCornerRadius
+        container.layer?.borderWidth = 0.5
+        container.layer?.borderColor = NSColor.separatorColor.cgColor
+
+        let header = NSTextField(labelWithString: title.uppercased())
+        header.font = .systemFont(ofSize: 10, weight: .semibold)
+        header.textColor = .secondaryLabelColor
+        header.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(header)
+
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.spacing = SettingsLayoutSupport.rowSpacing
+        stack.alignment = .leading
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+
+        let inset = SettingsLayoutSupport.groupInset
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: container.topAnchor, constant: inset),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: inset),
+            header.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -inset),
+
+            stack.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: inset),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -inset),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -inset),
+        ])
+
+        return container
+    }
+
     private func makeFieldLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
         label.alignment = .right
+        label.font = .systemFont(ofSize: 13)
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.widthAnchor.constraint(equalToConstant: 72).isActive = true
+        label.widthAnchor.constraint(equalToConstant: SettingsLayoutSupport.labelWidth).isActive = true
         return label
     }
 
     private func makeRow(label: NSTextField, field: NSView) -> NSStackView {
         let row = NSStackView()
         row.orientation = .horizontal
-        row.spacing = 12
+        row.spacing = 8
         row.alignment = .firstBaseline
         row.addArrangedSubview(label)
         row.addArrangedSubview(field)

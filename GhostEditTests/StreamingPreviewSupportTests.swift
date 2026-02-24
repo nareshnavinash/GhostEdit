@@ -36,21 +36,21 @@ final class StreamingPreviewSupportTests: XCTestCase {
     func testCompletedStatusNoChanges() {
         XCTAssertEqual(
             StreamingPreviewSupport.completedStatus(changeCount: 0),
-            "No changes detected"
+            "No changes detected — press R to regenerate, Esc to cancel"
         )
     }
 
     func testCompletedStatusSingular() {
         XCTAssertEqual(
             StreamingPreviewSupport.completedStatus(changeCount: 1),
-            "1 change — press Tab to accept, Esc to cancel"
+            "1 change — Tab to accept, R to regenerate, Esc to cancel"
         )
     }
 
     func testCompletedStatusPlural() {
         XCTAssertEqual(
             StreamingPreviewSupport.completedStatus(changeCount: 5),
-            "5 changes — press Tab to accept, Esc to cancel"
+            "5 changes — Tab to accept, R to regenerate, Esc to cancel"
         )
     }
 
