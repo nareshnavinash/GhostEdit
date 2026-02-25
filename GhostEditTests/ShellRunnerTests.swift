@@ -1062,6 +1062,347 @@ final class ShellRunnerTests: XCTestCase {
         }
     }
 
+    // MARK: - Persistent CLI Session
+
+    func testCorrectTextUsesPersistentSessionWhenReady() throws {
+        let testEnv = try makeRunnerEnvironment()
+
+        // Also set up a one-shot CLI so fallback works for config resolution.
+        let script = "#!/bin/zsh\nprint -r -- 'fallback response'"
+        let executable = try makeExecutableScript(named: "claude-fallback.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        mock.mockIsReady = true
+        mock.mockSendResult = PersistentCLISession.StreamResult(text: "  persistent result  ")
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        let result = try testEnv.runner.correctText(systemPrompt: "Fix", selectedText: "test")
+        XCTAssertEqual(result, "persistent result")
+        XCTAssertEqual(mock.sendCallCount, 1)
+        XCTAssertTrue(mock.lastPrompt?.contains("test") == true)
+    }
+
+    func testCorrectTextFallsBackWhenPersistentSessionNotReady() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'one-shot response'"
+        let executable = try makeExecutableScript(named: "claude-oneshot.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        mock.mockIsReady = false
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        let result = try testEnv.runner.correctText(systemPrompt: "Fix", selectedText: "test")
+        XCTAssertEqual(result, "one-shot response")
+        XCTAssertEqual(mock.sendCallCount, 0)
+    }
+
+    func testCorrectTextFallsBackWhenPersistentSessionFails() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'fallback after error'"
+        let executable = try makeExecutableScript(named: "claude-err-fallback.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        mock.mockIsReady = true
+        mock.mockSendError = PersistentCLISession.SessionError.timedOut(seconds: 10)
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        let result = try testEnv.runner.correctText(systemPrompt: "Fix", selectedText: "test")
+        XCTAssertEqual(result, "fallback after error")
+        XCTAssertEqual(mock.sendCallCount, 1)
+        XCTAssertTrue(mock.killCalled)
+    }
+
+    func testCorrectTextFallsBackWhenPersistentSessionReturnsEmpty() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'non-empty fallback'"
+        let executable = try makeExecutableScript(named: "claude-empty-fallback.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        mock.mockIsReady = true
+        mock.mockSendResult = PersistentCLISession.StreamResult(text: "   ")
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        let result = try testEnv.runner.correctText(systemPrompt: "Fix", selectedText: "test")
+        XCTAssertEqual(result, "non-empty fallback")
+    }
+
+    func testCorrectTextStreamingUsesPersistentSession() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'streaming fallback'"
+        let executable = try makeExecutableScript(named: "claude-stream-fallback.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        mock.mockIsReady = true
+        mock.mockStreamResult = PersistentCLISession.StreamResult(text: "streamed result")
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        var chunks: [String] = []
+        let result = try testEnv.runner.correctTextStreaming(
+            systemPrompt: "Fix",
+            selectedText: "test",
+            onChunk: { chunks.append($0) }
+        )
+        XCTAssertEqual(result, "streamed result")
+        XCTAssertEqual(mock.streamCallCount, 1)
+    }
+
+    func testCorrectTextStreamingFallsBackWhenNotReady() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'stream one-shot'"
+        let executable = try makeExecutableScript(named: "claude-stream-oneshot.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        mock.mockIsReady = false
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        let result = try testEnv.runner.correctTextStreaming(
+            systemPrompt: "Fix",
+            selectedText: "test",
+            onChunk: { _ in }
+        )
+        XCTAssertEqual(result, "stream one-shot")
+        XCTAssertEqual(mock.streamCallCount, 0)
+    }
+
+    func testCorrectTextStreamingFallsBackOnError() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'stream error fallback'"
+        let executable = try makeExecutableScript(named: "claude-stream-errfallback.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        mock.mockIsReady = true
+        mock.mockStreamError = PersistentCLISession.SessionError.processExited(code: 1)
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        let result = try testEnv.runner.correctTextStreaming(
+            systemPrompt: "Fix",
+            selectedText: "test",
+            onChunk: { _ in }
+        )
+        XCTAssertEqual(result, "stream error fallback")
+        XCTAssertTrue(mock.killCalled)
+    }
+
+    func testCorrectTextStreamingFallsBackOnEmpty() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'stream empty fallback'"
+        let executable = try makeExecutableScript(named: "claude-stream-emptyfallback.sh", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        mock.mockIsReady = true
+        mock.mockStreamResult = PersistentCLISession.StreamResult(text: "  \n  ")
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        let result = try testEnv.runner.correctTextStreaming(
+            systemPrompt: "Fix",
+            selectedText: "test",
+            onChunk: { _ in }
+        )
+        XCTAssertEqual(result, "stream empty fallback")
+    }
+
+    func testKillPersistentSessionCallsKill() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let mock = MockPersistentCLISession()
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        testEnv.runner.killPersistentSession()
+        XCTAssertTrue(mock.killCalled)
+    }
+
+    func testKillPersistentSessionWhenNilDoesNotCrash() throws {
+        let testEnv = try makeRunnerEnvironment()
+        testEnv.runner.killPersistentSession()
+    }
+
+    func testSpawnPersistentSessionSkipsNonClaudeProvider() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'ok'"
+        let executable = try makeExecutableScript(named: "codex", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.codex, executablePath: executable.path, model: "gpt-5-codex")
+        )
+
+        let expectation = XCTestExpectation(description: "spawn completes")
+        testEnv.runner.spawnPersistentSession()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 2.0)
+
+        // Should not have a session since provider is codex.
+        let result = try testEnv.runner.correctText(systemPrompt: "Fix", selectedText: "test")
+        XCTAssertEqual(result, "ok")
+    }
+
+    func testSpawnPersistentSessionSkipsWhenCLINotFound() throws {
+        let homeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ghostedit-no-cli-\(UUID().uuidString)", isDirectory: true)
+        tempRoots.append(homeURL)
+        let manager = ConfigManager(fileManager: .default, homeDirectoryURL: homeURL)
+        try manager.bootstrapIfNeeded()
+        // Runner with empty environment so PATH search finds nothing.
+        let runner = ShellRunner(
+            configManager: manager,
+            environment: ["HOME": homeURL.path],
+            homeDirectoryPath: homeURL.path
+        )
+        try manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: "/nonexistent/claude", model: "haiku")
+        )
+
+        let expectation = XCTestExpectation(description: "spawn completes")
+        runner.spawnPersistentSession()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 2.0)
+        // No crash, no session — that's the expected outcome.
+    }
+
+    func testSpawnPersistentSessionHandlesSpawnFailure() throws {
+        let testEnv = try makeRunnerEnvironment()
+        // Create a file that is marked as executable but is not a valid binary
+        // (e.g. an empty file). Process.run() will throw because the OS
+        // can't execute a zero-byte file.
+        let brokenExec = testEnv.homeURL.appendingPathComponent("claude")
+        try Data().write(to: brokenExec)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: brokenExec.path)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: brokenExec.path, model: "haiku")
+        )
+
+        let expectation = XCTestExpectation(description: "spawn completes")
+        testEnv.runner.spawnPersistentSession()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 3.0)
+        // spawn() throws because the executable is invalid — catch block runs.
+        // The important thing is no crash and no session set.
+    }
+
+    func testCorrectTextWithLanguageViaPeristentSession() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'ok'"
+        let executable = try makeExecutableScript(named: "claude-lang.sh", contents: script, homeURL: testEnv.homeURL)
+        var config = AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        config.language = "Spanish"
+        try testEnv.manager.saveConfig(config)
+
+        let mock = MockPersistentCLISession()
+        mock.mockIsReady = true
+        mock.mockSendResult = PersistentCLISession.StreamResult(text: "resultado")
+        testEnv.runner.setPersistentSessionForTesting(mock)
+
+        let result = try testEnv.runner.correctText(systemPrompt: "Fix", selectedText: "test")
+        XCTAssertEqual(result, "resultado")
+        XCTAssertTrue(mock.lastPrompt?.contains("Spanish") == true || mock.lastPrompt?.contains("Respond in") == true)
+    }
+
+    func testSpawnPersistentSessionViaFactorySuccess() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'ok'"
+        let executable = try makeExecutableScript(named: "claude", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        testEnv.runner.setSessionFactoryForTesting { mock }
+
+        let expectation = XCTestExpectation(description: "spawn completes")
+        testEnv.runner.spawnPersistentSession()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 2.0)
+
+        // The mock's spawn() should have been called and succeeded.
+        XCTAssertTrue(mock.spawnCalled)
+        // After successful spawn, the session is stored — verify by injecting
+        // a ready state and using it for a correction.
+        mock.mockIsReady = true
+        mock.mockSendResult = PersistentCLISession.StreamResult(text: "factory result")
+        let result = try testEnv.runner.correctText(systemPrompt: "Fix", selectedText: "test")
+        XCTAssertEqual(result, "factory result")
+    }
+
+    func testSpawnPersistentSessionViaFactoryReplacesExistingSession() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'ok'"
+        let executable = try makeExecutableScript(named: "claude", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        // Pre-set an existing session that should be killed on respawn.
+        let oldMock = MockPersistentCLISession()
+        testEnv.runner.setPersistentSessionForTesting(oldMock)
+
+        let newMock = MockPersistentCLISession()
+        testEnv.runner.setSessionFactoryForTesting { newMock }
+
+        let expectation = XCTestExpectation(description: "spawn completes")
+        testEnv.runner.spawnPersistentSession()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 2.0)
+
+        // The old session should have been killed.
+        XCTAssertTrue(oldMock.killCalled)
+        // The new session should be active.
+        XCTAssertTrue(newMock.spawnCalled)
+    }
+
+    func testSpawnPersistentSessionViaFactoryFailure() throws {
+        let testEnv = try makeRunnerEnvironment()
+        let script = "#!/bin/zsh\nprint -r -- 'ok'"
+        let executable = try makeExecutableScript(named: "claude", contents: script, homeURL: testEnv.homeURL)
+        try testEnv.manager.saveConfig(
+            AppConfig.default.withProvider(.claude, executablePath: executable.path, model: "haiku")
+        )
+
+        let mock = MockPersistentCLISession()
+        mock.mockSpawnError = PersistentCLISession.SessionError.spawnFailed("test failure")
+        testEnv.runner.setSessionFactoryForTesting { mock }
+
+        let expectation = XCTestExpectation(description: "spawn completes")
+        testEnv.runner.spawnPersistentSession()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 2.0)
+
+        // spawn was called but threw — catch block handled it, no crash.
+        XCTAssertTrue(mock.spawnCalled)
+    }
+
     private func decodeNullSeparatedArguments(from data: Data) -> [String] {
         var args = data
             .split(separator: 0, omittingEmptySubsequences: false)
@@ -1111,6 +1452,46 @@ private extension AppConfig {
         var copy = self
         copy.timeoutSeconds = seconds
         return copy
+    }
+}
+
+private final class MockPersistentCLISession: PersistentCLISessionProtocol {
+    var mockIsReady = false
+    var mockSendResult: PersistentCLISession.StreamResult?
+    var mockSendError: Error?
+    var mockStreamResult: PersistentCLISession.StreamResult?
+    var mockStreamError: Error?
+    var mockSpawnError: Error?
+
+    private(set) var sendCallCount = 0
+    private(set) var streamCallCount = 0
+    private(set) var killCalled = false
+    private(set) var spawnCalled = false
+    private(set) var lastPrompt: String?
+
+    var isReady: Bool { mockIsReady }
+
+    func spawn(executablePath: String, provider: CLIProvider, model: String, systemPrompt: String, environment: [String: String], workingDirectoryURL: URL?) throws {
+        spawnCalled = true
+        if let error = mockSpawnError { throw error }
+    }
+
+    func send(prompt: String, timeoutSeconds: Int) throws -> PersistentCLISession.StreamResult {
+        sendCallCount += 1
+        lastPrompt = prompt
+        if let error = mockSendError { throw error }
+        return mockSendResult ?? PersistentCLISession.StreamResult(text: "")
+    }
+
+    func sendStreaming(prompt: String, timeoutSeconds: Int, onChunk: @escaping (String) -> Void) throws -> PersistentCLISession.StreamResult {
+        streamCallCount += 1
+        lastPrompt = prompt
+        if let error = mockStreamError { throw error }
+        return mockStreamResult ?? PersistentCLISession.StreamResult(text: "")
+    }
+
+    func kill() {
+        killCalled = true
     }
 }
 

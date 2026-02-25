@@ -42,6 +42,22 @@ final class ShellRunner {
     private let discoveredPathLock = NSLock()
     private var discoveredCLIPaths: [CLIProvider: String] = [:]
 
+    private let persistentSessionLock = NSLock()
+    private var persistentSession: PersistentCLISessionProtocol?
+    private var sessionFactory: () -> PersistentCLISessionProtocol = { PersistentCLISession() }
+
+    /// Test-only: inject a mock persistent session.
+    func setPersistentSessionForTesting(_ session: PersistentCLISessionProtocol?) {
+        persistentSessionLock.lock()
+        persistentSession = session
+        persistentSessionLock.unlock()
+    }
+
+    /// Test-only: override the factory used by `spawnPersistentSessionSync`.
+    func setSessionFactoryForTesting(_ factory: @escaping () -> PersistentCLISessionProtocol) {
+        sessionFactory = factory
+    }
+
     init(
         configManager: ConfigManager,
         fileManager: FileManager = .default,
@@ -64,7 +80,79 @@ final class ShellRunner {
                 provider: provider,
                 preferredPath: config.resolvedPath(for: provider)
             )
+
+            // Spawn a persistent CLI session so the first Cmd+E is fast.
+            self.spawnPersistentSession()
         }
+    }
+
+    /// Spawn (or respawn) a persistent CLI session in the background.
+    /// Safe to call multiple times — kills any existing session first.
+    func spawnPersistentSession() {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            self.spawnPersistentSessionSync()
+        }
+    }
+
+    private func spawnPersistentSessionSync() {
+        let config = configManager.loadConfig()
+        let provider = config.resolvedProvider
+
+        guard provider == .claude else {
+            devLog(.cliResolution, "Persistent session skipped: only Claude supports stream-json")
+            return
+        }
+
+        guard let executablePath = try? resolveCLIPath(
+            provider: provider,
+            preferredPath: config.resolvedPath(for: provider)
+        ) else {
+            devLog(.cliResolution, "Persistent session skipped: CLI path not found")
+            return
+        }
+
+        let model = config.resolvedModel(for: provider)
+
+        // Build a minimal system prompt for the warm session. The actual
+        // per-correction prompt will be sent as the user message content.
+        let systemPrompt = "You are a text correction assistant. The user will send text to fix. Return ONLY the corrected text with no explanation."
+
+        var runtimeEnv = environment
+        runtimeEnv["PATH"] = ClaudeRuntimeSupport.runtimePathValue(
+            homeDirectoryPath: homeDirectoryPath,
+            environment: environment
+        )
+
+        let session = sessionFactory()
+
+        do {
+            try session.spawn(
+                executablePath: executablePath,
+                provider: provider,
+                model: model,
+                systemPrompt: systemPrompt,
+                environment: runtimeEnv,
+                workingDirectoryURL: configManager.baseDirectoryURL
+            )
+
+            persistentSessionLock.lock()
+            persistentSession?.kill()
+            persistentSession = session
+            persistentSessionLock.unlock()
+
+            devLog(.cliResolution, "Persistent CLI session spawned (model: \(model.isEmpty ? "default" : model))")
+        } catch {
+            devLog(.cliResolution, "Persistent session spawn failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Kill the persistent session (e.g. on app quit).
+    func killPersistentSession() {
+        persistentSessionLock.lock()
+        persistentSession?.kill()
+        persistentSession = nil
+        persistentSessionLock.unlock()
     }
 
     /// Correct text with streaming output. The `onChunk` callback fires on the main queue
@@ -76,6 +164,17 @@ final class ShellRunner {
     ) throws -> String {
         let config = configManager.loadConfig()
         let provider = config.resolvedProvider
+
+        // Try the persistent session first (Claude only, zero bootstrap overhead).
+        if let result = tryPersistentSessionStreaming(
+            systemPrompt: systemPrompt,
+            selectedText: selectedText,
+            config: config,
+            onChunk: onChunk
+        ) {
+            return result
+        }
+
         devLog(.cliResolution, "Resolving CLI path for provider: \(provider.displayName)")
         let executablePath = try resolveCLIPath(
             provider: provider,
@@ -113,6 +212,16 @@ final class ShellRunner {
     func correctText(systemPrompt: String, selectedText: String) throws -> String {
         let config = configManager.loadConfig()
         let provider = config.resolvedProvider
+
+        // Try the persistent session first (Claude only, zero bootstrap overhead).
+        if let result = tryPersistentSession(
+            systemPrompt: systemPrompt,
+            selectedText: selectedText,
+            config: config
+        ) {
+            return result
+        }
+
         devLog(.cliResolution, "Resolving CLI path for provider: \(provider.displayName)")
         let executablePath = try resolveCLIPath(
             provider: provider,
@@ -197,6 +306,100 @@ final class ShellRunner {
         // Last resort: best-effort restoration on the placeholder-based attempt.
         devLog(.tokenRestoration, "Falling back to best-effort token restoration")
         return TokenPreservationSupport.bestEffortRestore(in: lastCandidate, tokens: protection.tokens)
+    }
+
+    // MARK: - Persistent session helpers
+
+    /// Attempt to use the persistent session for a non-streaming correction.
+    /// Returns `nil` if the session isn't available, letting the caller fall
+    /// back to the one-shot path.
+    private func tryPersistentSession(
+        systemPrompt: String,
+        selectedText: String,
+        config: AppConfig
+    ) -> String? {
+        persistentSessionLock.lock()
+        guard let session = persistentSession, session.isReady else {
+            persistentSessionLock.unlock()
+            devLog(.cliExecution, "Persistent session not ready, falling back to one-shot CLI")
+            return nil
+        }
+        persistentSessionLock.unlock()
+
+        var augmentedPrompt = systemPrompt
+        if let langInstruction = AppConfig.languageInstruction(for: config.resolvedLanguage) {
+            augmentedPrompt = "\(systemPrompt) \(langInstruction)"
+            devLog(.cliExecution, "Language: \(config.resolvedLanguage) → \(langInstruction)")
+        }
+        let input = "\(augmentedPrompt)\n\n\(selectedText)"
+
+        devLog(.cliExecution, "Using persistent session (zero bootstrap overhead)")
+
+        do {
+            let result = try session.send(prompt: input, timeoutSeconds: config.timeoutSeconds)
+            let trimmed = ShellRunner.trimPreservingInternalNewlines(result.text)
+            guard !trimmed.isEmpty else {
+                devLog(.cliResponse, "Persistent session returned empty response, falling back")
+                return nil
+            }
+            devLog(.cliResponse, "Persistent session response (\(trimmed.count) chars): \(DeveloperModeSupport.truncate(trimmed))")
+            return trimmed
+        } catch {
+            devLog(.cliExecution, "Persistent session failed: \(error.localizedDescription), falling back to one-shot CLI")
+            // Kill the broken session; a new one will be spawned after correction.
+            persistentSessionLock.lock()
+            persistentSession?.kill()
+            persistentSession = nil
+            persistentSessionLock.unlock()
+            return nil
+        }
+    }
+
+    /// Attempt to use the persistent session for a streaming correction.
+    /// Returns `nil` if the session isn't available.
+    private func tryPersistentSessionStreaming(
+        systemPrompt: String,
+        selectedText: String,
+        config: AppConfig,
+        onChunk: @escaping (String) -> Void
+    ) -> String? {
+        persistentSessionLock.lock()
+        guard let session = persistentSession, session.isReady else {
+            persistentSessionLock.unlock()
+            devLog(.cliExecution, "Persistent session not ready, falling back to one-shot streaming CLI")
+            return nil
+        }
+        persistentSessionLock.unlock()
+
+        var augmentedPrompt = systemPrompt
+        if let langInstruction = AppConfig.languageInstruction(for: config.resolvedLanguage) {
+            augmentedPrompt = "\(systemPrompt) \(langInstruction)"
+        }
+        let input = "\(augmentedPrompt)\n\n\(selectedText)"
+
+        devLog(.cliExecution, "Using persistent session for streaming (zero bootstrap overhead)")
+
+        do {
+            let result = try session.sendStreaming(
+                prompt: input,
+                timeoutSeconds: config.timeoutSeconds,
+                onChunk: onChunk
+            )
+            let trimmed = ShellRunner.trimPreservingInternalNewlines(result.text)
+            guard !trimmed.isEmpty else {
+                devLog(.cliResponse, "Persistent session streaming returned empty, falling back")
+                return nil
+            }
+            devLog(.cliResponse, "Persistent session streaming response (\(trimmed.count) chars)")
+            return trimmed
+        } catch {
+            devLog(.cliExecution, "Persistent session streaming failed: \(error.localizedDescription), falling back")
+            persistentSessionLock.lock()
+            persistentSession?.kill()
+            persistentSession = nil
+            persistentSessionLock.unlock()
+            return nil
+        }
     }
 
     func resolveCLIPath(provider: CLIProvider, preferredPath: String?) throws -> String {

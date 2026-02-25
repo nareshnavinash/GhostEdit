@@ -76,6 +76,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregister()
+        shellRunner.killPersistentSession()
         stopProcessingIndicator()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
@@ -1070,6 +1071,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         isProcessing = false
         targetAppAtTrigger = nil
         stopProcessingIndicator()
+
+        // Immediately spawn a fresh persistent CLI session so the next
+        // Cmd+E hits a warm process with zero bootstrap overhead.
+        shellRunner.spawnPersistentSession()
     }
 
     @discardableResult

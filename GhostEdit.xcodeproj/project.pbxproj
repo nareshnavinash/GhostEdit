@@ -19,6 +19,7 @@
 		24380C4A156263072C6F4D98 /* AppProfileSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A07F8A57CF75EFEDBE13B5A /* AppProfileSupport.swift */; };
 		24FA7F9186288BF1A217E132 /* StreamingPreviewSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 744DC68D788097A76BF64F21 /* StreamingPreviewSupportTests.swift */; };
 		28AC827911C8D4C36D0CF7EE /* PersistentShellSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6C12DF332B64F2E5870B3A /* PersistentShellSession.swift */; };
+		A1B2C3D4E5F60718A9B0C1D2 /* PersistentCLISession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E4F5A6B7C80921E2F3A4B5 /* PersistentCLISession.swift */; };
 		2FEC073EDBBA2687B680572F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02CA262A37DF28DF09D5B7E /* AppDelegate.swift */; };
 		3AEA75847CCEB11F7BF67F48 /* FallbackSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBF7F14278D1215EDEA709EC /* FallbackSupportTests.swift */; };
 		4903927ED8098469CCFA5DBC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B5DAB86AE24B9D4BB2A49EE7 /* Assets.xcassets */; };
@@ -157,6 +158,7 @@
 		B7E061DD0958AC85DA7B2882 /* SettingsLayoutSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsLayoutSupportTests.swift; sourceTree = "<group>"; };
 		B906B851893CA488140981F6 /* HotkeySupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySupport.swift; sourceTree = "<group>"; };
 		BC6C12DF332B64F2E5870B3A /* PersistentShellSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistentShellSession.swift; sourceTree = "<group>"; };
+		D3E4F5A6B7C80921E2F3A4B5 /* PersistentCLISession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistentCLISession.swift; sourceTree = "<group>"; };
 		BDCC2504CAF8FAD1E28BA027 /* HotkeySupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySupportTests.swift; sourceTree = "<group>"; };
 		BDD78EB3192991763287EAD9 /* PartialCorrectionSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartialCorrectionSupportTests.swift; sourceTree = "<group>"; };
 		BFA4DE7478749A962208C497 /* GhostEdit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GhostEdit.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -232,6 +234,7 @@
 				107C8005BF9B19116B7FD5BA /* main.swift */,
 				6A19352959464C2B26B64C91 /* MenuBarIconSupport.swift */,
 				78368B67EF8940E82511FBDA /* PartialCorrectionSupport.swift */,
+				D3E4F5A6B7C80921E2F3A4B5 /* PersistentCLISession.swift */,
 				BC6C12DF332B64F2E5870B3A /* PersistentShellSession.swift */,
 				84B92A5348A8EF285F2F8A0F /* SettingsExportSupport.swift */,
 				48F2DC407FC987FB7499B2ED /* SettingsLayoutSupport.swift */,
@@ -434,6 +437,7 @@
 				5A164E9FAA1017AE15ADD622 /* LaunchAtLoginManager.swift in Sources */,
 				013DA631B17FFBBD629C1DF1 /* MenuBarIconSupport.swift in Sources */,
 				8AB448BDAC459548B2E24619 /* PartialCorrectionSupport.swift in Sources */,
+				A1B2C3D4E5F60718A9B0C1D2 /* PersistentCLISession.swift in Sources */,
 				28AC827911C8D4C36D0CF7EE /* PersistentShellSession.swift in Sources */,
 				538906D980374DDB35E86E76 /* SettingsExportSupport.swift in Sources */,
 				1247CC94014D6011C95AA3EA /* SettingsLayoutSupport.swift in Sources */,
@@ -511,7 +515,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = GhostEdit/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -519,7 +523,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 5.0.1;
+				MARKETING_VERSION = 5.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};
@@ -551,7 +555,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = GhostEdit/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -559,7 +563,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 5.0.1;
+				MARKETING_VERSION = 5.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
 			};
