@@ -25,6 +25,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var writingCoachMenuItem: NSMenuItem?
     private var developerModeMenuItem: NSMenuItem?
     private var toneMenuItem: NSMenuItem?
+    private var advancedSubmenuItem: NSMenuItem?
 
     private var isProcessing = false
     private var isShowingAccessibilityAlert = false
@@ -33,7 +34,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var targetAppAtTrigger: NSRunningApplication?
     private var lastExternalActiveApp: NSRunningApplication?
 
-    private let statusPrefix = "Status: "
     private let idleMenuBarIcon = MenuBarIconSupport.descriptor(for: .idle)
     private let workingMenuBarIcon = MenuBarIconSupport.descriptor(for: .processing)
     private let timeFormatter: DateFormatter = {
@@ -89,12 +89,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
-        let status = NSMenuItem(title: "\(statusPrefix)Idle", action: nil, keyEquivalent: "")
+        // ── Status line ──
+        let config = configManager.loadConfig()
+        let provider = config.resolvedProvider
+        let model = config.resolvedModel(for: provider)
+        let modelDisplay = model.isEmpty ? provider.defaultModel : model
+        let status = NSMenuItem(
+            title: "\(provider.displayName) · \(modelDisplay) · Ready",
+            action: nil,
+            keyEquivalent: ""
+        )
         status.isEnabled = false
+        if let img = sfSymbol("circle.fill", size: 8) {
+            img.isTemplate = false
+            let tinted = tintedImage(img, color: .systemGreen)
+            status.image = tinted
+        }
         menu.addItem(status)
         statusMenuItem = status
 
         menu.addItem(.separator())
+
+        // ── CORRECTION section ──
+        menu.addItem(sectionHeader("CORRECTION"))
 
         let runNow = NSMenuItem(
             title: "Fix Selected Text",
@@ -102,6 +119,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         runNow.target = self
+        runNow.image = sfSymbol("pencil.and.outline", size: 15)
         menu.addItem(runNow)
         runNowMenuItem = runNow
 
@@ -111,10 +129,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         undo.target = self
+        undo.image = sfSymbol("arrow.uturn.backward", size: 15)
         menu.addItem(undo)
         undoMenuItem = undo
 
         menu.addItem(.separator())
+
+        // ── TOOLS section ──
+        menu.addItem(sectionHeader("TOOLS"))
 
         let settings = NSMenuItem(
             title: "Settings...",
@@ -122,6 +144,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ","
         )
         settings.target = self
+        settings.image = sfSymbol("gearshape", size: 15)
         menu.addItem(settings)
 
         let history = NSMenuItem(
@@ -130,6 +153,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         history.target = self
+        history.image = sfSymbol("clock", size: 15)
         menu.addItem(history)
         historyMenuItem = history
 
@@ -139,10 +163,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         writingCoach.target = self
+        writingCoach.image = sfSymbol("text.magnifyingglass", size: 15)
         menu.addItem(writingCoach)
         writingCoachMenuItem = writingCoach
 
         let toneItem = NSMenuItem(title: "Tone", action: nil, keyEquivalent: "")
+        toneItem.image = sfSymbol("speaker.wave.2", size: 15)
         let toneSubmenu = NSMenu()
         for preset in AppConfig.supportedPresets {
             let item = NSMenuItem(
@@ -159,17 +185,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         toneMenuItem = toneItem
         refreshToneMenuState()
 
-        menu.addItem(.separator())
-
         let statistics = NSMenuItem(
             title: "Statistics...",
             action: #selector(openStatisticsAction),
             keyEquivalent: ""
         )
         statistics.target = self
+        statistics.image = sfSymbol("chart.bar", size: 15)
         menu.addItem(statistics)
 
         menu.addItem(.separator())
+
+        // ── ADVANCED submenu ──
+        let advancedItem = NSMenuItem(title: "Advanced", action: nil, keyEquivalent: "")
+        advancedItem.image = sfSymbol("wrench.and.screwdriver", size: 15)
+        let advancedSubmenu = NSMenu()
 
         let openPrompt = NSMenuItem(
             title: "Open Prompt File",
@@ -177,7 +207,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         openPrompt.target = self
-        menu.addItem(openPrompt)
+        openPrompt.image = sfSymbol("doc.text", size: 15)
+        advancedSubmenu.addItem(openPrompt)
 
         let openConfig = NSMenuItem(
             title: "Open Config File",
@@ -185,7 +216,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         openConfig.target = self
-        menu.addItem(openConfig)
+        openConfig.image = sfSymbol("doc.badge.gearshape", size: 15)
+        advancedSubmenu.addItem(openConfig)
+
+        advancedSubmenu.addItem(.separator())
 
         let exportSettings = NSMenuItem(
             title: "Export Settings...",
@@ -193,7 +227,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         exportSettings.target = self
-        menu.addItem(exportSettings)
+        exportSettings.image = sfSymbol("square.and.arrow.up", size: 15)
+        advancedSubmenu.addItem(exportSettings)
 
         let importSettings = NSMenuItem(
             title: "Import Settings...",
@@ -201,7 +236,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         importSettings.target = self
-        menu.addItem(importSettings)
+        importSettings.image = sfSymbol("square.and.arrow.down", size: 15)
+        advancedSubmenu.addItem(importSettings)
+
+        advancedSubmenu.addItem(.separator())
 
         let checkAccessibility = NSMenuItem(
             title: "Check Accessibility Permission",
@@ -209,9 +247,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         checkAccessibility.target = self
-        menu.addItem(checkAccessibility)
+        checkAccessibility.image = sfSymbol("lock.shield", size: 15)
+        advancedSubmenu.addItem(checkAccessibility)
 
-        menu.addItem(.separator())
+        advancedSubmenu.addItem(.separator())
 
         let developerMode = NSMenuItem(
             title: "Developer Mode",
@@ -219,12 +258,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         developerMode.target = self
-        menu.addItem(developerMode)
+        developerMode.image = sfSymbol("terminal", size: 15)
+        advancedSubmenu.addItem(developerMode)
         developerModeMenuItem = developerMode
         refreshDeveloperModeMenuState()
 
+        advancedItem.submenu = advancedSubmenu
+        menu.addItem(advancedItem)
+        advancedSubmenuItem = advancedItem
+
         menu.addItem(.separator())
 
+        // ── ABOUT section ──
         let version = NSMenuItem(title: appVersionText(), action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
@@ -235,6 +280,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         checkUpdates.target = self
+        checkUpdates.image = sfSymbol("arrow.triangle.2.circlepath", size: 15)
         menu.addItem(checkUpdates)
 
         menu.addItem(.separator())
@@ -244,11 +290,39 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(quitAction),
             keyEquivalent: "q"
         )
+        quit.image = sfSymbol("power", size: 15)
         quit.target = self
         menu.addItem(quit)
 
         statusMenu = menu
         statusItem.menu = menu
+    }
+
+    private func sfSymbol(_ name: String, size: CGFloat) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: size, weight: .regular))
+    }
+
+    private func tintedImage(_ image: NSImage, color: NSColor) -> NSImage {
+        let tinted = image.copy() as! NSImage
+        tinted.lockFocus()
+        color.set()
+        NSRect(origin: .zero, size: tinted.size).fill(using: .sourceAtop)
+        tinted.unlockFocus()
+        return tinted
+    }
+
+    private func sectionHeader(_ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        item.attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 10, weight: .semibold),
+                .foregroundColor: NSColor.tertiaryLabelColor,
+            ]
+        )
+        return item
     }
 
     private func startObservingActiveApplication() {
@@ -1191,8 +1265,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setStatus(_ text: String) {
-        statusMenuItem?.title = "\(statusPrefix)\(text)"
-        statusItem.button?.toolTip = "GhostEdit\n\(text)"
+        let config = configManager.loadConfig()
+        let provider = config.resolvedProvider
+        let model = config.resolvedModel(for: provider)
+        let modelDisplay = model.isEmpty ? provider.defaultModel : model
+        statusMenuItem?.title = "\(provider.displayName) · \(modelDisplay) · \(text)"
+
+        // Update status dot color
+        let dotColor: NSColor
+        if text == "Idle" || text.hasPrefix("Last correction") || text.hasPrefix("Settings saved") {
+            dotColor = .systemGreen
+        } else if text.contains("Processing") || text.contains("Working") || text.contains("Copying") || text.contains("Analyzing") || text.contains("Checking") || text.contains("Retrying") {
+            dotColor = .systemOrange
+        } else if text.contains("failed") || text.contains("not found") || text.contains("required") || text.contains("No text") || text.contains("permission") {
+            dotColor = .systemRed
+        } else {
+            dotColor = .systemGreen
+        }
+        if let img = sfSymbol("circle.fill", size: 8) {
+            img.isTemplate = false
+            statusMenuItem?.image = tintedImage(img, color: dotColor)
+        }
+
+        statusItem.button?.toolTip = "GhostEdit\n\(provider.displayName) · \(modelDisplay)\n\(text)"
     }
 
     private func setMenuBarIcon(_ descriptor: MenuBarIconDescriptor) {
@@ -2338,10 +2433,39 @@ final class StreamingPreviewController: NSWindowController {
     }
 }
 
-final class SettingsWindowController: NSWindowController {
+final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     struct ModelOption {
         let title: String
         let value: String?
+    }
+
+    private enum Tab: String, CaseIterable {
+        case general = "general"
+        case hotkey = "hotkey"
+        case behavior = "behavior"
+        case advanced = "advanced"
+
+        var label: String {
+            switch self {
+            case .general: return "General"
+            case .hotkey: return "Hotkey"
+            case .behavior: return "Behavior"
+            case .advanced: return "Advanced"
+            }
+        }
+
+        var sfSymbolName: String {
+            switch self {
+            case .general: return "globe"
+            case .hotkey: return "keyboard"
+            case .behavior: return "slider.horizontal.3"
+            case .advanced: return "wrench.and.screwdriver"
+            }
+        }
+
+        var toolbarItemID: NSToolbarItem.Identifier {
+            NSToolbarItem.Identifier(rawValue)
+        }
     }
 
     private let configManager: ConfigManager
@@ -2392,7 +2516,9 @@ final class SettingsWindowController: NSWindowController {
         action: nil
     )
     private let hintLabel = NSTextField(labelWithString: "")
-    private let rootStack = NSStackView()
+
+    private var tabViews: [Tab: NSView] = [:]
+    private var currentTab: Tab = .general
 
     private let providerOptions: [CLIProvider] = [.claude, .codex, .gemini]
     private let hotkeyKeyOptions = HotkeySupport.keyOptions
@@ -2413,17 +2539,16 @@ final class SettingsWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "GhostEdit Settings"
+        window.title = "General"
+        window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(
-            width: SettingsLayoutSupport.windowWidth,
-            height: SettingsLayoutSupport.minWindowHeight
-        )
         window.center()
 
         super.init(window: window)
-        buildUI()
+        setupToolbar()
+        buildAllTabs()
         loadCurrentValues()
+        switchToTab(.general)
     }
 
     @available(*, unavailable)
@@ -2431,46 +2556,95 @@ final class SettingsWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func buildUI() {
-        guard let contentView = window?.contentView else {
-            return
+    // MARK: - Toolbar
+
+    private func setupToolbar() {
+        guard let window else { return }
+        let toolbar = NSToolbar(identifier: "SettingsToolbar")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconAndLabel
+        toolbar.allowsUserCustomization = false
+        toolbar.selectedItemIdentifier = Tab.general.toolbarItemID
+        window.toolbar = toolbar
+        window.toolbarStyle = .preference
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        Tab.allCases.map(\.toolbarItemID)
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        Tab.allCases.map(\.toolbarItemID)
+    }
+
+    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        Tab.allCases.map(\.toolbarItemID)
+    }
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        guard let tab = Tab(rawValue: itemIdentifier.rawValue) else { return nil }
+        let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+        item.label = tab.label
+        item.target = self
+        item.action = #selector(toolbarTabClicked(_:))
+        if let img = NSImage(systemSymbolName: tab.sfSymbolName, accessibilityDescription: tab.label) {
+            item.image = img
+        }
+        return item
+    }
+
+    @objc private func toolbarTabClicked(_ sender: NSToolbarItem) {
+        guard let tab = Tab(rawValue: sender.itemIdentifier.rawValue) else { return }
+        switchToTab(tab)
+    }
+
+    private func switchToTab(_ tab: Tab) {
+        guard let window, let contentView = window.contentView else { return }
+        currentTab = tab
+        window.toolbar?.selectedItemIdentifier = tab.toolbarItemID
+        window.title = tab.label
+
+        for (_, view) in tabViews {
+            view.removeFromSuperview()
         }
 
-        // Use a scroll view so long settings don't clip
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.drawsBackground = false
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(scrollView)
-
-        let clipView = NSClipView()
-        clipView.drawsBackground = false
-        scrollView.contentView = clipView
-
-        rootStack.orientation = .vertical
-        rootStack.spacing = SettingsLayoutSupport.sectionSpacing
-        rootStack.translatesAutoresizingMaskIntoConstraints = false
-
-        let documentView = NSView()
-        documentView.translatesAutoresizingMaskIntoConstraints = false
-        documentView.addSubview(rootStack)
-        scrollView.documentView = documentView
+        guard let tabView = tabViews[tab] else { return }
+        tabView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(tabView)
 
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-
-            rootStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 24),
-            rootStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -24),
-            rootStack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 20),
-            rootStack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -20),
-
-            documentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
+            tabView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            tabView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            tabView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            tabView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
         ])
 
-        // ── Provider & Model ──
+        contentView.layoutSubtreeIfNeeded()
+        let fittingHeight = tabView.fittingSize.height
+        let targetHeight = max(SettingsLayoutSupport.minWindowHeight, ceil(fittingHeight))
+
+        // Animate the window resize from the top edge
+        var frame = window.frame
+        let delta = targetHeight - frame.size.height
+        frame.origin.y -= delta
+        frame.size.height = targetHeight
+        window.animator().setFrame(frame, display: true)
+    }
+
+    // MARK: - Build Tabs
+
+    private func buildAllTabs() {
+        tabViews[.general] = buildGeneralTab()
+        tabViews[.hotkey] = buildHotkeyTab()
+        tabViews[.behavior] = buildBehaviorTab()
+        tabViews[.advanced] = buildAdvancedTab()
+    }
+
+    private func buildGeneralTab() -> NSView {
         providerPopup.removeAllItems()
         providerOptions.forEach { providerPopup.addItem(withTitle: $0.displayName) }
         providerPopup.target = self
@@ -2485,26 +2659,33 @@ final class SettingsWindowController: NSWindowController {
         customModelContainer.addArrangedSubview(makeFieldLabel("Custom"))
         customModelContainer.addArrangedSubview(customModelField)
 
-        let providerGroup = makeGroupBox(title: "Provider & Model", views: [
-            makeRow(label: makeFieldLabel("Provider"), field: providerPopup),
-            makeRow(label: makeFieldLabel("Model"), field: modelPopup),
-            customModelContainer,
-        ])
-        rootStack.addArrangedSubview(providerGroup)
-
-        // ── Language & Tone ──
         languagePopup.removeAllItems()
         AppConfig.supportedLanguages.forEach { languagePopup.addItem(withTitle: $0.displayName) }
         tonePresetPopup.removeAllItems()
         AppConfig.supportedPresets.forEach { tonePresetPopup.addItem(withTitle: $0.capitalized) }
 
-        let langToneGroup = makeGroupBox(title: "Language & Tone", views: [
-            makeRow(label: makeFieldLabel("Language"), field: languagePopup),
-            makeRow(label: makeFieldLabel("Tone"), field: tonePresetPopup),
-        ])
-        rootStack.addArrangedSubview(langToneGroup)
+        hintLabel.textColor = .tertiaryLabelColor
+        hintLabel.font = .systemFont(ofSize: 11)
+        hintLabel.maximumNumberOfLines = 3
+        hintLabel.lineBreakMode = .byWordWrapping
 
-        // ── Hotkey ──
+        let stack = makeTabStack(sections: [
+            makeSection(title: "Provider & Model", views: [
+                makeRow(label: makeFieldLabel("Provider"), field: providerPopup),
+                makeRow(label: makeFieldLabel("Model"), field: modelPopup),
+                customModelContainer,
+                hintLabel,
+            ]),
+            makeSection(title: "Language & Tone", views: [
+                makeRow(label: makeFieldLabel("Language"), field: languagePopup),
+                makeRow(label: makeFieldLabel("Tone"), field: tonePresetPopup),
+            ]),
+            makeButtonRow(),
+        ])
+        return stack
+    }
+
+    private func buildHotkeyTab() -> NSView {
         hotkeyKeyPopup.removeAllItems()
         hotkeyKeyOptions.forEach { hotkeyKeyPopup.addItem(withTitle: $0.title) }
         hotkeyKeyPopup.target = self
@@ -2527,53 +2708,129 @@ final class SettingsWindowController: NSWindowController {
         modStack.addArrangedSubview(controlModifierCheckbox)
         modStack.addArrangedSubview(shiftModifierCheckbox)
 
-        hotkeyPreviewLabel.textColor = .tertiaryLabelColor
-        hotkeyPreviewLabel.font = .systemFont(ofSize: 11)
+        hotkeyPreviewLabel.textColor = .secondaryLabelColor
+        hotkeyPreviewLabel.font = .systemFont(ofSize: 12, weight: .medium)
 
-        let hotkeyGroup = makeGroupBox(title: "Hotkey", views: [
-            makeRow(label: makeFieldLabel("Key"), field: hotkeyKeyPopup),
-            makeRow(label: makeFieldLabel("Modifiers"), field: modStack),
-            hotkeyPreviewLabel,
+        let stack = makeTabStack(sections: [
+            makeSection(title: "Keyboard Shortcut", views: [
+                makeRow(label: makeFieldLabel("Key"), field: hotkeyKeyPopup),
+                makeRow(label: makeFieldLabel("Modifiers"), field: modStack),
+                hotkeyPreviewLabel,
+            ]),
+            makeButtonRow(),
         ])
-        rootStack.addArrangedSubview(hotkeyGroup)
+        return stack
+    }
 
-        // ── Behavior ──
+    private func buildBehaviorTab() -> NSView {
         showDiffPreviewCheckbox.setContentHuggingPriority(.required, for: .vertical)
         clipboardOnlyModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
         soundFeedbackCheckbox.setContentHuggingPriority(.required, for: .vertical)
         notifyOnSuccessCheckbox.setContentHuggingPriority(.required, for: .vertical)
         launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
 
-        let behaviorGroup = makeGroupBox(title: "Behavior", views: [
-            showDiffPreviewCheckbox,
-            clipboardOnlyModeCheckbox,
-            soundFeedbackCheckbox,
-            notifyOnSuccessCheckbox,
-            launchAtLoginCheckbox,
+        let stack = makeTabStack(sections: [
+            makeSection(title: "Correction", views: [
+                showDiffPreviewCheckbox,
+                clipboardOnlyModeCheckbox,
+            ]),
+            makeSection(title: "Feedback", views: [
+                soundFeedbackCheckbox,
+                notifyOnSuccessCheckbox,
+            ]),
+            makeSection(title: "System", views: [
+                launchAtLoginCheckbox,
+            ]),
+            makeButtonRow(),
         ])
-        rootStack.addArrangedSubview(behaviorGroup)
+        return stack
+    }
 
-        // ── Advanced ──
-        historyLimitField.placeholderString = "200"
+    private func buildAdvancedTab() -> NSView {
+        historyLimitField.placeholderString = "50"
         historyLimitField.alignment = .left
         timeoutField.placeholderString = "60"
         timeoutField.alignment = .left
         developerModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
 
-        hintLabel.textColor = .tertiaryLabelColor
-        hintLabel.font = .systemFont(ofSize: 11)
-        hintLabel.maximumNumberOfLines = 3
-        hintLabel.lineBreakMode = .byWordWrapping
-
-        let advancedGroup = makeGroupBox(title: "Advanced", views: [
-            makeRow(label: makeFieldLabel("History limit"), field: historyLimitField),
-            makeRow(label: makeFieldLabel("Timeout (s)"), field: timeoutField),
-            developerModeCheckbox,
-            hintLabel,
+        let stack = makeTabStack(sections: [
+            makeSection(title: "Limits", views: [
+                makeRow(label: makeFieldLabel("History limit"), field: historyLimitField),
+                makeRow(label: makeFieldLabel("Timeout (s)"), field: timeoutField),
+            ]),
+            makeSection(title: "Debug", views: [
+                developerModeCheckbox,
+            ]),
+            makeButtonRow(),
         ])
-        rootStack.addArrangedSubview(advancedGroup)
+        return stack
+    }
 
-        // ── Buttons ──
+    // MARK: - Layout Helpers
+
+    private func makeTabStack(sections: [NSView]) -> NSView {
+        let stack = NSStackView(views: sections)
+        stack.orientation = .vertical
+        stack.spacing = SettingsLayoutSupport.sectionSpacing
+        stack.alignment = .leading
+        stack.edgeInsets = NSEdgeInsets(
+            top: SettingsLayoutSupport.verticalInset,
+            left: 32,
+            bottom: SettingsLayoutSupport.verticalInset,
+            right: 32
+        )
+        // Make the stack fill the window width
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        for section in sections {
+            section.translatesAutoresizingMaskIntoConstraints = false
+            section.widthAnchor.constraint(
+                equalToConstant: SettingsLayoutSupport.windowWidth - 64
+            ).isActive = true
+        }
+        return stack
+    }
+
+    private func makeSection(title: String, views: [NSView]) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let header = NSTextField(labelWithString: title)
+        header.font = .systemFont(ofSize: 13, weight: .semibold)
+        header.textColor = .labelColor
+        header.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(header)
+
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(separator)
+
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.spacing = SettingsLayoutSupport.rowSpacing
+        stack.alignment = .leading
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: container.topAnchor),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            header.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
+
+            separator.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
+            separator.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+
+            stack.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
+        return container
+    }
+
+    private func makeButtonRow() -> NSView {
         let buttonRow = NSStackView()
         buttonRow.orientation = .horizontal
         buttonRow.spacing = 10
@@ -2589,45 +2846,7 @@ final class SettingsWindowController: NSWindowController {
         buttonRow.addArrangedSubview(buttonSpacer)
         buttonRow.addArrangedSubview(closeButton)
         buttonRow.addArrangedSubview(saveButton)
-        rootStack.addArrangedSubview(buttonRow)
-
-        updateWindowHeightToFitContent()
-    }
-
-    private func makeGroupBox(title: String, views: [NSView]) -> NSView {
-        let container = NSView()
-        container.wantsLayer = true
-        container.layer?.cornerRadius = SettingsLayoutSupport.groupCornerRadius
-        container.layer?.borderWidth = 0.5
-        container.layer?.borderColor = NSColor.separatorColor.cgColor
-
-        let header = NSTextField(labelWithString: title.uppercased())
-        header.font = .systemFont(ofSize: 10, weight: .semibold)
-        header.textColor = .secondaryLabelColor
-        header.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(header)
-
-        let stack = NSStackView(views: views)
-        stack.orientation = .vertical
-        stack.spacing = SettingsLayoutSupport.rowSpacing
-        stack.alignment = .leading
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(stack)
-
-        let inset = SettingsLayoutSupport.groupInset
-
-        NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: container.topAnchor, constant: inset),
-            header.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: inset),
-            header.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -inset),
-
-            stack.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: inset),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -inset),
-            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -inset),
-        ])
-
-        return container
+        return buttonRow
     }
 
     private func makeFieldLabel(_ text: String) -> NSTextField {
@@ -2648,6 +2867,8 @@ final class SettingsWindowController: NSWindowController {
         row.addArrangedSubview(field)
         return row
     }
+
+    // MARK: - Load / Save
 
     private func loadCurrentValues() {
         let config = configManager.loadConfig()
@@ -2677,7 +2898,6 @@ final class SettingsWindowController: NSWindowController {
         let rawModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedModel = rawModel.isEmpty ? AppConfig.defaultModel(for: provider) : rawModel
         reloadModelOptions(for: provider, selectedModel: selectedModel)
-        updateWindowHeightToFitContent()
     }
 
     @objc private func providerPopupChanged() {
@@ -2773,18 +2993,6 @@ final class SettingsWindowController: NSWindowController {
         if isCustom {
             customModelField.becomeFirstResponder()
         }
-        updateWindowHeightToFitContent()
-    }
-
-    private func updateWindowHeightToFitContent() {
-        guard let window, let contentView = window.contentView else {
-            return
-        }
-
-        contentView.layoutSubtreeIfNeeded()
-        let preferredHeight = SettingsLayoutSupport.preferredWindowHeight(for: rootStack.fittingSize.height)
-        window.contentMinSize = NSSize(width: SettingsLayoutSupport.windowWidth, height: preferredHeight)
-        window.setContentSize(NSSize(width: SettingsLayoutSupport.windowWidth, height: preferredHeight))
     }
 
     private func selectedOptionValue() -> String? {
@@ -3157,6 +3365,12 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         }
 
         let text = rows[row].value(for: column)
+
+        // Status column: use a colored badge instead of plain text
+        if column == .status {
+            return makeStatusBadgeView(for: text, in: tableView)
+        }
+
         let viewID = NSUserInterfaceItemIdentifier("HistoryCell-\(column.rawValue)")
 
         let cellView: NSTableCellView
@@ -3190,6 +3404,58 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         cellView.textField?.stringValue = text
         cellView.textField?.toolTip = text
         return cellView
+    }
+
+    private func makeStatusBadgeView(for status: String, in tableView: NSTableView) -> NSView {
+        let viewID = NSUserInterfaceItemIdentifier("HistoryStatusBadge")
+        let isSuccess = status.lowercased().contains("success")
+        let badgeColor: NSColor = isSuccess ? .systemGreen : .systemRed
+        let badgeText = isSuccess ? "Success" : "Failed"
+
+        let container: NSView
+        if let reused = tableView.makeView(withIdentifier: viewID, owner: self) {
+            container = reused
+            // Update existing badge
+            if let badge = container.subviews.first {
+                badge.layer?.backgroundColor = badgeColor.withAlphaComponent(0.15).cgColor
+                badge.layer?.borderColor = badgeColor.withAlphaComponent(0.4).cgColor
+                if let label = badge.subviews.first as? NSTextField {
+                    label.stringValue = badgeText
+                    label.textColor = badgeColor
+                }
+            }
+        } else {
+            container = NSView()
+            container.identifier = viewID
+
+            let badge = NSView()
+            badge.wantsLayer = true
+            badge.layer?.cornerRadius = 4
+            badge.layer?.backgroundColor = badgeColor.withAlphaComponent(0.15).cgColor
+            badge.layer?.borderWidth = 0.5
+            badge.layer?.borderColor = badgeColor.withAlphaComponent(0.4).cgColor
+            badge.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(badge)
+
+            let label = NSTextField(labelWithString: badgeText)
+            label.font = .systemFont(ofSize: 10, weight: .semibold)
+            label.textColor = badgeColor
+            label.alignment = .center
+            label.translatesAutoresizingMaskIntoConstraints = false
+            badge.addSubview(label)
+
+            NSLayoutConstraint.activate([
+                badge.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                badge.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 6),
+                label.topAnchor.constraint(equalTo: badge.topAnchor, constant: 2),
+                label.bottomAnchor.constraint(equalTo: badge.bottomAnchor, constant: -2),
+                label.leadingAnchor.constraint(equalTo: badge.leadingAnchor, constant: 8),
+                label.trailingAnchor.constraint(equalTo: badge.trailingAnchor, constant: -8),
+            ])
+        }
+
+        container.toolTip = status
+        return container
     }
 
     @objc private func copyCellAction() {

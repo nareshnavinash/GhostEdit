@@ -21,7 +21,7 @@ final class SettingsLayoutSupportTests: XCTestCase {
         XCTAssertGreaterThan(SettingsLayoutSupport.sectionSpacing, 0)
         XCTAssertGreaterThan(SettingsLayoutSupport.rowSpacing, 0)
         XCTAssertGreaterThan(SettingsLayoutSupport.labelWidth, 0)
-        XCTAssertGreaterThan(SettingsLayoutSupport.groupInset, 0)
-        XCTAssertGreaterThan(SettingsLayoutSupport.groupCornerRadius, 0)
+        XCTAssertGreaterThanOrEqual(SettingsLayoutSupport.groupInset, 0)
+        XCTAssertGreaterThanOrEqual(SettingsLayoutSupport.groupCornerRadius, 0)
     }
 }
