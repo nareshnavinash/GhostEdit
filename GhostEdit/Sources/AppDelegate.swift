@@ -71,7 +71,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: false)
         syncLaunchAtLoginPreferenceSilently()
         registerHotkey()
-        shellRunner.prewarm()
         setStatus("Idle")
     }
 
@@ -1161,10 +1160,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         isProcessing = false
         targetAppAtTrigger = nil
         stopProcessingIndicator()
-
-        // Immediately spawn a fresh persistent CLI session so the next
-        // Cmd+E hits a warm process with zero bootstrap overhead.
-        shellRunner.spawnPersistentSession()
     }
 
     @discardableResult
