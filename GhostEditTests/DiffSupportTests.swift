@@ -171,4 +171,52 @@ final class DiffSupportTests: XCTestCase {
             .joined()
         XCTAssertEqual(insertionsAndEquals, new)
     }
+
+    // MARK: - charDiff
+
+    func testCharDiffIdenticalStrings() {
+        let segments = DiffSupport.charDiff(old: "hello", new: "hello")
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments.first?.kind, .equal)
+        XCTAssertEqual(segments.first?.text, "hello")
+    }
+
+    func testCharDiffSingleCharChange() {
+        let segments = DiffSupport.charDiff(old: "cat", new: "car")
+        // "ca" equal, "t" deleted, "r" inserted
+        let deletions = segments.filter { $0.kind == .deletion }.map(\.text).joined()
+        let insertions = segments.filter { $0.kind == .insertion }.map(\.text).joined()
+        XCTAssertEqual(deletions, "t")
+        XCTAssertEqual(insertions, "r")
+    }
+
+    func testCharDiffReconstructsOriginalAndNew() {
+        let old = "The quick fox"
+        let new = "The slow fox"
+        let segments = DiffSupport.charDiff(old: old, new: new)
+
+        let reconstructedOld = segments
+            .filter { $0.kind != .insertion }
+            .map(\.text)
+            .joined()
+        XCTAssertEqual(reconstructedOld, old)
+
+        let reconstructedNew = segments
+            .filter { $0.kind != .deletion }
+            .map(\.text)
+            .joined()
+        XCTAssertEqual(reconstructedNew, new)
+    }
+
+    func testCharDiffEmptyStrings() {
+        let segments = DiffSupport.charDiff(old: "", new: "")
+        XCTAssertTrue(segments.isEmpty)
+    }
+
+    func testCharDiffInsertionOnly() {
+        let segments = DiffSupport.charDiff(old: "", new: "abc")
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments.first?.kind, .insertion)
+        XCTAssertEqual(segments.first?.text, "abc")
+    }
 }

@@ -4,6 +4,7 @@ import Foundation
 enum HUDOverlayState: Equatable {
     case working
     case success
+    case successWithCount(Int)
     case error(String)
 }
 
@@ -73,6 +74,8 @@ enum HUDOverlaySupport {
             return HUDOverlayContent(emoji: "\u{1F47B}", message: "Working on it...")
         case .success:
             return HUDOverlayContent(emoji: "\u{1F47B}", message: "Done!")
+        case .successWithCount(let chars):
+            return HUDOverlayContent(emoji: "\u{1F47B}", message: "Done! (\(chars) chars fixed)")
         case .error(let detail):
             let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
             let message = trimmed.isEmpty ? defaultErrorMessage : trimmed
@@ -84,7 +87,7 @@ enum HUDOverlaySupport {
         switch state {
         case .working:
             return true
-        case .success, .error:
+        case .success, .successWithCount, .error:
             return false
         }
     }
@@ -93,7 +96,7 @@ enum HUDOverlaySupport {
         switch state {
         case .working:
             return workingAutoDismissDelay
-        case .success:
+        case .success, .successWithCount:
             return successAutoDismissDelay
         case .error:
             return errorAutoDismissDelay

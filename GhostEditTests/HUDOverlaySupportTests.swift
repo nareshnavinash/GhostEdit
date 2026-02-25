@@ -18,6 +18,23 @@ final class HUDOverlaySupportTests: XCTestCase {
         XCTAssertEqual(content.message, "Done!")
     }
 
+    func testContentForSuccessWithCountState() {
+        let content = HUDOverlaySupport.content(for: .successWithCount(142))
+        XCTAssertEqual(content.emoji, "\u{1F47B}")
+        XCTAssertEqual(content.message, "Done! (142 chars fixed)")
+    }
+
+    func testSuccessWithCountSpectaclesIsFalse() {
+        XCTAssertFalse(HUDOverlaySupport.showsSpectacles(for: .successWithCount(50)))
+    }
+
+    func testSuccessWithCountAutoDismissDelay() {
+        XCTAssertEqual(
+            HUDOverlaySupport.autoDismissDelay(for: .successWithCount(50)),
+            HUDOverlaySupport.successAutoDismissDelay
+        )
+    }
+
     func testContentForErrorStateWithDetail() {
         let content = HUDOverlaySupport.content(for: .error("Network timeout"))
         XCTAssertEqual(content.emoji, "\u{1F47B}")
@@ -91,6 +108,7 @@ final class HUDOverlaySupportTests: XCTestCase {
     func testAllStatesReturnNonNilDelay() {
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .working))
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .success))
+        XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .successWithCount(10)))
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .error("x")))
     }
 
@@ -208,8 +226,11 @@ final class HUDOverlaySupportTests: XCTestCase {
     func testHUDOverlayStateEquatable() {
         XCTAssertEqual(HUDOverlayState.working, HUDOverlayState.working)
         XCTAssertEqual(HUDOverlayState.success, HUDOverlayState.success)
+        XCTAssertEqual(HUDOverlayState.successWithCount(10), HUDOverlayState.successWithCount(10))
         XCTAssertEqual(HUDOverlayState.error("a"), HUDOverlayState.error("a"))
         XCTAssertNotEqual(HUDOverlayState.working, HUDOverlayState.success)
+        XCTAssertNotEqual(HUDOverlayState.successWithCount(10), HUDOverlayState.successWithCount(20))
+        XCTAssertNotEqual(HUDOverlayState.success, HUDOverlayState.successWithCount(10))
         XCTAssertNotEqual(HUDOverlayState.error("a"), HUDOverlayState.error("b"))
         XCTAssertNotEqual(HUDOverlayState.working, HUDOverlayState.error("a"))
         XCTAssertNotEqual(HUDOverlayState.success, HUDOverlayState.error("a"))
@@ -228,7 +249,7 @@ final class HUDOverlaySupportTests: XCTestCase {
     // MARK: - Content consistency
 
     func testAllStatesProduceNonEmptyContent() {
-        for state: HUDOverlayState in [.working, .success, .error("test")] {
+        for state: HUDOverlayState in [.working, .success, .successWithCount(99), .error("test")] {
             let content = HUDOverlaySupport.content(for: state)
             XCTAssertFalse(content.emoji.isEmpty, "emoji should not be empty for \(state)")
             XCTAssertFalse(content.message.isEmpty, "message should not be empty for \(state)")

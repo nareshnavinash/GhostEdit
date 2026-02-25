@@ -208,6 +208,15 @@ enum DiffSupport {
         return segments
     }
 
+    /// Compute a character-level diff between `old` and `new`.
+    /// More precise than wordDiff for showing exact changes.
+    static func charDiff(old: String, new: String) -> [DiffSegment] {
+        let oldChars = Array(old).map { String($0) }
+        let newChars = Array(new).map { String($0) }
+        let edits = myersDiff(old: oldChars, new: newChars)
+        return coalesce(edits)
+    }
+
     // MARK: - Helpers
 
     private static func wordCount(_ text: String) -> Int {

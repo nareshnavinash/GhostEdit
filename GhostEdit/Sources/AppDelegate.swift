@@ -26,6 +26,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var developerModeMenuItem: NSMenuItem?
     private var toneMenuItem: NSMenuItem?
     private var advancedSubmenuItem: NSMenuItem?
+    private var checkUpdatesMenuItem: NSMenuItem?
 
     private var isProcessing = false
     private var isShowingAccessibilityAlert = false
@@ -120,6 +121,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         runNow.target = self
         runNow.image = sfSymbol("pencil.and.outline", size: 15)
+        // Show current hotkey combo as tooltip hint
+        let hotkeyDisplay = HotkeySupport.displayString(
+            keyCode: config.hotkeyKeyCode,
+            modifiers: config.hotkeyModifiers
+        )
+        runNow.toolTip = "Hotkey: \(hotkeyDisplay)"
         menu.addItem(runNow)
         runNowMenuItem = runNow
 
@@ -279,6 +286,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // ── ABOUT section ──
         let version = NSMenuItem(title: appVersionText(), action: nil, keyEquivalent: "")
         version.isEnabled = false
+        version.image = sfSymbol("ghost", size: 15) ?? sfSymbol("sparkles", size: 15)
         menu.addItem(version)
 
         let checkUpdates = NSMenuItem(
@@ -289,6 +297,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         checkUpdates.target = self
         checkUpdates.image = sfSymbol("arrow.triangle.2.circlepath", size: 15)
         menu.addItem(checkUpdates)
+        checkUpdatesMenuItem = checkUpdates
 
         menu.addItem(.separator())
 
@@ -834,7 +843,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         self.clipboardSnapshot = nil
                         let time = self.timeFormatter.string(from: Date())
                         self.setStatus("Corrected text copied to clipboard at \(time)")
-                        self.updateHUD(state: .success)
+                        self.updateHUD(state: .successWithCount(correctedText.count))
                         self.playSuccessSound()
                         self.notifySuccessIfEnabled()
                         self.finishProcessing()
@@ -865,7 +874,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                     let time = self.timeFormatter.string(from: Date())
                                     self.setStatus("Last correction succeeded at \(time)")
                                     self.restoreClipboardSnapshot(after: 0)
-                                    self.updateHUD(state: .success)
+                                    self.updateHUD(state: .successWithCount(correctedText.count))
                                     self.playSuccessSound()
                                     self.notifySuccessIfEnabled()
                                     self.finishProcessing()
@@ -1074,7 +1083,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         let time = self.timeFormatter.string(from: Date())
                         self.setStatus("Last correction succeeded at \(time)")
                         self.restoreClipboardSnapshot(after: 0)
-                        self.updateHUD(state: .success)
+                        self.updateHUD(state: .successWithCount(correctedText.count))
                         self.playSuccessSound()
                         self.notifySuccessIfEnabled()
                         self.finishProcessing()
@@ -1113,7 +1122,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 let time = self.timeFormatter.string(from: Date())
                 self.setStatus("Last correction succeeded at \(time)")
-                self.updateHUD(state: .success)
+                self.updateHUD(state: .successWithCount(correctedText.count))
                 self.playSuccessSound()
                 self.notifySuccessIfEnabled()
 
@@ -1472,6 +1481,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 let alert = NSAlert()
                 alert.messageText = "Update Check"
                 if info.isUpdateAvailable {
+                    self.checkUpdatesMenuItem?.title = "Update Available (v\(info.latest))"
+                    if let badge = self.sfSymbol("exclamationmark.circle.fill", size: 15) {
+                        badge.isTemplate = false
+                        self.checkUpdatesMenuItem?.image = self.tintedImage(badge, color: .systemOrange)
+                    }
                     alert.informativeText = "A new version is available!\n\nCurrent: \(info.current)\nLatest: \(info.latest)"
                     alert.addButton(withTitle: "Open Downloads")
                     alert.addButton(withTitle: "Later")
@@ -1877,7 +1891,8 @@ final class DeveloperConsoleController: NSWindowController {
         )
         window.title = "GhostEdit Developer Console"
         window.isReleasedWhenClosed = false
-        window.center()
+        window.setFrameAutosaveName("GhostEditDeveloperConsole")
+        if !window.setFrameUsingName("GhostEditDeveloperConsole") { window.center() }
 
         super.init(window: window)
         buildUI()
@@ -2009,7 +2024,9 @@ final class DiffPreviewController: NSWindowController {
             defer: false
         )
         window.title = "Review Changes"
-        window.center()
+        window.titlebarAppearsTransparent = true
+        window.setFrameAutosaveName("GhostEditDiffPreview")
+        if !window.setFrameUsingName("GhostEditDiffPreview") { window.center() }
         window.minSize = NSSize(width: 400, height: 300)
         super.init(window: window)
         buildUI()
@@ -2053,9 +2070,14 @@ final class DiffPreviewController: NSWindowController {
         scrollView.documentView = textView
         contentView.addSubview(scrollView)
 
-        // Buttons
+        // Buttons — green primary, plain secondary
         let applyButton = NSButton(title: "Apply", target: self, action: #selector(applyClicked))
         applyButton.keyEquivalent = "\r"
+        applyButton.bezelStyle = .rounded
+        applyButton.contentTintColor = .white
+        applyButton.wantsLayer = true
+        applyButton.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        applyButton.layer?.cornerRadius = 5
         applyButton.translatesAutoresizingMaskIntoConstraints = false
 
         let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelClicked))
@@ -2142,9 +2164,16 @@ final class StreamingPreviewController: NSWindowController {
     private let cancelButton: NSButton
     private let leftScrollView = NSScrollView()
     private let rightScrollView = NSScrollView()
+    private let statsLabel = NSTextField(labelWithString: "")
 
     private var latestCorrectedText = ""
     private(set) var isComplete = false
+
+    // Change navigation (Item 31)
+    private let prevChangeButton = NSButton()
+    private let nextChangeButton = NSButton()
+    private var changeRanges: [(left: NSRange, right: NSRange)] = []
+    private var currentChangeIndex: Int = -1
 
     init(
         originalText: String,
@@ -2167,7 +2196,9 @@ final class StreamingPreviewController: NSWindowController {
             defer: false
         )
         window.title = "Streaming Preview"
-        window.center()
+        window.titlebarAppearsTransparent = true
+        window.setFrameAutosaveName("GhostEditStreamingPreview")
+        if !window.setFrameUsingName("GhostEditStreamingPreview") { window.center() }
         window.minSize = NSSize(width: 600, height: 350)
         super.init(window: window)
         acceptButton.target = self
@@ -2199,16 +2230,38 @@ final class StreamingPreviewController: NSWindowController {
         isComplete = true
         latestCorrectedText = correctedText
 
-        let diff = DiffSupport.wordDiff(old: originalText, new: correctedText)
-        let changeCount = StreamingPreviewSupport.changeCount(from: diff)
+        let wordDiff = DiffSupport.wordDiff(old: originalText, new: correctedText)
+        let changeCount = StreamingPreviewSupport.changeCount(from: wordDiff)
         statusLabel.stringValue = StreamingPreviewSupport.completedStatus(changeCount: changeCount)
         acceptButton.isEnabled = changeCount > 0
         regenerateButton.isEnabled = true
 
+        // Stats bar
+        let summary = DiffSupport.changeSummary(segments: wordDiff)
+        let similarity = computeSimilarity(old: originalText, new: correctedText)
+        statsLabel.stringValue = "\(summary) · \(similarity)% similarity"
+        statsLabel.isHidden = false
+
+        // Character-level diff for precise highlighting
+        let charDiff = DiffSupport.charDiff(old: originalText, new: correctedText)
+
         // Side-by-side: left shows original with deletions highlighted,
         // right shows corrected with insertions highlighted.
-        leftTextView.textStorage?.setAttributedString(buildOriginalSide(from: diff))
-        rightTextView.textStorage?.setAttributedString(buildCorrectedSide(from: diff))
+        leftTextView.textStorage?.setAttributedString(buildOriginalSide(from: charDiff))
+        rightTextView.textStorage?.setAttributedString(buildCorrectedSide(from: charDiff))
+
+        // Build change ranges for navigation
+        changeRanges = buildChangeRanges(from: charDiff)
+        currentChangeIndex = -1
+        updateNavButtonStates()
+    }
+
+    private func computeSimilarity(old: String, new: String) -> Int {
+        let maxLen = max(old.count, new.count)
+        guard maxLen > 0 else { return 100 }
+        let diff = DiffSupport.wordDiff(old: old, new: new)
+        let equalChars = diff.filter { $0.kind == .equal }.map(\.text).joined().count
+        return Int(round(Double(equalChars) / Double(maxLen) * 100))
     }
 
     func resetForRegeneration() {
@@ -2217,6 +2270,10 @@ final class StreamingPreviewController: NSWindowController {
         acceptButton.isEnabled = false
         regenerateButton.isEnabled = false
         statusLabel.stringValue = "Regenerating..."
+        statsLabel.isHidden = true
+        changeRanges = []
+        currentChangeIndex = -1
+        updateNavButtonStates()
 
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13),
@@ -2324,6 +2381,34 @@ final class StreamingPreviewController: NSWindowController {
         cancelButton.keyEquivalent = "\u{1b}"
         cancelButton.translatesAutoresizingMaskIntoConstraints = false
 
+        // Stats bar (hidden until completion)
+        statsLabel.font = .systemFont(ofSize: 11)
+        statsLabel.textColor = .tertiaryLabelColor
+        statsLabel.isHidden = true
+        statsLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(statsLabel)
+
+        // Change navigation buttons (Item 31)
+        prevChangeButton.image = NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Previous Change")
+        prevChangeButton.bezelStyle = .rounded
+        prevChangeButton.isBordered = true
+        prevChangeButton.toolTip = "Previous Change"
+        prevChangeButton.isEnabled = false
+        prevChangeButton.target = self
+        prevChangeButton.action = #selector(prevChangeClicked)
+        prevChangeButton.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(prevChangeButton)
+
+        nextChangeButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Next Change")
+        nextChangeButton.bezelStyle = .rounded
+        nextChangeButton.isBordered = true
+        nextChangeButton.toolTip = "Next Change"
+        nextChangeButton.isEnabled = false
+        nextChangeButton.target = self
+        nextChangeButton.action = #selector(nextChangeClicked)
+        nextChangeButton.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(nextChangeButton)
+
         contentView.addSubview(acceptButton)
         contentView.addSubview(regenerateButton)
         contentView.addSubview(cancelButton)
@@ -2352,19 +2437,31 @@ final class StreamingPreviewController: NSWindowController {
             leftScrollView.topAnchor.constraint(equalTo: originalHeaderBg.bottomAnchor, constant: 4),
             leftScrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
             leftScrollView.trailingAnchor.constraint(equalTo: divider.leadingAnchor, constant: -4),
-            leftScrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
+            leftScrollView.bottomAnchor.constraint(equalTo: statsLabel.topAnchor, constant: -6),
             leftScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 200),
 
             divider.topAnchor.constraint(equalTo: originalHeaderBg.bottomAnchor, constant: 4),
             divider.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             divider.widthAnchor.constraint(equalToConstant: 1),
-            divider.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
+            divider.bottomAnchor.constraint(equalTo: statsLabel.topAnchor, constant: -6),
 
             rightScrollView.topAnchor.constraint(equalTo: correctedHeaderBg.bottomAnchor, constant: 4),
             rightScrollView.leadingAnchor.constraint(equalTo: divider.trailingAnchor, constant: 4),
             rightScrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            rightScrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
+            rightScrollView.bottomAnchor.constraint(equalTo: statsLabel.topAnchor, constant: -6),
             rightScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 200),
+
+            statsLabel.leadingAnchor.constraint(equalTo: nextChangeButton.trailingAnchor, constant: 8),
+            statsLabel.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -6),
+
+            // Change navigation buttons — left side of stats bar
+            prevChangeButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            prevChangeButton.centerYAnchor.constraint(equalTo: statsLabel.centerYAnchor),
+            prevChangeButton.widthAnchor.constraint(equalToConstant: 28),
+
+            nextChangeButton.leadingAnchor.constraint(equalTo: prevChangeButton.trailingAnchor, constant: 2),
+            nextChangeButton.centerYAnchor.constraint(equalTo: statsLabel.centerYAnchor),
+            nextChangeButton.widthAnchor.constraint(equalToConstant: 28),
 
             acceptButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             acceptButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
@@ -2399,6 +2496,13 @@ final class StreamingPreviewController: NSWindowController {
         textView.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         textView.drawsBackground = false
+
+        // Line numbers (Item 29)
+        scrollView.hasHorizontalRuler = false
+        scrollView.hasVerticalRuler = true
+        scrollView.rulersVisible = true
+        let ruler = LineNumberRulerView(textView: textView)
+        scrollView.verticalRulerView = ruler
 
         scrollView.documentView = textView
     }
@@ -2451,6 +2555,79 @@ final class StreamingPreviewController: NSWindowController {
         return result
     }
 
+    // MARK: - Change Navigation (Item 31)
+
+    private func buildChangeRanges(from segments: [DiffSegment]) -> [(left: NSRange, right: NSRange)] {
+        var ranges: [(left: NSRange, right: NSRange)] = []
+        var leftOffset = 0
+        var rightOffset = 0
+        for segment in segments {
+            let len = segment.text.utf16.count
+            switch segment.kind {
+            case .equal:
+                leftOffset += len
+                rightOffset += len
+            case .deletion:
+                ranges.append((left: NSRange(location: leftOffset, length: len),
+                                right: NSRange(location: rightOffset, length: 0)))
+                leftOffset += len
+            case .insertion:
+                if let last = ranges.last, last.right.location + last.right.length == rightOffset,
+                   last.left.location + last.left.length == leftOffset {
+                    // Merge adjacent deletion+insertion into one change
+                    ranges[ranges.count - 1] = (left: last.left,
+                                                  right: NSRange(location: last.right.location, length: len))
+                } else {
+                    ranges.append((left: NSRange(location: leftOffset, length: 0),
+                                    right: NSRange(location: rightOffset, length: len)))
+                }
+                rightOffset += len
+            }
+        }
+        return ranges
+    }
+
+    private func updateNavButtonStates() {
+        let hasChanges = !changeRanges.isEmpty
+        prevChangeButton.isEnabled = hasChanges && currentChangeIndex > 0
+        nextChangeButton.isEnabled = hasChanges && currentChangeIndex < changeRanges.count - 1
+    }
+
+    @objc private func prevChangeClicked() {
+        guard currentChangeIndex > 0 else { return }
+        currentChangeIndex -= 1
+        scrollToCurrentChange()
+        updateNavButtonStates()
+    }
+
+    @objc private func nextChangeClicked() {
+        guard currentChangeIndex < changeRanges.count - 1 else { return }
+        currentChangeIndex += 1
+        scrollToCurrentChange()
+        updateNavButtonStates()
+    }
+
+    private func scrollToCurrentChange() {
+        guard changeRanges.indices.contains(currentChangeIndex) else { return }
+        let change = changeRanges[currentChangeIndex]
+
+        // Scroll left side to the deletion
+        if change.left.length > 0 {
+            leftTextView.scrollRangeToVisible(change.left)
+            leftTextView.setSelectedRange(change.left)
+        } else {
+            leftTextView.scrollRangeToVisible(NSRange(location: change.left.location, length: 0))
+        }
+
+        // Scroll right side to the insertion
+        if change.right.length > 0 {
+            rightTextView.scrollRangeToVisible(change.right)
+            rightTextView.setSelectedRange(change.right)
+        } else {
+            rightTextView.scrollRangeToVisible(NSRange(location: change.right.location, length: 0))
+        }
+    }
+
     @objc private func acceptClicked() {
         guard isComplete else { return }
         window?.close()
@@ -2466,6 +2643,95 @@ final class StreamingPreviewController: NSWindowController {
     @objc private func cancelClicked() {
         window?.close()
         onCancel()
+    }
+}
+
+// MARK: - Line Number Ruler View (Item 29)
+
+private final class LineNumberRulerView: NSRulerView {
+    private weak var textView: NSTextView?
+    private static let rulerWidth: CGFloat = 36
+    private static let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    private static let textColor = NSColor.tertiaryLabelColor
+
+    init(textView: NSTextView) {
+        self.textView = textView
+        super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
+        ruleThickness = Self.rulerWidth
+        clientView = textView
+
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(textDidChange(_:)),
+            name: NSText.didChangeNotification, object: textView
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(textDidChange(_:)),
+            name: NSView.boundsDidChangeNotification,
+            object: textView.enclosingScrollView?.contentView
+        )
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) { fatalError() }
+
+    @objc private func textDidChange(_ notification: Notification) {
+        needsDisplay = true
+    }
+
+    override func drawHashMarksAndLabels(in rect: NSRect) {
+        guard let textView = textView,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else { return }
+
+        let visibleRect = scrollView?.contentView.bounds ?? rect
+        let textInset = textView.textContainerInset
+
+        let visibleGlyphRange = layoutManager.glyphRange(
+            forBoundingRect: visibleRect, in: textContainer
+        )
+        let visibleCharRange = layoutManager.characterRange(
+            forGlyphRange: visibleGlyphRange, actualGlyphRange: nil
+        )
+
+        let text = textView.string as NSString
+        var lineNumber = 1
+
+        // Count lines before visible range
+        text.enumerateSubstrings(
+            in: NSRange(location: 0, length: visibleCharRange.location),
+            options: [.byLines, .substringNotRequired]
+        ) { _, _, _, _ in
+            lineNumber += 1
+        }
+
+        // Draw line numbers for visible lines
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: Self.font,
+            .foregroundColor: Self.textColor
+        ]
+
+        text.enumerateSubstrings(
+            in: visibleCharRange,
+            options: [.byLines, .substringNotRequired]
+        ) { _, substringRange, _, _ in
+            let glyphRange = layoutManager.glyphRange(
+                forCharacterRange: NSRange(location: substringRange.location, length: 0),
+                actualCharacterRange: nil
+            )
+            var lineRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphRange.location, effectiveRange: nil
+            )
+            lineRect.origin.y += textInset.height - visibleRect.origin.y
+
+            let numStr = "\(lineNumber)" as NSString
+            let strSize = numStr.size(withAttributes: attrs)
+            let drawPoint = NSPoint(
+                x: Self.rulerWidth - strSize.width - 5,
+                y: lineRect.origin.y + (lineRect.height - strSize.height) / 2
+            )
+            numStr.draw(at: drawPoint, withAttributes: attrs)
+            lineNumber += 1
+        }
     }
 }
 
@@ -2522,6 +2788,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         target: nil,
         action: nil
     )
+    private let launchAtLoginSwitch = NSSwitch()
     private let languagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let historyLimitField = NSTextField(string: "")
     private let timeoutField = NSTextField(string: "")
@@ -2580,7 +2847,8 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         window.title = "General"
         window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
-        window.center()
+        window.setFrameAutosaveName("GhostEditSettings")
+        if !window.setFrameUsingName("GhostEditSettings") { window.center() }
 
         super.init(window: window)
         setupToolbar()
@@ -2861,9 +3129,10 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                 ),
             ]),
             makeSection(title: "System", views: [
-                makeCheckboxWithDescription(
-                    checkbox: launchAtLoginCheckbox,
-                    description: "Adds GhostEdit to your login items"
+                makeSwitchRow(
+                    label: "Launch at Login",
+                    toggle: launchAtLoginSwitch,
+                    description: "Start GhostEdit automatically when you log in"
                 ),
             ]),
             makeButtonRow(),
@@ -2973,6 +3242,10 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let saveButton = NSButton(title: "Save", target: self, action: #selector(saveClicked))
         saveButton.bezelStyle = .rounded
         saveButton.keyEquivalent = "\r"
+        saveButton.contentTintColor = .white
+        saveButton.wantsLayer = true
+        saveButton.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        saveButton.layer?.cornerRadius = 5
 
         let buttonSpacer = NSView()
         buttonSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -3011,6 +3284,33 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         return label
     }
 
+    private func makeSwitchRow(label: String, toggle: NSSwitch, description: String) -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 10
+        row.alignment = .centerY
+
+        let labelField = NSTextField(labelWithString: label)
+        labelField.font = .systemFont(ofSize: 13)
+        row.addArrangedSubview(labelField)
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(spacer)
+        row.addArrangedSubview(toggle)
+
+        let container = NSStackView()
+        container.orientation = .vertical
+        container.spacing = 2
+        container.alignment = .leading
+        container.addArrangedSubview(row)
+
+        let desc = makeDescription(description)
+        container.addArrangedSubview(desc)
+
+        return container
+    }
+
     private func makeCheckboxWithDescription(checkbox: NSButton, description: String) -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -3033,6 +3333,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let providerIndex = providerOptions.firstIndex(of: provider) ?? 0
         providerPopup.selectItem(at: providerIndex)
         launchAtLoginCheckbox.state = config.launchAtLogin ? .on : .off
+        launchAtLoginSwitch.state = config.launchAtLogin ? .on : .off
         soundFeedbackCheckbox.state = config.soundFeedbackEnabled ? .on : .off
         notifyOnSuccessCheckbox.state = config.notifyOnSuccess ? .on : .off
         clipboardOnlyModeCheckbox.state = config.clipboardOnlyMode ? .on : .off
@@ -3238,7 +3539,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         config.model = model
         config.hotkeyKeyCode = hotkeyKeyCode
         config.hotkeyModifiers = hotkeyModifiers
-        config.launchAtLogin = (launchAtLoginCheckbox.state == .on)
+        config.launchAtLogin = (launchAtLoginSwitch.state == .on)
         config.soundFeedbackEnabled = (soundFeedbackCheckbox.state == .on)
         config.notifyOnSuccess = (notifyOnSuccessCheckbox.state == .on)
         config.clipboardOnlyMode = (clipboardOnlyModeCheckbox.state == .on)
@@ -3267,7 +3568,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                 alert.runModal()
             }
             onConfigSaved(config)
-            close()
+            showSaveConfirmation()
         } catch {
             let alert = NSAlert()
             alert.alertStyle = .critical
@@ -3280,6 +3581,58 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     @objc private func closeClicked() {
         close()
     }
+
+    private func showSaveConfirmation() {
+        guard let window else {
+            close()
+            return
+        }
+
+        // Show a brief "Settings Saved" overlay before closing
+        let overlay = NSView()
+        overlay.wantsLayer = true
+        overlay.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.9).cgColor
+        overlay.layer?.cornerRadius = 8
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+
+        let checkmark = NSTextField(labelWithString: "\u{2713} Settings Saved")
+        checkmark.font = .systemFont(ofSize: 14, weight: .semibold)
+        checkmark.textColor = .white
+        checkmark.alignment = .center
+        checkmark.translatesAutoresizingMaskIntoConstraints = false
+        overlay.addSubview(checkmark)
+
+        guard let contentView = window.contentView else {
+            close()
+            return
+        }
+        contentView.addSubview(overlay)
+
+        NSLayoutConstraint.activate([
+            overlay.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            overlay.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            checkmark.topAnchor.constraint(equalTo: overlay.topAnchor, constant: 12),
+            checkmark.bottomAnchor.constraint(equalTo: overlay.bottomAnchor, constant: -12),
+            checkmark.leadingAnchor.constraint(equalTo: overlay.leadingAnchor, constant: 24),
+            checkmark.trailingAnchor.constraint(equalTo: overlay.trailingAnchor, constant: -24),
+        ])
+
+        overlay.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            overlay.animator().alphaValue = 1
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.2
+                overlay.animator().alphaValue = 0
+            }, completionHandler: {
+                overlay.removeFromSuperview()
+                self?.close()
+            })
+        }
+    }
 }
 
 final class HistoryWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
@@ -3288,7 +3641,13 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
     private var emptyStateContainer: NSView?
     private let cellFont = NSFont.systemFont(ofSize: 12)
     private var rows: [HistoryTableRow] = []
+    private var filteredRows: [HistoryTableRow] = []
+    private var filteredEntries: [CorrectionHistoryEntry] = []
     private var entries: [CorrectionHistoryEntry] = []
+    private let searchField = NSSearchField()
+    private let filterSegment = NSSegmentedControl(labels: ["All", "Success", "Failed"], trackingMode: .selectOne, target: nil, action: nil)
+    private var currentFilter: Int = 0  // 0=All, 1=Success, 2=Failed
+    private var searchQuery: String = ""
     private let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -3310,7 +3669,8 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         )
         window.title = "GhostEdit History"
         window.isReleasedWhenClosed = false
-        window.center()
+        window.setFrameAutosaveName("GhostEditHistory")
+        if !window.setFrameUsingName("GhostEditHistory") { window.center() }
 
         super.init(window: window)
         buildUI()
@@ -3332,10 +3692,36 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
             from: entries,
             timestampFormatter: { self.timestampFormatter.string(from: $0) }
         )
+        applyFilters()
+    }
+
+    private func applyFilters() {
+        var zipped = Array(zip(entries, rows))
+
+        // Apply status filter
+        switch currentFilter {
+        case 1: zipped = zipped.filter { $0.0.succeeded }
+        case 2: zipped = zipped.filter { !$0.0.succeeded }
+        default: break
+        }
+
+        // Apply search query
+        if !searchQuery.isEmpty {
+            let query = searchQuery.lowercased()
+            zipped = zipped.filter { entry, row in
+                row.original.lowercased().contains(query)
+                    || row.generated.lowercased().contains(query)
+                    || row.provider.lowercased().contains(query)
+                    || row.model.lowercased().contains(query)
+            }
+        }
+
+        filteredEntries = zipped.map(\.0)
+        filteredRows = zipped.map(\.1)
 
         tableView.reloadData()
         refreshRowHeights()
-        emptyStateContainer?.isHidden = !rows.isEmpty
+        emptyStateContainer?.isHidden = !filteredRows.isEmpty
     }
 
     private func buildUI() {
@@ -3369,9 +3755,24 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         controlsRow.spacing = 10
         controlsRow.alignment = .centerY
 
+        filterSegment.selectedSegment = 0
+        filterSegment.target = self
+        filterSegment.action = #selector(filterSegmentChanged)
+        controlsRow.addArrangedSubview(filterSegment)
+
+        searchField.placeholderString = "Search corrections..."
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
+        searchField.target = self
+        searchField.action = #selector(searchFieldChanged)
+        controlsRow.addArrangedSubview(searchField)
+
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        controlsRow.addArrangedSubview(spacer)
+
         let exportButton = NSButton(title: "Export CSV...", target: self, action: #selector(exportCSVClicked))
         controlsRow.addArrangedSubview(exportButton)
-        controlsRow.addArrangedSubview(NSView())
         rootStack.addArrangedSubview(controlsRow)
 
         // Empty state: ghost icon + styled message
@@ -3521,17 +3922,17 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        rows.count
+        filteredRows.count
     }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        guard rows.indices.contains(row) else {
+        guard filteredRows.indices.contains(row) else {
             return 30
         }
 
         let padding: CGFloat = 10
         var maxTextHeight: CGFloat = 20
-        let currentRow = rows[row]
+        let currentRow = filteredRows[row]
         for column in HistoryTableColumn.allCases {
             guard
                 let tableColumn = tableView.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier(column.rawValue))
@@ -3554,18 +3955,19 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard
-            rows.indices.contains(row),
+            filteredRows.indices.contains(row),
             let tableColumn,
             let column = HistoryTableColumn(rawValue: tableColumn.identifier.rawValue)
         else {
             return nil
         }
 
-        let text = rows[row].value(for: column)
+        let text = filteredRows[row].value(for: column)
 
         // Status column: use a colored badge instead of plain text
         if column == .status {
-            return makeStatusBadgeView(for: text, in: tableView)
+            let succeeded = filteredEntries.indices.contains(row) && filteredEntries[row].succeeded
+            return makeStatusBadgeView(succeeded: succeeded, in: tableView)
         }
 
         let viewID = NSUserInterfaceItemIdentifier("HistoryCell-\(column.rawValue)")
@@ -3598,9 +4000,19 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
             ])
         }
 
+        // Long text columns: limit display lines, lighter for preview
+        if column == .original || column == .generated {
+            cellView.textField?.maximumNumberOfLines = 3
+            cellView.textField?.lineBreakMode = .byTruncatingTail
+            cellView.textField?.textColor = .secondaryLabelColor
+        } else {
+            cellView.textField?.maximumNumberOfLines = 0
+            cellView.textField?.lineBreakMode = .byWordWrapping
+        }
+
         // Duration column: color-code by speed
-        if column == .duration, entries.indices.contains(row) {
-            let ms = entries[row].durationMilliseconds
+        if column == .duration, filteredEntries.indices.contains(row) {
+            let ms = filteredEntries[row].durationMilliseconds
             let color: NSColor
             if ms < 2000 {
                 color = .systemGreen
@@ -3617,8 +4029,8 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         }
 
         // Timestamp column: show relative time
-        if column == .timestamp, entries.indices.contains(row) {
-            let relativeText = relativeTimestamp(for: entries[row].timestamp)
+        if column == .timestamp, filteredEntries.indices.contains(row) {
+            let relativeText = relativeTimestamp(for: filteredEntries[row].timestamp)
             cellView.textField?.stringValue = relativeText
             cellView.textField?.toolTip = text // Full timestamp in tooltip
         } else {
@@ -3654,20 +4066,21 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         return formatter
     }()
 
-    private func makeStatusBadgeView(for status: String, in tableView: NSTableView) -> NSView {
+    private func makeStatusBadgeView(succeeded: Bool, in tableView: NSTableView) -> NSView {
         let viewID = NSUserInterfaceItemIdentifier("HistoryStatusBadge")
-        let isSuccess = status.lowercased().contains("success")
-        let badgeColor: NSColor = isSuccess ? .systemGreen : .systemRed
-        let badgeText = isSuccess ? "Success" : "Failed"
+        let badgeID = NSUserInterfaceItemIdentifier("HistoryStatusBadge.badge")
+        let labelID = NSUserInterfaceItemIdentifier("HistoryStatusBadge.label")
+        let badgeColor: NSColor = succeeded ? .systemGreen : .systemRed
+        let badgeText = succeeded ? "Succeeded" : "Failed"
 
         let container: NSView
         if let reused = tableView.makeView(withIdentifier: viewID, owner: self) {
             container = reused
-            // Update existing badge
-            if let badge = container.subviews.first {
+            // Update existing badge using identifiers for reliable lookup
+            if let badge = container.subviews.first(where: { $0.identifier == badgeID }) {
                 badge.layer?.backgroundColor = badgeColor.withAlphaComponent(0.15).cgColor
                 badge.layer?.borderColor = badgeColor.withAlphaComponent(0.4).cgColor
-                if let label = badge.subviews.first as? NSTextField {
+                if let label = badge.subviews.first(where: { $0.identifier == labelID }) as? NSTextField {
                     label.stringValue = badgeText
                     label.textColor = badgeColor
                 }
@@ -3677,6 +4090,7 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
             container.identifier = viewID
 
             let badge = NSView()
+            badge.identifier = badgeID
             badge.wantsLayer = true
             badge.layer?.cornerRadius = 4
             badge.layer?.backgroundColor = badgeColor.withAlphaComponent(0.15).cgColor
@@ -3686,6 +4100,7 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
             container.addSubview(badge)
 
             let label = NSTextField(labelWithString: badgeText)
+            label.identifier = labelID
             label.font = .systemFont(ofSize: 10, weight: .semibold)
             label.textColor = badgeColor
             label.alignment = .center
@@ -3702,12 +4117,22 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
             ])
         }
 
-        container.toolTip = status
+        container.toolTip = badgeText
         return container
     }
 
     @objc private func copyCellAction() {
         _ = copySelectedCellToPasteboard()
+    }
+
+    @objc private func filterSegmentChanged() {
+        currentFilter = filterSegment.selectedSegment
+        applyFilters()
+    }
+
+    @objc private func searchFieldChanged() {
+        searchQuery = searchField.stringValue
+        applyFilters()
     }
 
     @objc private func exportCSVClicked() {
@@ -3750,11 +4175,11 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
     }
 
     private func refreshRowHeights() {
-        guard !rows.isEmpty else {
+        guard !filteredRows.isEmpty else {
             return
         }
 
-        let indexes = IndexSet(integersIn: 0..<rows.count)
+        let indexes = IndexSet(integersIn: 0..<filteredRows.count)
         tableView.noteHeightOfRows(withIndexesChanged: indexes)
     }
 
@@ -3762,13 +4187,13 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
     private func copySelectedCellToPasteboard() -> Bool {
         guard
             let (rowIndex, column) = selectedCellLocation(),
-            rows.indices.contains(rowIndex)
+            filteredRows.indices.contains(rowIndex)
         else {
             NSSound.beep()
             return false
         }
 
-        let value = rows[rowIndex].value(for: column)
+        let value = filteredRows[rowIndex].value(for: column)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(value, forType: .string)
@@ -3777,7 +4202,7 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
 
     private func selectedCellLocation() -> (Int, HistoryTableColumn)? {
         let rowCandidates = [tableView.clickedRow, tableView.activeRow, tableView.selectedRow]
-        guard let rowIndex = rowCandidates.first(where: { rows.indices.contains($0) }) else {
+        guard let rowIndex = rowCandidates.first(where: { filteredRows.indices.contains($0) }) else {
             return nil
         }
 
@@ -3816,6 +4241,9 @@ private final class HistoryCopyTableView: NSTableView {
 
 final class HUDOverlayController {
     private var panel: NSPanel?
+    private var effectView: NSVisualEffectView?
+    private var tintOverlay: NSView?
+    private var spinner: NSProgressIndicator?
     private var ghostImageView: NSImageView?
     private var messageLabel: NSTextField?
     private var dismissWorkItem: DispatchWorkItem?
@@ -3833,12 +4261,20 @@ final class HUDOverlayController {
         applyContent(for: state)
 
         guard let panel else { return }
+        // Start 10px below and faded out, then slide up
+        var frame = panel.frame
+        frame.origin.y -= 10
+        panel.setFrame(frame, display: false)
         panel.alphaValue = 0
         panel.orderFrontRegardless()
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = TimeInterval(HUDOverlaySupport.fadeInDuration)
             context.allowsImplicitAnimation = true
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            var targetFrame = panel.frame
+            targetFrame.origin.y += 10
+            panel.animator().setFrame(targetFrame, display: true)
             panel.animator().alphaValue = 1
         }
 
@@ -3925,7 +4361,14 @@ final class HUDOverlayController {
         message.maximumNumberOfLines = 2
         message.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = NSStackView(views: [imageView, message])
+        let progress = NSProgressIndicator()
+        progress.style = .spinning
+        progress.controlSize = .small
+        progress.isIndeterminate = true
+        progress.translatesAutoresizingMaskIntoConstraints = false
+        progress.isHidden = true
+
+        let stack = NSStackView(views: [imageView, progress, message])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = HUDOverlaySupport.verticalSpacing
@@ -3947,9 +4390,27 @@ final class HUDOverlayController {
             ),
         ])
 
+        // Tint overlay for state color
+        let tint = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = NSColor.clear.cgColor
+        tint.layer?.cornerRadius = HUDOverlaySupport.cornerRadius
+        tint.layer?.masksToBounds = true
+        effectView.addSubview(tint, positioned: .below, relativeTo: stack)
+        tint.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            tint.leadingAnchor.constraint(equalTo: effectView.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: effectView.trailingAnchor),
+            tint.topAnchor.constraint(equalTo: effectView.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: effectView.bottomAnchor),
+        ])
+
         newPanel.contentView = effectView
 
         self.panel = newPanel
+        self.effectView = effectView
+        self.tintOverlay = tint
+        self.spinner = progress
         self.ghostImageView = imageView
         self.messageLabel = message
     }
@@ -3963,6 +4424,27 @@ final class HUDOverlayController {
             size: HUDOverlaySupport.iconSize,
             spectacles: spectacles
         )
+
+        // Spinner for working state
+        if case .working = state {
+            spinner?.isHidden = false
+            spinner?.startAnimation(nil)
+        } else {
+            spinner?.stopAnimation(nil)
+            spinner?.isHidden = true
+        }
+
+        // Color tint per state
+        let tintColor: NSColor
+        switch state {
+        case .working:
+            tintColor = NSColor.systemBlue.withAlphaComponent(0.06)
+        case .success, .successWithCount:
+            tintColor = NSColor.systemGreen.withAlphaComponent(0.06)
+        case .error:
+            tintColor = NSColor.systemRed.withAlphaComponent(0.06)
+        }
+        tintOverlay?.layer?.backgroundColor = tintColor.cgColor
     }
 
     private func scheduleAutoDismissIfNeeded(for state: HUDOverlayState) {
