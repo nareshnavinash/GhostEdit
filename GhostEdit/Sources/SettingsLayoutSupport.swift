@@ -8,7 +8,7 @@ enum SettingsLayoutSupport {
     static let rowSpacing: CGFloat = 12
     static let labelWidth: CGFloat = 100
     static let groupInset: CGFloat = 0
-    static let groupCornerRadius: CGFloat = 0
+    static let groupCornerRadius: CGFloat = 10
 
     static func preferredWindowHeight(for contentHeight: CGFloat) -> CGFloat {
         max(minWindowHeight, ceil(contentHeight + (verticalInset * 2)))

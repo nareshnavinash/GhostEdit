@@ -2849,6 +2849,16 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         setupToolbar()
         buildAllTabs()
         loadCurrentValues()
+
+        // Fix window height to the tallest tab so switching never resizes
+        let maxTabHeight = tabViews.values.map { $0.fittingSize.height }.max() ?? SettingsLayoutSupport.minWindowHeight
+        let fixedHeight = max(ceil(maxTabHeight), SettingsLayoutSupport.minWindowHeight)
+        var settingsFrame = window.frame
+        let heightDelta = fixedHeight - settingsFrame.size.height
+        settingsFrame.origin.y -= heightDelta
+        settingsFrame.size.height = fixedHeight
+        window.setFrame(settingsFrame, display: false)
+
         switchToTab(.general)
     }
 
@@ -2905,35 +2915,37 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     private func switchToTab(_ tab: Tab) {
         guard let window, let contentView = window.contentView else { return }
+        let previousTab = currentTab
         currentTab = tab
         window.toolbar?.selectedItemIdentifier = tab.toolbarItemID
         window.title = tab.label
 
-        for (_, view) in tabViews {
-            view.removeFromSuperview()
-        }
+        guard let newView = tabViews[tab] else { return }
 
-        guard let tabView = tabViews[tab] else { return }
-        tabView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(tabView)
+        newView.translatesAutoresizingMaskIntoConstraints = false
+        newView.alphaValue = 0
+        contentView.addSubview(newView)
 
         NSLayoutConstraint.activate([
-            tabView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            tabView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            tabView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            tabView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            newView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            newView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            newView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            newView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
         ])
 
-        contentView.layoutSubtreeIfNeeded()
-        let fittingHeight = tabView.fittingSize.height
-        let targetHeight = max(SettingsLayoutSupport.minWindowHeight, ceil(fittingHeight))
-
-        // Animate the window resize from the top edge
-        var frame = window.frame
-        let delta = targetHeight - frame.size.height
-        frame.origin.y -= delta
-        frame.size.height = targetHeight
-        window.animator().setFrame(frame, display: true)
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            ctx.allowsImplicitAnimation = true
+            newView.animator().alphaValue = 1
+            if previousTab != tab, let oldView = self.tabViews[previousTab] {
+                oldView.animator().alphaValue = 0
+            }
+        }, completionHandler: {
+            for (t, view) in self.tabViews where t != tab {
+                view.removeFromSuperview()
+                view.alphaValue = 1
+            }
+        })
     }
 
     // MARK: - Build Tabs
@@ -3191,37 +3203,48 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
 
-        let header = NSTextField(labelWithString: title)
-        header.font = .systemFont(ofSize: 13, weight: .semibold)
-        header.textColor = .labelColor
+        let header = NSTextField(labelWithString: title.uppercased())
+        header.font = .systemFont(ofSize: 11, weight: .medium)
+        header.textColor = .secondaryLabelColor
         header.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(header)
 
-        let separator = NSBox()
-        separator.boxType = .separator
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(separator)
+        let card = NSBox()
+        card.boxType = .custom
+        card.cornerRadius = SettingsLayoutSupport.groupCornerRadius
+        card.fillColor = .controlBackgroundColor
+        card.borderColor = .separatorColor
+        card.borderWidth = 0.5
+        card.contentViewMargins = .zero
+        card.titlePosition = .noTitle
+        card.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(card)
 
         let stack = NSStackView(views: views)
         stack.orientation = .vertical
         stack.spacing = SettingsLayoutSupport.rowSpacing
         stack.alignment = .leading
         stack.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(stack)
+
+        if let cardContent = card.contentView {
+            cardContent.addSubview(stack)
+            NSLayoutConstraint.activate([
+                stack.topAnchor.constraint(equalTo: cardContent.topAnchor, constant: 14),
+                stack.leadingAnchor.constraint(equalTo: cardContent.leadingAnchor, constant: 16),
+                stack.trailingAnchor.constraint(equalTo: cardContent.trailingAnchor, constant: -16),
+                stack.bottomAnchor.constraint(equalTo: cardContent.bottomAnchor, constant: -14),
+            ])
+        }
 
         NSLayoutConstraint.activate([
             header.topAnchor.constraint(equalTo: container.topAnchor),
-            header.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
             header.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
 
-            separator.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
-            separator.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            separator.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-
-            stack.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
-            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            card.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
+            card.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            card.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            card.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
         return container
