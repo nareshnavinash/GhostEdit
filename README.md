@@ -8,6 +8,33 @@
 
 ![GhostEdit launch preview](remotion/out/TwitterBanner.png)
 
+## Installation
+
+Download the latest `.dmg` from the [Releases page](https://github.com/nareshnavinash/GhostEdit/releases/latest), drag GhostEdit to Applications, and grant Accessibility permission.
+
+### 🛠 macOS Installation & Troubleshooting
+
+Because GhostEdit is not currently signed with an Apple Developer certificate, macOS Gatekeeper may flag it and show an error saying: **"Apple could not verify 'GhostEdit' is free of malware"** or **"'GhostEdit' is damaged and can't be opened."**
+
+If you encounter this error and only see a "Move to Bin" option, you can easily bypass it using one of the following methods:
+
+#### Method 1: Using Terminal (Recommended)
+This removes the macOS "quarantine" flag from the downloaded app, allowing it to run normally.
+
+1. Unzip the downloaded release and move `GhostEdit.app` to your **Applications** folder.
+2. Open the **Terminal** app.
+3. Paste the following command and press Enter:
+   xattr -cr /Applications/GhostEdit.app
+
+You can now double-click the app to open it normally! (You only need to do this once).
+
+#### Method 2: System Settings
+1. Attempt to open the app normally by double-clicking it (this triggers the error). Click Done.
+2. Open your Mac's System Settings and go to Privacy & Security.
+3. Scroll down to the Security section.
+4. You will see a message saying that "GhostEdit" was blocked. Click the Open Anyway button next to it.
+5. Enter your Mac password or use Touch ID, and click Open on the final prompt.
+
 ## Trailer
 
 ![GhostEdit launch trailer](remotion/out/LaunchTrailer.gif)
@@ -50,10 +77,6 @@
 - Menu bar state indicator:
   - ![Idle menubar icon](remotion/out/MenuBarIconIdle.png) idle
   - ![Processing menubar icon](remotion/out/MenuBarIconProcessing.png) processing
-
-## Install
-
-Download the latest `.dmg` from the [Releases page](https://github.com/nareshnavinash/GhostEdit/releases/latest), drag GhostEdit to Applications, and grant Accessibility permission.
 
 ### Prerequisites
 
