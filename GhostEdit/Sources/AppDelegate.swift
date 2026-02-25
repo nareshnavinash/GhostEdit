@@ -170,6 +170,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let toneItem = NSMenuItem(title: "Tone", action: nil, keyEquivalent: "")
         toneItem.image = sfSymbol("speaker.wave.2", size: 15)
         let toneSubmenu = NSMenu()
+        let toneIcons: [String: String] = [
+            "default": "circle", "casual": "cup.and.saucer", "professional": "briefcase",
+            "academic": "graduationcap", "slack": "bubble.left"
+        ]
         for preset in AppConfig.supportedPresets {
             let item = NSMenuItem(
                 title: preset.capitalized,
@@ -178,6 +182,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             item.target = self
             item.representedObject = preset
+            if let iconName = toneIcons[preset] {
+                item.image = sfSymbol(iconName, size: 13)
+            }
             toneSubmenu.addItem(item)
         }
         toneItem.submenu = toneSubmenu
@@ -2251,18 +2258,32 @@ final class StreamingPreviewController: NSWindowController {
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(statusLabel)
 
-        // Column headers
+        // Column headers with tinted backgrounds
+        let originalHeaderBg = NSView()
+        originalHeaderBg.wantsLayer = true
+        originalHeaderBg.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.06).cgColor
+        originalHeaderBg.layer?.cornerRadius = 4
+        originalHeaderBg.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(originalHeaderBg)
+
         let originalHeader = NSTextField(labelWithString: "Original")
         originalHeader.font = .systemFont(ofSize: 11, weight: .semibold)
-        originalHeader.textColor = .secondaryLabelColor
+        originalHeader.textColor = .systemRed.withAlphaComponent(0.8)
         originalHeader.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(originalHeader)
+        originalHeaderBg.addSubview(originalHeader)
+
+        let correctedHeaderBg = NSView()
+        correctedHeaderBg.wantsLayer = true
+        correctedHeaderBg.layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.06).cgColor
+        correctedHeaderBg.layer?.cornerRadius = 4
+        correctedHeaderBg.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(correctedHeaderBg)
 
         let correctedHeader = NSTextField(labelWithString: "Corrected")
         correctedHeader.font = .systemFont(ofSize: 11, weight: .semibold)
-        correctedHeader.textColor = .secondaryLabelColor
+        correctedHeader.textColor = .systemGreen.withAlphaComponent(0.8)
         correctedHeader.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(correctedHeader)
+        correctedHeaderBg.addSubview(correctedHeader)
 
         // Left scroll view (original text)
         configureTextView(leftTextView, in: leftScrollView)
@@ -2287,8 +2308,13 @@ final class StreamingPreviewController: NSWindowController {
         divider.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(divider)
 
-        // Buttons
+        // Buttons — styled: Accept is green accent, Cancel is plain
         acceptButton.keyEquivalent = "\t"
+        acceptButton.bezelStyle = .rounded
+        acceptButton.contentTintColor = .white
+        acceptButton.wantsLayer = true
+        acceptButton.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        acceptButton.layer?.cornerRadius = 5
         acceptButton.isEnabled = false
         acceptButton.translatesAutoresizingMaskIntoConstraints = false
 
@@ -2307,24 +2333,34 @@ final class StreamingPreviewController: NSWindowController {
             statusLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             statusLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
 
-            originalHeader.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
-            originalHeader.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            // Original header background
+            originalHeaderBg.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
+            originalHeaderBg.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            originalHeader.topAnchor.constraint(equalTo: originalHeaderBg.topAnchor, constant: 3),
+            originalHeader.bottomAnchor.constraint(equalTo: originalHeaderBg.bottomAnchor, constant: -3),
+            originalHeader.leadingAnchor.constraint(equalTo: originalHeaderBg.leadingAnchor, constant: 8),
+            originalHeader.trailingAnchor.constraint(equalTo: originalHeaderBg.trailingAnchor, constant: -8),
 
-            correctedHeader.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
-            correctedHeader.leadingAnchor.constraint(equalTo: contentView.centerXAnchor, constant: 8),
+            // Corrected header background
+            correctedHeaderBg.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
+            correctedHeaderBg.leadingAnchor.constraint(equalTo: contentView.centerXAnchor, constant: 4),
+            correctedHeader.topAnchor.constraint(equalTo: correctedHeaderBg.topAnchor, constant: 3),
+            correctedHeader.bottomAnchor.constraint(equalTo: correctedHeaderBg.bottomAnchor, constant: -3),
+            correctedHeader.leadingAnchor.constraint(equalTo: correctedHeaderBg.leadingAnchor, constant: 8),
+            correctedHeader.trailingAnchor.constraint(equalTo: correctedHeaderBg.trailingAnchor, constant: -8),
 
-            leftScrollView.topAnchor.constraint(equalTo: originalHeader.bottomAnchor, constant: 4),
+            leftScrollView.topAnchor.constraint(equalTo: originalHeaderBg.bottomAnchor, constant: 4),
             leftScrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
             leftScrollView.trailingAnchor.constraint(equalTo: divider.leadingAnchor, constant: -4),
             leftScrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
             leftScrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 200),
 
-            divider.topAnchor.constraint(equalTo: originalHeader.bottomAnchor, constant: 4),
+            divider.topAnchor.constraint(equalTo: originalHeaderBg.bottomAnchor, constant: 4),
             divider.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             divider.widthAnchor.constraint(equalToConstant: 1),
             divider.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
 
-            rightScrollView.topAnchor.constraint(equalTo: correctedHeader.bottomAnchor, constant: 4),
+            rightScrollView.topAnchor.constraint(equalTo: correctedHeaderBg.bottomAnchor, constant: 4),
             rightScrollView.leadingAnchor.constraint(equalTo: divider.trailingAnchor, constant: 4),
             rightScrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
             rightScrollView.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -12),
@@ -2516,6 +2552,8 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         action: nil
     )
     private let hintLabel = NSTextField(labelWithString: "")
+    private let hotkeyBadgeView = NSView()
+    private let hotkeyBadgeLabel = NSTextField(labelWithString: "")
 
     private var tabViews: [Tab: NSView] = [:]
     private var currentTab: Tab = .general
@@ -2669,20 +2707,64 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         hintLabel.maximumNumberOfLines = 3
         hintLabel.lineBreakMode = .byWordWrapping
 
+        let providerDesc = makeDescription("The AI provider used for grammar corrections")
+        let modelDesc = makeDescription(modelDescriptionText())
+        modelDesc.identifier = NSUserInterfaceItemIdentifier("modelDescriptionLabel")
+
+        let languageDesc = makeDescription("Auto-detect works for most languages")
+        let toneDesc = makeDescription("Adjusts formality and style of corrections")
+
         let stack = makeTabStack(sections: [
             makeSection(title: "Provider & Model", views: [
                 makeRow(label: makeFieldLabel("Provider"), field: providerPopup),
+                providerDesc,
                 makeRow(label: makeFieldLabel("Model"), field: modelPopup),
+                modelDesc,
                 customModelContainer,
                 hintLabel,
             ]),
             makeSection(title: "Language & Tone", views: [
                 makeRow(label: makeFieldLabel("Language"), field: languagePopup),
+                languageDesc,
                 makeRow(label: makeFieldLabel("Tone"), field: tonePresetPopup),
+                toneDesc,
             ]),
             makeButtonRow(),
         ])
         return stack
+    }
+
+    private func modelDescriptionText() -> String {
+        guard let selected = modelPopup.selectedItem?.title else { return "" }
+        let descriptions: [String: String] = [
+            "Sonnet": "Balanced speed and quality",
+            "Opus": "Highest quality, slower",
+            "Haiku": "Fastest, lightweight corrections",
+            "GPT-4o": "OpenAI flagship model",
+            "GPT-4o mini": "Fast and cost-effective",
+            "o3-mini": "OpenAI reasoning model",
+            "Gemini 2.0 Flash": "Fast multimodal model",
+            "Gemini 2.5 Pro": "Most capable Gemini model",
+            "Custom...": "Specify any model identifier",
+        ]
+        return descriptions[selected] ?? ""
+    }
+
+    private func refreshModelDescription() {
+        guard let tabView = tabViews[.general] else { return }
+        func findLabel(in view: NSView) -> NSTextField? {
+            if let label = view as? NSTextField,
+               label.identifier?.rawValue == "modelDescriptionLabel" {
+                return label
+            }
+            for sub in view.subviews {
+                if let found = findLabel(in: sub) { return found }
+            }
+            return nil
+        }
+        if let label = findLabel(in: tabView) {
+            label.stringValue = modelDescriptionText()
+        }
     }
 
     private func buildHotkeyTab() -> NSView {
@@ -2711,8 +2793,36 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         hotkeyPreviewLabel.textColor = .secondaryLabelColor
         hotkeyPreviewLabel.font = .systemFont(ofSize: 12, weight: .medium)
 
+        hotkeyBadgeView.wantsLayer = true
+        hotkeyBadgeView.layer?.cornerRadius = 6
+        hotkeyBadgeView.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
+        hotkeyBadgeView.layer?.borderWidth = 1
+        hotkeyBadgeView.layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.25).cgColor
+        hotkeyBadgeView.translatesAutoresizingMaskIntoConstraints = false
+
+        hotkeyBadgeLabel.font = .monospacedSystemFont(ofSize: 16, weight: .medium)
+        hotkeyBadgeLabel.textColor = .controlAccentColor
+        hotkeyBadgeLabel.alignment = .center
+        hotkeyBadgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        hotkeyBadgeView.addSubview(hotkeyBadgeLabel)
+
+        NSLayoutConstraint.activate([
+            hotkeyBadgeLabel.topAnchor.constraint(equalTo: hotkeyBadgeView.topAnchor, constant: 8),
+            hotkeyBadgeLabel.bottomAnchor.constraint(equalTo: hotkeyBadgeView.bottomAnchor, constant: -8),
+            hotkeyBadgeLabel.leadingAnchor.constraint(equalTo: hotkeyBadgeView.leadingAnchor, constant: 16),
+            hotkeyBadgeLabel.trailingAnchor.constraint(equalTo: hotkeyBadgeView.trailingAnchor, constant: -16),
+        ])
+
+        let badgeRow = NSStackView()
+        badgeRow.orientation = .horizontal
+        badgeRow.spacing = 8
+        badgeRow.alignment = .centerY
+        badgeRow.addArrangedSubview(makeFieldLabel("Current"))
+        badgeRow.addArrangedSubview(hotkeyBadgeView)
+
         let stack = makeTabStack(sections: [
             makeSection(title: "Keyboard Shortcut", views: [
+                badgeRow,
                 makeRow(label: makeFieldLabel("Key"), field: hotkeyKeyPopup),
                 makeRow(label: makeFieldLabel("Modifiers"), field: modStack),
                 hotkeyPreviewLabel,
@@ -2731,15 +2841,30 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
         let stack = makeTabStack(sections: [
             makeSection(title: "Correction", views: [
-                showDiffPreviewCheckbox,
-                clipboardOnlyModeCheckbox,
+                makeCheckboxWithDescription(
+                    checkbox: showDiffPreviewCheckbox,
+                    description: "Shows a side-by-side diff before replacing text"
+                ),
+                makeCheckboxWithDescription(
+                    checkbox: clipboardOnlyModeCheckbox,
+                    description: "Corrected text is copied but not auto-pasted"
+                ),
             ]),
             makeSection(title: "Feedback", views: [
-                soundFeedbackCheckbox,
-                notifyOnSuccessCheckbox,
+                makeCheckboxWithDescription(
+                    checkbox: soundFeedbackCheckbox,
+                    description: "Plays a system sound when a correction finishes"
+                ),
+                makeCheckboxWithDescription(
+                    checkbox: notifyOnSuccessCheckbox,
+                    description: "Shows a macOS notification banner on success"
+                ),
             ]),
             makeSection(title: "System", views: [
-                launchAtLoginCheckbox,
+                makeCheckboxWithDescription(
+                    checkbox: launchAtLoginCheckbox,
+                    description: "Adds GhostEdit to your login items"
+                ),
             ]),
             makeButtonRow(),
         ])
@@ -2753,13 +2878,21 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         timeoutField.alignment = .left
         developerModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
 
+        let historyDesc = makeDescription("Maximum number of corrections to keep in history")
+        let timeoutDesc = makeDescription("Seconds to wait before cancelling a correction request")
+
         let stack = makeTabStack(sections: [
             makeSection(title: "Limits", views: [
                 makeRow(label: makeFieldLabel("History limit"), field: historyLimitField),
+                historyDesc,
                 makeRow(label: makeFieldLabel("Timeout (s)"), field: timeoutField),
+                timeoutDesc,
             ]),
             makeSection(title: "Debug", views: [
-                developerModeCheckbox,
+                makeCheckboxWithDescription(
+                    checkbox: developerModeCheckbox,
+                    description: "Shows a console log with CLI commands and raw responses"
+                ),
             ]),
             makeButtonRow(),
         ])
@@ -2868,6 +3001,30 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         return row
     }
 
+    private func makeDescription(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = .tertiaryLabelColor
+        label.maximumNumberOfLines = 2
+        label.lineBreakMode = .byWordWrapping
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return label
+    }
+
+    private func makeCheckboxWithDescription(checkbox: NSButton, description: String) -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.spacing = 2
+        stack.alignment = .leading
+        stack.addArrangedSubview(checkbox)
+        let desc = makeDescription(description)
+        desc.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(desc)
+        // Indent description to align with checkbox label
+        desc.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 20).isActive = true
+        return stack
+    }
+
     // MARK: - Load / Save
 
     private func loadCurrentValues() {
@@ -2907,6 +3064,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     @objc private func modelPopupChanged() {
         refreshCustomFieldVisibility()
+        refreshModelDescription()
     }
 
     @objc private func hotkeyInputChanged() {
@@ -2928,6 +3086,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
         refreshCustomFieldVisibility()
         updateHint(for: provider)
+        refreshModelDescription()
     }
 
     private func modelOptionsForProvider(_ provider: CLIProvider) -> [ModelOption] {
@@ -2979,12 +3138,14 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private func updateHotkeyPreview() {
         guard let keyCode = selectedHotkeyKeyCode() else {
             hotkeyPreviewLabel.stringValue = "Current hotkey: unavailable"
+            hotkeyBadgeLabel.stringValue = "—"
             return
         }
 
         let modifiers = selectedHotkeyModifiers()
         let display = HotkeySupport.displayString(keyCode: keyCode, modifiers: modifiers)
         hotkeyPreviewLabel.stringValue = "Current hotkey: \(display)"
+        hotkeyBadgeLabel.stringValue = display
     }
 
     private func refreshCustomFieldVisibility() {
@@ -3123,7 +3284,8 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
 final class HistoryWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     private let tableView = HistoryCopyTableView(frame: .zero)
-    private let emptyLabel = NSTextField(labelWithString: "No corrections yet.")
+    private let emptyLabel = NSTextField(labelWithString: "No corrections yet")
+    private var emptyStateContainer: NSView?
     private let cellFont = NSFont.systemFont(ofSize: 12)
     private var rows: [HistoryTableRow] = []
     private var entries: [CorrectionHistoryEntry] = []
@@ -3173,7 +3335,7 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
 
         tableView.reloadData()
         refreshRowHeights()
-        emptyLabel.isHidden = !rows.isEmpty
+        emptyStateContainer?.isHidden = !rows.isEmpty
     }
 
     private func buildUI() {
@@ -3212,8 +3374,43 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         controlsRow.addArrangedSubview(NSView())
         rootStack.addArrangedSubview(controlsRow)
 
-        emptyLabel.textColor = .secondaryLabelColor
-        rootStack.addArrangedSubview(emptyLabel)
+        // Empty state: ghost icon + styled message
+        let emptyContainer = NSView()
+        emptyContainer.translatesAutoresizingMaskIntoConstraints = false
+        emptyContainer.identifier = NSUserInterfaceItemIdentifier("emptyStateContainer")
+
+        let ghostIcon = NSTextField(labelWithString: "\u{1F47B}")
+        ghostIcon.font = .systemFont(ofSize: 48)
+        ghostIcon.alignment = .center
+        ghostIcon.translatesAutoresizingMaskIntoConstraints = false
+        emptyContainer.addSubview(ghostIcon)
+
+        emptyLabel.font = .systemFont(ofSize: 15, weight: .medium)
+        emptyLabel.textColor = .tertiaryLabelColor
+        emptyLabel.alignment = .center
+        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        emptyContainer.addSubview(emptyLabel)
+
+        let emptySubtext = NSTextField(labelWithString: "Corrections will appear here after you use the hotkey.")
+        emptySubtext.font = .systemFont(ofSize: 12)
+        emptySubtext.textColor = .quaternaryLabelColor
+        emptySubtext.alignment = .center
+        emptySubtext.translatesAutoresizingMaskIntoConstraints = false
+        emptyContainer.addSubview(emptySubtext)
+
+        NSLayoutConstraint.activate([
+            ghostIcon.centerXAnchor.constraint(equalTo: emptyContainer.centerXAnchor),
+            ghostIcon.topAnchor.constraint(equalTo: emptyContainer.topAnchor, constant: 40),
+            emptyLabel.centerXAnchor.constraint(equalTo: emptyContainer.centerXAnchor),
+            emptyLabel.topAnchor.constraint(equalTo: ghostIcon.bottomAnchor, constant: 12),
+            emptySubtext.centerXAnchor.constraint(equalTo: emptyContainer.centerXAnchor),
+            emptySubtext.topAnchor.constraint(equalTo: emptyLabel.bottomAnchor, constant: 6),
+            emptySubtext.bottomAnchor.constraint(equalTo: emptyContainer.bottomAnchor),
+            emptyContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: 160),
+        ])
+
+        rootStack.addArrangedSubview(emptyContainer)
+        self.emptyStateContainer = emptyContainer
 
         configureTableView()
 
@@ -3401,10 +3598,61 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
             ])
         }
 
-        cellView.textField?.stringValue = text
-        cellView.textField?.toolTip = text
+        // Duration column: color-code by speed
+        if column == .duration, entries.indices.contains(row) {
+            let ms = entries[row].durationMilliseconds
+            let color: NSColor
+            if ms < 2000 {
+                color = .systemGreen
+            } else if ms < 5000 {
+                color = .systemOrange
+            } else {
+                color = .systemRed
+            }
+            cellView.textField?.textColor = color
+            cellView.textField?.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        } else {
+            cellView.textField?.textColor = .labelColor
+            cellView.textField?.font = cellFont
+        }
+
+        // Timestamp column: show relative time
+        if column == .timestamp, entries.indices.contains(row) {
+            let relativeText = relativeTimestamp(for: entries[row].timestamp)
+            cellView.textField?.stringValue = relativeText
+            cellView.textField?.toolTip = text // Full timestamp in tooltip
+        } else {
+            cellView.textField?.stringValue = text
+            cellView.textField?.toolTip = text
+        }
+
         return cellView
     }
+
+    private func relativeTimestamp(for date: Date) -> String {
+        let interval = Date().timeIntervalSince(date)
+        if interval < 60 {
+            return "Just now"
+        } else if interval < 3600 {
+            let mins = Int(interval / 60)
+            return "\(mins) min\(mins == 1 ? "" : "s") ago"
+        } else if interval < 86400 {
+            let hours = Int(interval / 3600)
+            return "\(hours) hour\(hours == 1 ? "" : "s") ago"
+        } else if interval < 172800 {
+            let timeStr = timeOnlyFormatter.string(from: date)
+            return "Yesterday at \(timeStr)"
+        } else {
+            return timestampFormatter.string(from: date)
+        }
+    }
+
+    private let timeOnlyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
 
     private func makeStatusBadgeView(for status: String, in tableView: NSTableView) -> NSView {
         let viewID = NSUserInterfaceItemIdentifier("HistoryStatusBadge")
