@@ -50,19 +50,19 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| QFX-01 | — | Pending |
-| QFX-02 | — | Pending |
-| SEL-01 | — | Pending |
-| SEL-02 | — | Pending |
-| SET-01 | — | Pending |
-| SET-02 | — | Pending |
-| DOC-01 | — | Pending |
+| QFX-01 | Phase 1 | Pending |
+| QFX-02 | Phase 1 | Pending |
+| SEL-01 | Phase 2 | Pending |
+| SEL-02 | Phase 2 | Pending |
+| SET-01 | Phase 3 | Pending |
+| SET-02 | Phase 3 | Pending |
+| DOC-01 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 7 total
-- Mapped to phases: 0
-- Unmapped: 7
+- Mapped to phases: 7
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-26*
-*Last updated: 2026-02-26 after initial definition*
+*Last updated: 2026-02-26 after roadmap creation*
