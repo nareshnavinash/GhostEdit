@@ -80,6 +80,8 @@ REQUIRED_FILES=(
   "$ROOT_DIR/GhostEdit/Sources/AppProfileSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/UpdateCheckSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/StreamingPreviewSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/SpellCheckSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/LiveFeedbackSupport.swift"
 )
 
 xcrun llvm-cov report \

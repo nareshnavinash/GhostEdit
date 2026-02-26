@@ -99,6 +99,7 @@ struct AppConfig: Codable, Equatable {
     var clipboardOnlyMode: Bool
     var tonePreset: String
     var showDiffPreview: Bool
+    var liveFeedbackEnabled: Bool
 
     static let `default` = AppConfig(
         claudePath: "",
@@ -117,7 +118,8 @@ struct AppConfig: Codable, Equatable {
         notifyOnSuccess: false,
         clipboardOnlyMode: false,
         tonePreset: "default",
-        showDiffPreview: false
+        showDiffPreview: false,
+        liveFeedbackEnabled: false
     )
 
     static let supportedPresets: [String] = [
@@ -193,6 +195,7 @@ struct AppConfig: Codable, Equatable {
         case clipboardOnlyMode
         case tonePreset
         case showDiffPreview
+        case liveFeedbackEnabled
     }
 
     init(
@@ -212,7 +215,8 @@ struct AppConfig: Codable, Equatable {
         notifyOnSuccess: Bool = false,
         clipboardOnlyMode: Bool = false,
         tonePreset: String = "default",
-        showDiffPreview: Bool = false
+        showDiffPreview: Bool = false,
+        liveFeedbackEnabled: Bool = false
     ) {
         self.claudePath = claudePath
         self.codexPath = codexPath
@@ -231,6 +235,7 @@ struct AppConfig: Codable, Equatable {
         self.clipboardOnlyMode = clipboardOnlyMode
         self.tonePreset = tonePreset
         self.showDiffPreview = showDiffPreview
+        self.liveFeedbackEnabled = liveFeedbackEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -253,6 +258,7 @@ struct AppConfig: Codable, Equatable {
         clipboardOnlyMode = try container.decodeIfPresent(Bool.self, forKey: .clipboardOnlyMode) ?? AppConfig.default.clipboardOnlyMode
         tonePreset = try container.decodeIfPresent(String.self, forKey: .tonePreset) ?? AppConfig.default.tonePreset
         showDiffPreview = try container.decodeIfPresent(Bool.self, forKey: .showDiffPreview) ?? AppConfig.default.showDiffPreview
+        liveFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .liveFeedbackEnabled) ?? AppConfig.default.liveFeedbackEnabled
     }
 
     var resolvedClaudePath: String? {
@@ -442,7 +448,8 @@ final class ConfigManager {
             notifyOnSuccess: config.notifyOnSuccess,
             clipboardOnlyMode: config.clipboardOnlyMode,
             tonePreset: tonePreset,
-            showDiffPreview: config.showDiffPreview
+            showDiffPreview: config.showDiffPreview,
+            liveFeedbackEnabled: config.liveFeedbackEnabled
         )
     }
 

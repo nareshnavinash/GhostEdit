@@ -70,6 +70,7 @@ You can now double-click the app to open it normally! (You only need to do this 
 - **Clipboard-only mode**: Correct text and place it on the clipboard without auto-pasting
 - **Menu bar tooltip**: Shows a summary of the last correction (time, text preview, provider)
 - **Token estimation**: Estimated cumulative token usage shown in Statistics
+- **Live feedback**: Real-time spelling, grammar, punctuation, and style checking in any text field — a floating widget shows issues as you type with smart quotes, em-dash, and symbol replacement suggestions powered by macOS native text checking
 - **Version check support**: Compare your version against the latest release
 - Global hotkey (`Command + E` by default), configurable in **Settings...**
 - Works in background (no Dock icon)
@@ -77,6 +78,23 @@ You can now double-click the app to open it normally! (You only need to do this 
 - Menu bar state indicator:
   - ![Idle menubar icon](remotion/out/MenuBarIconIdle.png) idle
   - ![Processing menubar icon](remotion/out/MenuBarIconProcessing.png) processing
+
+### Live Feedback
+
+When enabled in **Settings > Behavior**, a floating widget appears near the active text field and checks your writing in real time using macOS built-in text checking — no AI API calls needed.
+
+**What it detects:**
+
+| Category | Examples |
+|----------|----------|
+| Spelling | Misspelled words with correction suggestions |
+| Grammar | Subject-verb agreement, punctuation errors |
+| Smart quotes | Straight `"..."` → curly `\u201c...\u201d` |
+| Smart dashes | `--` → em-dash `\u2014` |
+| Symbol replacement | `(c)` → `\u00a9`, `(tm)` → `\u2122` |
+| Autocorrect | Common typos the system already knows |
+
+The widget shows a colored status dot (green = clean, red = issues found) and auto-expands a popover listing each issue with suggestions. Click the widget to toggle the detail view. Enable from **Settings > Behavior > Live Feedback** or set `"liveFeedbackEnabled": true` in config.
 
 ### Prerequisites
 
@@ -140,7 +158,8 @@ Default `config.json`:
   "soundFeedbackEnabled": true,
   "notifyOnSuccess": false,
   "clipboardOnlyMode": false,
-  "showDiffPreview": false
+  "showDiffPreview": false,
+  "liveFeedbackEnabled": false
 }
 ```
 
@@ -157,6 +176,7 @@ Notes:
 - `notifyOnSuccess` sends a macOS notification when a correction completes.
 - `clipboardOnlyMode` places corrected text on the clipboard without pasting it back.
 - `showDiffPreview` shows a word-level diff preview window before applying the correction.
+- `liveFeedbackEnabled` enables real-time spelling, grammar, and style checking in a floating widget.
 
 ### Per-App Profiles
 

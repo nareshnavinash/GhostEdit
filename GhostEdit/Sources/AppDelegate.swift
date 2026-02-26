@@ -16,6 +16,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var developerConsoleController: DeveloperConsoleController?
     private var diffPreviewController: DiffPreviewController?
     private var streamingPreviewController: StreamingPreviewController?
+    private var liveFeedbackController: LiveFeedbackController?
 
     private var statusMenu: NSMenu?
     private var statusMenuItem: NSMenuItem?
@@ -28,6 +29,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var toneMenuItem: NSMenuItem?
     private var advancedSubmenuItem: NSMenuItem?
     private var checkUpdatesMenuItem: NSMenuItem?
+    private var liveFeedbackMenuItem: NSMenuItem?
 
     private var isProcessing = false
     private var isShowingAccessibilityAlert = false
@@ -72,11 +74,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: false)
         syncLaunchAtLoginPreferenceSilently()
         registerHotkey()
+        if configManager.loadConfig().liveFeedbackEnabled {
+            startLiveFeedback()
+        }
         setStatus("Idle")
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregister()
+        stopLiveFeedback()
         shellRunner.killPersistentSession()
         stopProcessingIndicator()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
@@ -183,6 +189,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         writingCoach.image = sfSymbol("text.magnifyingglass", size: 15)
         menu.addItem(writingCoach)
         writingCoachMenuItem = writingCoach
+
+        let liveFeedback = NSMenuItem(
+            title: "Live Feedback",
+            action: #selector(toggleLiveFeedbackAction),
+            keyEquivalent: ""
+        )
+        liveFeedback.target = self
+        liveFeedback.image = sfSymbol("waveform.badge.magnifyingglass", size: 15)
+        let feedbackConfig = configManager.loadConfig()
+        liveFeedback.state = feedbackConfig.liveFeedbackEnabled ? .on : .off
+        menu.addItem(liveFeedback)
+        liveFeedbackMenuItem = liveFeedback
 
         let toneItem = NSMenuItem(title: "Tone", action: nil, keyEquivalent: "")
         toneItem.image = sfSymbol("speaker.wave.2", size: 15)
@@ -381,6 +399,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func startLiveFeedback() {
+        guard liveFeedbackController == nil else { return }
+        liveFeedbackController = LiveFeedbackController()
+        liveFeedbackController?.start()
+    }
+
+    private func stopLiveFeedback() {
+        liveFeedbackController?.stop()
+        liveFeedbackController = nil
+    }
+
     private func registerHotkey() {
         let config = configManager.loadConfig()
 
@@ -487,6 +516,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openWritingCoachAction() {
         statusMenu?.cancelTracking()
         runWritingCoach()
+    }
+
+    @objc private func toggleLiveFeedbackAction() {
+        var config = configManager.loadConfig()
+        config.liveFeedbackEnabled.toggle()
+        try? configManager.saveConfig(config)
+        liveFeedbackMenuItem?.state = config.liveFeedbackEnabled ? .on : .off
+        if config.liveFeedbackEnabled {
+            startLiveFeedback()
+        } else {
+            stopLiveFeedback()
+        }
     }
 
     @objc private func openConfigFileAction() {
@@ -1361,6 +1402,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 try? self.historyStore.trim(limit: config.historyLimit)
                 self.refreshHistoryWindowIfVisible()
                 self.registerHotkey()
+                self.liveFeedbackMenuItem?.state = config.liveFeedbackEnabled ? .on : .off
+                if config.liveFeedbackEnabled {
+                    self.startLiveFeedback()
+                } else {
+                    self.stopLiveFeedback()
+                }
                 self.setStatus("Settings saved (\(provider.executableName), model: \(modelDisplay), hotkey: \(hotkeyDisplay))")
             }
         }
@@ -2819,6 +2866,11 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         target: nil,
         action: nil
     )
+    private let liveFeedbackCheckbox = NSButton(
+        checkboxWithTitle: "Enable live spell-check feedback while typing",
+        target: nil,
+        action: nil
+    )
     private let tonePresetPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let developerModeCheckbox = NSButton(
         checkboxWithTitle: "Enable Developer Mode (show behind-the-scenes log)",
@@ -3123,6 +3175,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         clipboardOnlyModeCheckbox.setContentHuggingPriority(.required, for: .vertical)
         soundFeedbackCheckbox.setContentHuggingPriority(.required, for: .vertical)
         notifyOnSuccessCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        liveFeedbackCheckbox.setContentHuggingPriority(.required, for: .vertical)
         launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
 
         let stack = makeTabStack(sections: [
@@ -3134,6 +3187,12 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                 makeCheckboxWithDescription(
                     checkbox: clipboardOnlyModeCheckbox,
                     description: "Corrected text is copied but not auto-pasted"
+                ),
+            ]),
+            makeSection(title: "Live Feedback", views: [
+                makeCheckboxWithDescription(
+                    checkbox: liveFeedbackCheckbox,
+                    description: "Monitors the active text field and highlights spelling issues in real time using macOS spell checker"
                 ),
             ]),
             makeSection(title: "Feedback", views: [
@@ -3396,6 +3455,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         notifyOnSuccessCheckbox.state = config.notifyOnSuccess ? .on : .off
         clipboardOnlyModeCheckbox.state = config.clipboardOnlyMode ? .on : .off
         showDiffPreviewCheckbox.state = config.showDiffPreview ? .on : .off
+        liveFeedbackCheckbox.state = config.liveFeedbackEnabled ? .on : .off
         if let toneIndex = AppConfig.supportedPresets.firstIndex(of: config.tonePreset) {
             tonePresetPopup.selectItem(at: toneIndex)
         } else {
@@ -3602,6 +3662,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         config.notifyOnSuccess = (notifyOnSuccessCheckbox.state == .on)
         config.clipboardOnlyMode = (clipboardOnlyModeCheckbox.state == .on)
         config.showDiffPreview = (showDiffPreviewCheckbox.state == .on)
+        config.liveFeedbackEnabled = (liveFeedbackCheckbox.state == .on)
         let toneIndex = tonePresetPopup.indexOfSelectedItem
         config.tonePreset = AppConfig.supportedPresets.indices.contains(toneIndex)
             ? AppConfig.supportedPresets[toneIndex]
@@ -4655,5 +4716,546 @@ private extension CGPath {
         }
 
         return path.isEmpty ? nil : path
+    }
+}
+
+// MARK: - LiveFeedbackController
+
+final class LiveFeedbackController {
+    private var pollingTimer: Timer?
+    private var debounceTimer: Timer?
+    private var lastCheckedText: String?
+    private var currentIssues: [SpellCheckIssue] = []
+    private var state: LiveFeedbackState = .idle
+    private var isPolling = false
+
+    private let backgroundQueue = DispatchQueue(label: "com.ghostedit.livefeedback", qos: .userInitiated)
+
+    private var widgetWindow: NSWindow?
+    private var widgetLabel: NSTextField?
+    private var widgetDot: NSView?
+
+    private var popoverWindow: NSWindow?
+    private var popoverDismissTimer: Timer?
+
+    // MARK: - Lifecycle
+
+    func start() {
+        state = .idle
+        pollingTimer = Timer.scheduledTimer(
+            withTimeInterval: LiveFeedbackSupport.pollingInterval,
+            repeats: true
+        ) { [weak self] _ in
+            self?.schedulePoll()
+        }
+    }
+
+    func stop() {
+        pollingTimer?.invalidate()
+        pollingTimer = nil
+        debounceTimer?.invalidate()
+        debounceTimer = nil
+        popoverDismissTimer?.invalidate()
+        popoverDismissTimer = nil
+        dismissWidget()
+        dismissPopover()
+        lastCheckedText = nil
+        currentIssues = []
+        state = .idle
+        isPolling = false
+    }
+
+    // MARK: - Polling
+
+    private func schedulePoll() {
+        // Re-entrancy guard: skip if previous poll is still running
+        guard !isPolling else { return }
+        isPolling = true
+
+        backgroundQueue.async { [weak self] in
+            self?.pollFocusedTextField()
+        }
+    }
+
+    private func pollFocusedTextField() {
+        defer { isPolling = false }
+
+        guard let app = NSWorkspace.shared.frontmostApplication else {
+            DispatchQueue.main.async { [weak self] in self?.dismissWidget() }
+            return
+        }
+
+        let pid = app.processIdentifier
+        let appElement = AXUIElementCreateApplication(pid)
+
+        var focusedValue: AnyObject?
+        let focusResult = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedValue
+        )
+        guard focusResult == .success, let focused = focusedValue else {
+            DispatchQueue.main.async { [weak self] in self?.dismissWidget() }
+            return
+        }
+
+        let element = focused as! AXUIElement
+
+        // Check if it's a text element
+        var roleValue: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue)
+        let role = roleValue as? String ?? ""
+        guard role == kAXTextAreaRole || role == kAXTextFieldRole else {
+            DispatchQueue.main.async { [weak self] in self?.dismissWidget() }
+            return
+        }
+
+        // Read text value
+        var textValue: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &textValue)
+        guard let text = textValue as? String, !text.isEmpty else {
+            DispatchQueue.main.async { [weak self] in self?.dismissWidget() }
+            return
+        }
+
+        // Debounce: only recheck if text changed
+        if text == lastCheckedText {
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.debounceTimer?.invalidate()
+            self?.debounceTimer = Timer.scheduledTimer(
+                withTimeInterval: SpellCheckSupport.debounceInterval,
+                repeats: false
+            ) { [weak self] _ in
+                self?.triggerCheck(text, element: element)
+            }
+        }
+    }
+
+    // MARK: - Spell Check
+
+    private func triggerCheck(_ text: String, element: AXUIElement) {
+        updateState(.checking)
+
+        backgroundQueue.async { [weak self] in
+            let issues = self?.performSpellCheck(text) ?? []
+            DispatchQueue.main.async { [weak self] in
+                self?.lastCheckedText = text
+                self?.applyResults(issues, element: element)
+            }
+        }
+    }
+
+    private func performSpellCheck(_ text: String) -> [SpellCheckIssue] {
+        guard SpellCheckSupport.shouldCheck(text: text) else {
+            return []
+        }
+
+        let checker = NSSpellChecker.shared
+        let nsText = text as NSString
+        var issues: [SpellCheckIssue] = []
+
+        // Use the full check method to detect spelling, grammar, punctuation, and style
+        let checkingTypes: NSTextCheckingTypes =
+            NSTextCheckingResult.CheckingType.spelling.rawValue |
+            NSTextCheckingResult.CheckingType.grammar.rawValue |
+            NSTextCheckingResult.CheckingType.correction.rawValue |
+            NSTextCheckingResult.CheckingType.quote.rawValue |
+            NSTextCheckingResult.CheckingType.dash.rawValue |
+            NSTextCheckingResult.CheckingType.replacement.rawValue
+
+        let results = checker.check(
+            text,
+            range: NSRange(location: 0, length: nsText.length),
+            types: checkingTypes,
+            options: nil,
+            inSpellDocumentWithTag: 0,
+            orthography: nil,
+            wordCount: nil
+        )
+
+        for result in results {
+            if issues.count >= SpellCheckSupport.maxDisplayIssues { break }
+
+            switch result.resultType {
+            case .spelling:
+                let word = nsText.substring(with: result.range)
+                let guesses = checker.guesses(
+                    forWordRange: result.range,
+                    in: text,
+                    language: nil,
+                    inSpellDocumentWithTag: 0
+                ) ?? []
+                issues.append(SpellCheckIssue(
+                    word: word,
+                    range: result.range,
+                    kind: .spelling,
+                    suggestions: guesses
+                ))
+
+            case .grammar:
+                // Each grammar result can contain multiple detail entries
+                for detail in (result.grammarDetails ?? []) {
+                    if issues.count >= SpellCheckSupport.maxDisplayIssues { break }
+
+                    let detailRange: NSRange
+                    if let rangeValue = detail["NSGrammarRange"] as? NSValue {
+                        detailRange = rangeValue.rangeValue
+                    } else {
+                        detailRange = result.range
+                    }
+
+                    // Validate range bounds
+                    guard detailRange.location + detailRange.length <= nsText.length else { continue }
+
+                    let word = nsText.substring(with: detailRange)
+                    let corrections = detail["NSGrammarCorrections"] as? [String] ?? []
+                    issues.append(SpellCheckIssue(
+                        word: word,
+                        range: detailRange,
+                        kind: .grammar,
+                        suggestions: corrections
+                    ))
+                }
+
+            case .correction:
+                // Autocorrect-style suggestions
+                if let replacement = result.replacementString {
+                    let word = nsText.substring(with: result.range)
+                    issues.append(SpellCheckIssue(
+                        word: word,
+                        range: result.range,
+                        kind: .spelling,
+                        suggestions: [replacement]
+                    ))
+                }
+
+            case .quote, .dash, .replacement:
+                // Smart quotes, em-dashes, symbol replacements (e.g. (c) → ©)
+                if let replacement = result.replacementString {
+                    let word = nsText.substring(with: result.range)
+                    issues.append(SpellCheckIssue(
+                        word: word,
+                        range: result.range,
+                        kind: .style,
+                        suggestions: [replacement]
+                    ))
+                }
+
+            default:
+                break
+            }
+        }
+
+        return issues
+    }
+
+    private func applyResults(_ issues: [SpellCheckIssue], element: AXUIElement) {
+        let displayIssues = SpellCheckSupport.truncateForDisplay(issues)
+        currentIssues = displayIssues
+
+        if displayIssues.isEmpty {
+            updateState(.clean)
+            dismissPopover()
+        } else {
+            updateState(.issues(displayIssues.count))
+        }
+
+        positionWidget(near: element)
+
+        // Auto-expand the popover when issues are found
+        if !displayIssues.isEmpty {
+            showPopover()
+            schedulePopoverAutoDismiss()
+        }
+    }
+
+    private func schedulePopoverAutoDismiss() {
+        popoverDismissTimer?.invalidate()
+        popoverDismissTimer = Timer.scheduledTimer(
+            withTimeInterval: LiveFeedbackSupport.issuePopoverAutoDismissDelay,
+            repeats: false
+        ) { [weak self] _ in
+            self?.dismissPopover()
+        }
+    }
+
+    // MARK: - State
+
+    private func updateState(_ newState: LiveFeedbackState) {
+        state = newState
+        updateWidgetAppearance()
+
+        if let delay = LiveFeedbackSupport.autoDismissDelay(for: newState) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.state == newState else { return }
+                self.dismissWidget()
+            }
+        }
+    }
+
+    // MARK: - Widget
+
+    private func showWidget() {
+        guard widgetWindow == nil else { return }
+
+        let window = NSWindow(
+            contentRect: NSRect(
+                x: 0, y: 0,
+                width: LiveFeedbackSupport.widgetWidth,
+                height: LiveFeedbackSupport.widgetHeight
+            ),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.level = .floating
+        window.hasShadow = true
+        window.ignoresMouseEvents = false
+        window.collectionBehavior = [.canJoinAllSpaces, .transient]
+
+        let container = NSView(frame: window.contentView!.bounds)
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        container.layer?.cornerRadius = LiveFeedbackSupport.widgetCornerRadius
+        container.layer?.borderWidth = 0.5
+        container.layer?.borderColor = NSColor.separatorColor.cgColor
+
+        let dot = NSView()
+        dot.wantsLayer = true
+        dot.layer?.cornerRadius = 4
+        dot.layer?.backgroundColor = NSColor.systemGray.cgColor
+        dot.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = NSTextField(labelWithString: LiveFeedbackSupport.statusText(for: .idle))
+        label.font = .systemFont(ofSize: LiveFeedbackSupport.widgetFontSize, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(dot)
+        container.addSubview(label)
+        container.translatesAutoresizingMaskIntoConstraints = false
+        window.contentView!.addSubview(container)
+
+        NSLayoutConstraint.activate([
+            container.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor),
+            container.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),
+            container.topAnchor.constraint(equalTo: window.contentView!.topAnchor),
+            container.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor),
+
+            dot.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: LiveFeedbackSupport.widgetPadding),
+            dot.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            dot.widthAnchor.constraint(equalToConstant: 8),
+            dot.heightAnchor.constraint(equalToConstant: 8),
+
+            label.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: 6),
+            label.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor, constant: -LiveFeedbackSupport.widgetPadding),
+        ])
+
+        self.widgetWindow = window
+        self.widgetLabel = label
+        self.widgetDot = dot
+
+        window.alphaValue = 0
+        window.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = TimeInterval(LiveFeedbackSupport.widgetFadeInDuration)
+            window.animator().alphaValue = 1
+        }
+
+        // Click to show popover
+        let clickGesture = NSClickGestureRecognizer(target: self, action: #selector(widgetClicked))
+        container.addGestureRecognizer(clickGesture)
+    }
+
+    @objc private func widgetClicked() {
+        if popoverWindow?.isVisible == true {
+            dismissPopover()
+        } else {
+            showPopover()
+            schedulePopoverAutoDismiss()
+        }
+    }
+
+    private func dismissWidget() {
+        guard let window = widgetWindow else { return }
+        dismissPopover()
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = TimeInterval(LiveFeedbackSupport.widgetFadeOutDuration)
+            window.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            window.orderOut(nil)
+            self?.widgetWindow = nil
+            self?.widgetLabel = nil
+            self?.widgetDot = nil
+        })
+    }
+
+    private func updateWidgetAppearance() {
+        guard widgetWindow != nil else {
+            if state != .idle {
+                showWidget()
+            }
+            return
+        }
+
+        widgetLabel?.stringValue = LiveFeedbackSupport.statusText(for: state)
+
+        let colorName = LiveFeedbackSupport.statusColorName(for: state)
+        let dotColor: NSColor
+        switch colorName {
+        case "systemOrange": dotColor = .systemOrange
+        case "systemGreen": dotColor = .systemGreen
+        case "systemRed": dotColor = .systemRed
+        default: dotColor = .systemGray
+        }
+        widgetDot?.layer?.backgroundColor = dotColor.cgColor
+    }
+
+    private func positionWidget(near element: AXUIElement) {
+        if widgetWindow == nil {
+            showWidget()
+        }
+
+        // Try to get bounds of the focused element to position the widget below it
+        var boundsValue: AnyObject?
+        let boundsResult = AXUIElementCopyAttributeValue(
+            element,
+            kAXPositionAttribute as CFString,
+            &boundsValue
+        )
+
+        var sizeValue: AnyObject?
+        let sizeResult = AXUIElementCopyAttributeValue(
+            element,
+            kAXSizeAttribute as CFString,
+            &sizeValue
+        )
+
+        guard boundsResult == .success, sizeResult == .success,
+              let posValue = boundsValue, let szValue = sizeValue else {
+            // Fallback: position at bottom-right of screen
+            if let screen = NSScreen.main {
+                let screenFrame = screen.visibleFrame
+                let x = screenFrame.maxX - LiveFeedbackSupport.widgetWidth - 20
+                let y = screenFrame.minY + 20
+                widgetWindow?.setFrameOrigin(NSPoint(x: x, y: y))
+            }
+            return
+        }
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        AXValueGetValue(posValue as! AXValue, .cgPoint, &position)
+        AXValueGetValue(szValue as! AXValue, .cgSize, &size)
+
+        // Convert from top-left screen coords to Cocoa bottom-left coords
+        if let screen = NSScreen.main {
+            let screenHeight = screen.frame.height
+            let widgetX = position.x + size.width - LiveFeedbackSupport.widgetWidth
+            let widgetY = screenHeight - position.y - size.height - LiveFeedbackSupport.widgetHeight - LiveFeedbackSupport.widgetOffsetY
+
+            widgetWindow?.setFrameOrigin(NSPoint(x: max(0, widgetX), y: max(0, widgetY)))
+        }
+    }
+
+    // MARK: - Popover
+
+    private func showPopover() {
+        guard !currentIssues.isEmpty, let widgetFrame = widgetWindow?.frame else { return }
+
+        dismissPopover()
+
+        let height = LiveFeedbackSupport.popoverHeight(for: currentIssues.count)
+        let popover = NSWindow(
+            contentRect: NSRect(
+                x: widgetFrame.origin.x,
+                y: widgetFrame.origin.y + widgetFrame.height + 4,
+                width: LiveFeedbackSupport.popoverWidth,
+                height: height
+            ),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        popover.isOpaque = false
+        popover.backgroundColor = .clear
+        popover.level = .floating
+        popover.hasShadow = true
+
+        let container = NSView(frame: popover.contentView!.bounds)
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        container.layer?.cornerRadius = LiveFeedbackSupport.popoverCornerRadius
+        container.layer?.borderWidth = 0.5
+        container.layer?.borderColor = NSColor.separatorColor.cgColor
+        container.autoresizingMask = [.width, .height]
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.spacing = 0
+        stack.alignment = .leading
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let displayIssues = Array(currentIssues.prefix(LiveFeedbackSupport.popoverMaxVisibleRows))
+        for issue in displayIssues {
+            let row = makeIssueRow(issue)
+            stack.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalToConstant: LiveFeedbackSupport.popoverWidth - LiveFeedbackSupport.popoverPadding * 2).isActive = true
+        }
+
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: LiveFeedbackSupport.popoverPadding),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: LiveFeedbackSupport.popoverPadding),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LiveFeedbackSupport.popoverPadding),
+        ])
+
+        popover.contentView!.addSubview(container)
+        popover.orderFrontRegardless()
+        self.popoverWindow = popover
+    }
+
+    private func dismissPopover() {
+        popoverDismissTimer?.invalidate()
+        popoverDismissTimer = nil
+        popoverWindow?.orderOut(nil)
+        popoverWindow = nil
+    }
+
+    private func makeIssueRow(_ issue: SpellCheckIssue) -> NSView {
+        let row = NSView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.heightAnchor.constraint(equalToConstant: LiveFeedbackSupport.popoverRowHeight).isActive = true
+
+        let wordLabel = NSTextField(labelWithString: issue.word)
+        wordLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        wordLabel.textColor = .labelColor
+        wordLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let descLabel = NSTextField(labelWithString: SpellCheckSupport.issueDescription(for: issue))
+        descLabel.font = .systemFont(ofSize: 11)
+        descLabel.textColor = .secondaryLabelColor
+        descLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        row.addSubview(wordLabel)
+        row.addSubview(descLabel)
+
+        NSLayoutConstraint.activate([
+            wordLabel.topAnchor.constraint(equalTo: row.topAnchor, constant: 4),
+            wordLabel.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            wordLabel.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
+
+            descLabel.topAnchor.constraint(equalTo: wordLabel.bottomAnchor, constant: 1),
+            descLabel.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            descLabel.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
+        ])
+
+        return row
     }
 }
