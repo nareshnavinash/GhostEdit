@@ -1,0 +1,1 @@
+/Users/nareshsekar/Desktop/Scripts/grammar/GrammarFixer/harper-bridge/target/x86_64-apple-darwin/release/libharper_bridge.a: /Users/nareshsekar/Desktop/Scripts/grammar/GrammarFixer/harper-bridge/src/lib.rs

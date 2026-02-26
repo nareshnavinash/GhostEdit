@@ -46,8 +46,22 @@ You can now double-click the app to open it normally! (You only need to do this 
 - **Free and open source** no premium tiers, no word limits, no feature gates. Full grammar correction, writing coaching, and history all included.
 - **Works everywhere** correct text in any macOS app: Slack, Notion, VS Code, Mail, Pages, or any text field. One hotkey, any app.
 - **Bring your own AI** switch between Claude, OpenAI Codex, and Gemini from Settings. Pick the model that works best for you.
+- **On-device grammar** Apple Foundation Models and Harper provide instant local corrections with no API calls needed.
 
 ## Features
+
+### v6.0.0 Highlights
+
+- **Apple Foundation Models integration**: On-device grammar correction using Apple's built-in language models — no API keys, no network, instant results
+- **Harper bundled grammar/spell checker**: Fast, offline grammar and style checking via the Harper linting engine for comprehensive rule-based detection
+- **Redesigned floating widget**: App icon with a colored status dot indicator, positioned below the active text field (never overlapping your typing)
+- **Draggable widget**: Drag the widget anywhere on screen — it stays where you put it until you switch apps
+- **Click-to-fix with accept/ignore**: Each issue row shows action buttons — accept the fix, ignore once, or always ignore a word
+- **Acronym and proper noun awareness**: Automatically filters out acronyms (LLM, API, NASA) and proper nouns from spelling issues
+- **Dual hotkey system**: Base hotkey triggers fast local fixes (Harper + NSSpellChecker), Shift+hotkey triggers full LLM correction
+- **Per-word cursor stability**: Fixes in Slack and other apps now apply word-by-word to preserve cursor position
+
+### Core Features
 
 - **Fire-and-forget correction**: Press the hotkey, switch to any app corrected text is pasted back automatically, even if the target app is in the background
 - **Native HUD overlay**: A glossy floating ghost indicator shows "Working on it..." (with spectacles) and "Done!" (idle ghost), then fades away after 1 second
@@ -70,7 +84,8 @@ You can now double-click the app to open it normally! (You only need to do this 
 - **Clipboard-only mode**: Correct text and place it on the clipboard without auto-pasting
 - **Menu bar tooltip**: Shows a summary of the last correction (time, text preview, provider)
 - **Token estimation**: Estimated cumulative token usage shown in Statistics
-- **Live feedback**: Real-time spelling, grammar, punctuation, and style checking in any text field — a floating widget shows issues as you type with smart quotes, em-dash, and symbol replacement suggestions powered by macOS native text checking
+- **Live feedback**: Real-time spelling, grammar, punctuation, and style checking in any text field — a floating widget shows issues as you type with smart quotes, em-dash, and symbol replacement suggestions powered by macOS native text checking and Harper
+- **Ignored words**: Permanently ignore specific words across sessions via the widget or `~/.ghostedit/ignored_words.json`
 - **Version check support**: Compare your version against the latest release
 - Global hotkey (`Command + E` by default), configurable in **Settings...**
 - Works in background (no Dock icon)
@@ -94,7 +109,7 @@ When enabled in **Settings > Behavior**, a floating widget appears near the acti
 | Symbol replacement | `(c)` → `\u00a9`, `(tm)` → `\u2122` |
 | Autocorrect | Common typos the system already knows |
 
-The widget shows a colored status dot (green = clean, red = issues found) and auto-expands a popover listing each issue with suggestions. Click the widget to toggle the detail view. Enable from **Settings > Behavior > Live Feedback** or set `"liveFeedbackEnabled": true` in config.
+The widget shows a colored status dot (green = clean, red = issues found). Click the widget to toggle the detail popover listing each issue with suggestions. Each issue row has action buttons: accept the fix, ignore once, or always ignore the word. Drag the widget anywhere — it stays put until you switch apps. Enable from **Settings > Behavior > Live Feedback** or set `"liveFeedbackEnabled": true` in config.
 
 ### Prerequisites
 

@@ -1,13 +1,13 @@
 import Carbon.HIToolbox
 
 final class HotkeyManager {
-    typealias Handler = () -> Void
+    /// Handler receives a variant ID: 0 = base hotkey, 1 = shift variant.
+    typealias Handler = (Int) -> Void
 
-    private var hotKeyRef: EventHotKeyRef?
+    private var hotKeyRefs: [UInt32: EventHotKeyRef] = [:]
     private var eventHandlerRef: EventHandlerRef?
     private var handler: Handler?
 
-    private let hotKeyIdentifier: UInt32 = 1
     private let signature: OSType = 0x47534544 // "GSED"
 
     deinit {
@@ -15,14 +15,15 @@ final class HotkeyManager {
     }
 
     func registerDefault(handler: @escaping Handler) {
-        register(
+        registerWithVariant(
             keyCode: UInt32(kVK_ANSI_E),
             modifiers: UInt32(cmdKey),
             handler: handler
         )
     }
 
-    func register(keyCode: UInt32, modifiers: UInt32, handler: @escaping Handler) {
+    /// Registers the base hotkey (variant 0) and auto-derives a Shift variant (variant 1).
+    func registerWithVariant(keyCode: UInt32, modifiers: UInt32, handler: @escaping Handler) {
         unregister()
         self.handler = handler
 
@@ -53,11 +54,17 @@ final class HotkeyManager {
                     &hotKeyID
                 )
 
-                guard status == noErr, hotKeyID.id == manager.hotKeyIdentifier else {
+                guard status == noErr else {
                     return noErr
                 }
 
-                manager.handler?()
+                // Variant 0 uses id=1, variant 1 uses id=2
+                let variant = Int(hotKeyID.id) - 1
+                guard variant == 0 || variant == 1 else {
+                    return noErr
+                }
+
+                manager.handler?(variant)
                 return noErr
             },
             1,
@@ -70,26 +77,55 @@ final class HotkeyManager {
             return
         }
 
-        let eventHotKeyID = EventHotKeyID(signature: signature, id: hotKeyIdentifier)
-        let registerStatus = RegisterEventHotKey(
+        // Register base hotkey (variant 0, id=1)
+        let baseID = EventHotKeyID(signature: signature, id: 1)
+        var baseRef: EventHotKeyRef?
+        let baseStatus = RegisterEventHotKey(
             keyCode,
             modifiers,
-            eventHotKeyID,
+            baseID,
             GetEventDispatcherTarget(),
             0,
-            &hotKeyRef
+            &baseRef
         )
+        if baseStatus == noErr, let ref = baseRef {
+            hotKeyRefs[1] = ref
+        }
 
-        if registerStatus != noErr {
+        // Register shift variant (variant 1, id=2) — base modifiers + Shift
+        let shiftModifiers = modifiers | UInt32(shiftKey)
+        let shiftID = EventHotKeyID(signature: signature, id: 2)
+        var shiftRef: EventHotKeyRef?
+        let shiftStatus = RegisterEventHotKey(
+            keyCode,
+            shiftModifiers,
+            shiftID,
+            GetEventDispatcherTarget(),
+            0,
+            &shiftRef
+        )
+        if shiftStatus == noErr, let ref = shiftRef {
+            hotKeyRefs[2] = ref
+        }
+
+        // If neither registered, clean up
+        if hotKeyRefs.isEmpty {
             unregister()
         }
     }
 
-    func unregister() {
-        if let hotKeyRef {
-            UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
+    /// Legacy single-hotkey registration (always fires variant 0).
+    func register(keyCode: UInt32, modifiers: UInt32, handler: @escaping () -> Void) {
+        registerWithVariant(keyCode: keyCode, modifiers: modifiers) { _ in
+            handler()
         }
+    }
+
+    func unregister() {
+        for (_, ref) in hotKeyRefs {
+            UnregisterEventHotKey(ref)
+        }
+        hotKeyRefs.removeAll()
 
         if let eventHandlerRef {
             RemoveEventHandler(eventHandlerRef)

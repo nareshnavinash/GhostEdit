@@ -13,6 +13,17 @@ final class LiveFeedbackSupportTests: XCTestCase {
         XCTAssertGreaterThan(LiveFeedbackSupport.widgetFontSize, 0)
         XCTAssertGreaterThan(LiveFeedbackSupport.widgetPadding, 0)
         XCTAssertGreaterThanOrEqual(LiveFeedbackSupport.widgetOffsetY, 0)
+        XCTAssertGreaterThan(LiveFeedbackSupport.widgetIconSize, 0)
+        XCTAssertGreaterThan(LiveFeedbackSupport.widgetDotSize, 0)
+    }
+
+    func testWidgetIsCircular() {
+        // Corner radius should be half the width for a circular widget
+        XCTAssertEqual(LiveFeedbackSupport.widgetCornerRadius, LiveFeedbackSupport.widgetWidth / 2)
+    }
+
+    func testWidgetIsSquare() {
+        XCTAssertEqual(LiveFeedbackSupport.widgetWidth, LiveFeedbackSupport.widgetHeight)
     }
 
     // MARK: - Popover Layout Constants
@@ -23,6 +34,26 @@ final class LiveFeedbackSupportTests: XCTestCase {
         XCTAssertGreaterThan(LiveFeedbackSupport.popoverMaxVisibleRows, 0)
         XCTAssertGreaterThan(LiveFeedbackSupport.popoverCornerRadius, 0)
         XCTAssertGreaterThan(LiveFeedbackSupport.popoverPadding, 0)
+        XCTAssertGreaterThan(LiveFeedbackSupport.popoverRowIconSize, 0)
+        XCTAssertGreaterThan(LiveFeedbackSupport.popoverRowIconPadding, 0)
+        XCTAssertGreaterThanOrEqual(LiveFeedbackSupport.popoverRowArrowPadding, 0)
+        XCTAssertGreaterThan(LiveFeedbackSupport.popoverRowVerticalPadding, 0)
+        XCTAssertGreaterThan(LiveFeedbackSupport.popoverRowHoverAlpha, 0)
+        XCTAssertLessThanOrEqual(LiveFeedbackSupport.popoverRowHoverAlpha, 1.0)
+    }
+
+    // MARK: - Issue Action Button Constants
+
+    func testIssueActionButtonConstantsArePositive() {
+        XCTAssertGreaterThan(LiveFeedbackSupport.issueActionButtonSize, 0)
+        XCTAssertGreaterThanOrEqual(LiveFeedbackSupport.issueActionButtonSpacing, 0)
+    }
+
+    func testIssueActionButtonSizeFitsInRow() {
+        XCTAssertLessThanOrEqual(
+            LiveFeedbackSupport.issueActionButtonSize,
+            LiveFeedbackSupport.popoverRowHeight
+        )
     }
 
     // MARK: - Timing Constants
@@ -33,6 +64,14 @@ final class LiveFeedbackSupportTests: XCTestCase {
         XCTAssertGreaterThan(LiveFeedbackSupport.widgetFadeOutDuration, 0)
         XCTAssertGreaterThan(LiveFeedbackSupport.cleanAutoDismissDelay, 0)
         XCTAssertGreaterThan(LiveFeedbackSupport.issuePopoverAutoDismissDelay, 0)
+        XCTAssertGreaterThan(LiveFeedbackSupport.hoverDismissRestartDelay, 0)
+    }
+
+    func testHoverDismissRestartDelayIsLessThanIssuePopoverDelay() {
+        XCTAssertLessThan(
+            LiveFeedbackSupport.hoverDismissRestartDelay,
+            LiveFeedbackSupport.issuePopoverAutoDismissDelay
+        )
     }
 
     func testIssuePopoverDelayIsAtLeastFiveSeconds() {

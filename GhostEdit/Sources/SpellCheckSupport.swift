@@ -63,6 +63,66 @@ enum SpellCheckSupport {
         return issues.filter { !ignoredWords.contains($0.word.lowercased()) }
     }
 
+    /// Returns true if the word looks like a proper noun (capitalized, not sentence-start).
+    /// A word is considered a likely proper noun if it starts with an uppercase letter
+    /// followed by lowercase letters, and is not at the very start of the text.
+    static func isLikelyProperNoun(_ word: String, at range: NSRange, in text: String) -> Bool {
+        guard let first = word.unicodeScalars.first,
+              CharacterSet.uppercaseLetters.contains(first) else {
+            return false
+        }
+        // Single letters and all-caps words (acronyms) are not proper nouns
+        let restOfWord = word.dropFirst()
+        if restOfWord.isEmpty || restOfWord.allSatisfy({ $0.isUppercase }) {
+            return false
+        }
+        // If at text start, it's just normal capitalization
+        if range.location == 0 { return false }
+        // Check if preceded by sentence-ending punctuation + space
+        let nsText = text as NSString
+        let beforeIdx = range.location - 1
+        guard beforeIdx >= 0 else { return false }
+        // Walk backwards to find the first non-whitespace character
+        var idx = beforeIdx
+        while idx >= 0 && CharacterSet.whitespaces.contains(
+            Unicode.Scalar(nsText.character(at: idx))!
+        ) {
+            idx -= 1
+        }
+        guard idx >= 0 else { return false }
+        let precedingChar = Unicode.Scalar(nsText.character(at: idx))!
+        let sentenceEnders = CharacterSet(charactersIn: ".!?")
+        // If preceded by a sentence ender, this is just normal sentence-start capitalization
+        if sentenceEnders.contains(precedingChar) { return false }
+        // Capitalized mid-sentence → likely a proper noun
+        return true
+    }
+
+    /// Filters out issues where the flagged word is likely a proper noun (name).
+    static func filterProperNouns(
+        _ issues: [SpellCheckIssue],
+        in text: String
+    ) -> [SpellCheckIssue] {
+        issues.filter { issue in
+            guard issue.kind == .spelling else { return true }
+            return !isLikelyProperNoun(issue.word, at: issue.range, in: text)
+        }
+    }
+
+    /// Returns true if the word looks like an acronym/abbreviation (2+ uppercase letters).
+    static func isLikelyAcronym(_ word: String) -> Bool {
+        guard word.count >= 2 else { return false }
+        return word.allSatisfy { $0.isUppercase || $0.isNumber }
+    }
+
+    /// Filters out spelling issues where the flagged word is likely an acronym.
+    static func filterAcronyms(_ issues: [SpellCheckIssue]) -> [SpellCheckIssue] {
+        issues.filter { issue in
+            guard issue.kind == .spelling else { return true }
+            return !isLikelyAcronym(issue.word)
+        }
+    }
+
     /// Limits display to the configured maximum.
     static func truncateForDisplay(_ issues: [SpellCheckIssue]) -> [SpellCheckIssue] {
         Array(issues.prefix(maxDisplayIssues))
@@ -96,6 +156,17 @@ enum SpellCheckSupport {
             }
         }
         return (spelling, grammar, style)
+    }
+
+    // MARK: - Icon
+
+    /// Returns the SF Symbol name for the given issue kind.
+    static func iconName(for kind: SpellCheckIssue.Kind) -> String {
+        switch kind {
+        case .spelling: return "textformat.abc.dottedunderline"
+        case .grammar: return "text.badge.xmark"
+        case .style: return "paintbrush.pointed"
+        }
     }
 
     // MARK: - Issue description

@@ -5,9 +5,11 @@ private final class StubAXProvider: AXElementProviding {
     var focusResult: AXError = .success
     var selectedTextResult: AXError = .success
     var setResult: AXError = .success
+    var setResultByAttribute: [String: AXError] = [:]
     var selectedText: String?
     private(set) var lastSetText: String?
     private(set) var lastSetAttribute: String?
+    private(set) var setAttributeCalls: [(attribute: String, value: Any?)] = []
 
     func createApplication(_ pid: pid_t) -> AXUIElement {
         AXUIElementCreateSystemWide()
@@ -39,6 +41,10 @@ private final class StubAXProvider: AXElementProviding {
     func setAttribute(_ element: AXUIElement, _ attribute: String, _ value: CFTypeRef) -> AXError {
         lastSetAttribute = attribute
         lastSetText = value as? String
+        setAttributeCalls.append((attribute: attribute, value: value as Any?))
+        if let result = setResultByAttribute[attribute] {
+            return result
+        }
         return setResult
     }
 }
@@ -139,6 +145,70 @@ final class AccessibilityTextSupportTests: XCTestCase {
         )
 
         XCTAssertFalse(result)
+    }
+
+    // MARK: - replaceTextAtRange
+
+    func testReplaceTextAtRangeSucceeds() {
+        let provider = StubAXProvider()
+
+        let result = AccessibilityTextSupport.replaceTextAtRange(
+            appPID: 1,
+            range: CFRange(location: 0, length: 3),
+            with: "the",
+            provider: provider
+        )
+
+        XCTAssertTrue(result)
+        XCTAssertEqual(provider.setAttributeCalls.count, 2)
+        XCTAssertEqual(provider.setAttributeCalls[0].attribute, kAXSelectedTextRangeAttribute as String)
+        XCTAssertEqual(provider.setAttributeCalls[1].attribute, kAXSelectedTextAttribute as String)
+        XCTAssertEqual(provider.lastSetText, "the")
+    }
+
+    func testReplaceTextAtRangeFailsWhenFocusFails() {
+        let provider = StubAXProvider()
+        provider.focusResult = .cannotComplete
+
+        let result = AccessibilityTextSupport.replaceTextAtRange(
+            appPID: 1,
+            range: CFRange(location: 0, length: 3),
+            with: "the",
+            provider: provider
+        )
+
+        XCTAssertFalse(result)
+        XCTAssertTrue(provider.setAttributeCalls.isEmpty)
+    }
+
+    func testReplaceTextAtRangeFailsWhenSetRangeFails() {
+        let provider = StubAXProvider()
+        provider.setResultByAttribute[kAXSelectedTextRangeAttribute as String] = .attributeUnsupported
+
+        let result = AccessibilityTextSupport.replaceTextAtRange(
+            appPID: 1,
+            range: CFRange(location: 0, length: 3),
+            with: "the",
+            provider: provider
+        )
+
+        XCTAssertFalse(result)
+        XCTAssertEqual(provider.setAttributeCalls.count, 1)
+    }
+
+    func testReplaceTextAtRangeFailsWhenSetTextFails() {
+        let provider = StubAXProvider()
+        provider.setResultByAttribute[kAXSelectedTextAttribute as String] = .attributeUnsupported
+
+        let result = AccessibilityTextSupport.replaceTextAtRange(
+            appPID: 1,
+            range: CFRange(location: 0, length: 3),
+            with: "the",
+            provider: provider
+        )
+
+        XCTAssertFalse(result)
+        XCTAssertEqual(provider.setAttributeCalls.count, 2)
     }
 
     // MARK: - SystemAXElementProvider

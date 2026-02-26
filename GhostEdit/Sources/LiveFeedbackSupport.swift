@@ -12,12 +12,15 @@ enum LiveFeedbackState: Equatable {
 enum LiveFeedbackSupport {
     // MARK: - Widget Layout
 
-    static let widgetWidth: CGFloat = 180
-    static let widgetHeight: CGFloat = 28
-    static let widgetCornerRadius: CGFloat = 8
+    static let widgetWidth: CGFloat = 36
+    static let widgetHeight: CGFloat = 36
+    static let widgetCornerRadius: CGFloat = 18
     static let widgetFontSize: CGFloat = 12
     static let widgetPadding: CGFloat = 8
     static let widgetOffsetY: CGFloat = 4
+    static let widgetIconSize: CGFloat = 20
+    static let widgetDotSize: CGFloat = 10
+    static let widgetDotOffset: CGFloat = -1
 
     // MARK: - Popover Layout
 
@@ -26,6 +29,16 @@ enum LiveFeedbackSupport {
     static let popoverMaxVisibleRows: Int = 6
     static let popoverCornerRadius: CGFloat = 10
     static let popoverPadding: CGFloat = 8
+    static let popoverRowIconSize: CGFloat = 16
+    static let popoverRowIconPadding: CGFloat = 6
+    static let popoverRowArrowPadding: CGFloat = 4
+    static let popoverRowVerticalPadding: CGFloat = 6
+    static let popoverRowHoverAlpha: CGFloat = 0.08
+
+    // MARK: - Issue Action Buttons
+
+    static let issueActionButtonSize: CGFloat = 16
+    static let issueActionButtonSpacing: CGFloat = 4
 
     // MARK: - Timing
 
@@ -34,6 +47,7 @@ enum LiveFeedbackSupport {
     static let widgetFadeOutDuration: CGFloat = 0.15
     static let cleanAutoDismissDelay: TimeInterval = 3.0
     static let issuePopoverAutoDismissDelay: TimeInterval = 5.0
+    static let hoverDismissRestartDelay: TimeInterval = 3.0
 
     // MARK: - State Display
 

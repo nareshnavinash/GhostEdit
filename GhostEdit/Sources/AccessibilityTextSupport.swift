@@ -77,4 +77,44 @@ enum AccessibilityTextSupport {
         )
         return result == .success
     }
+
+    static func replaceTextAtRange(
+        appPID: pid_t,
+        range: CFRange,
+        with text: String,
+        provider: AXElementProviding = SystemAXElementProvider()
+    ) -> Bool {
+        let appElement = provider.createApplication(appPID)
+
+        let (focusResult, focusedValue) = provider.copyAttribute(
+            appElement,
+            kAXFocusedUIElementAttribute as String
+        )
+        guard focusResult == .success, let focused = focusedValue else {
+            return false
+        }
+
+        // swiftlint:disable:next force_cast
+        let focusedElement = focused as! AXUIElement
+
+        var cfRange = range
+        // swiftlint:disable:next force_unwrapping
+        let rangeValue = AXValueCreate(.cfRange, &cfRange)!
+
+        let rangeResult = provider.setAttribute(
+            focusedElement,
+            kAXSelectedTextRangeAttribute as String,
+            rangeValue
+        )
+        guard rangeResult == .success else {
+            return false
+        }
+
+        let textResult = provider.setAttribute(
+            focusedElement,
+            kAXSelectedTextAttribute as String,
+            text as CFTypeRef
+        )
+        return textResult == .success
+    }
 }

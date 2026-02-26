@@ -4,7 +4,7 @@
 A macOS menu bar app (AppKit, no SwiftUI/XIBs) that fixes grammar/spelling in any text field system-wide. User presses a hotkey, selected text is sent to an LLM (Claude/Gemini/Codex), corrected text is pasted back. Supports streaming preview, diff view, writing coach, and history.
 
 **Repo:** https://github.com/nareshnavinash/GhostEdit.git
-**Version:** 5.4.0 (build 25) | **macOS 13.0+** | **Swift 5**
+**Version:** 6.0.0 (build 26) | **macOS 13.0+** | **Swift 5**
 
 ## Architecture
 

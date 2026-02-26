@@ -264,6 +264,192 @@ final class SpellCheckSupportTests: XCTestCase {
         XCTAssertEqual(style.count, 1)
     }
 
+    // MARK: - iconName
+
+    func testIconNameForSpelling() {
+        XCTAssertEqual(SpellCheckSupport.iconName(for: .spelling), "textformat.abc.dottedunderline")
+    }
+
+    func testIconNameForGrammar() {
+        XCTAssertEqual(SpellCheckSupport.iconName(for: .grammar), "text.badge.xmark")
+    }
+
+    func testIconNameForStyle() {
+        XCTAssertEqual(SpellCheckSupport.iconName(for: .style), "paintbrush.pointed")
+    }
+
+    // MARK: - isLikelyProperNoun
+
+    func testIsLikelyProperNounMidSentence() {
+        let text = "I met John yesterday"
+        XCTAssertTrue(SpellCheckSupport.isLikelyProperNoun("John", at: NSRange(location: 5, length: 4), in: text))
+    }
+
+    func testIsLikelyProperNounAtTextStart() {
+        let text = "John went home"
+        XCTAssertFalse(SpellCheckSupport.isLikelyProperNoun("John", at: NSRange(location: 0, length: 4), in: text))
+    }
+
+    func testIsLikelyProperNounAfterPeriod() {
+        let text = "Hello. John went home"
+        XCTAssertFalse(SpellCheckSupport.isLikelyProperNoun("John", at: NSRange(location: 7, length: 4), in: text))
+    }
+
+    func testIsLikelyProperNounAfterExclamation() {
+        let text = "Wow! Sarah is here"
+        XCTAssertFalse(SpellCheckSupport.isLikelyProperNoun("Sarah", at: NSRange(location: 5, length: 5), in: text))
+    }
+
+    func testIsLikelyProperNounAfterQuestion() {
+        let text = "Really? Mike is here"
+        XCTAssertFalse(SpellCheckSupport.isLikelyProperNoun("Mike", at: NSRange(location: 8, length: 4), in: text))
+    }
+
+    func testIsLikelyProperNounLowercaseWord() {
+        let text = "I have apples"
+        XCTAssertFalse(SpellCheckSupport.isLikelyProperNoun("apples", at: NSRange(location: 7, length: 6), in: text))
+    }
+
+    func testIsLikelyProperNounAllCapsAcronym() {
+        let text = "The NASA launch"
+        XCTAssertFalse(SpellCheckSupport.isLikelyProperNoun("NASA", at: NSRange(location: 4, length: 4), in: text))
+    }
+
+    func testIsLikelyProperNounSingleCapitalLetter() {
+        let text = "Press X to continue"
+        XCTAssertFalse(SpellCheckSupport.isLikelyProperNoun("X", at: NSRange(location: 6, length: 1), in: text))
+    }
+
+    func testIsLikelyProperNounAfterComma() {
+        let text = "Hello, Naresh how are you"
+        XCTAssertTrue(SpellCheckSupport.isLikelyProperNoun("Naresh", at: NSRange(location: 7, length: 6), in: text))
+    }
+
+    // MARK: - filterProperNouns
+
+    func testFilterProperNounsRemovesNames() {
+        let text = "I met Naresh yesterday"
+        let issues = [
+            SpellCheckIssue(word: "Naresh", range: NSRange(location: 5, length: 6), kind: .spelling, suggestions: ["Marsh"])
+        ]
+        let result = SpellCheckSupport.filterProperNouns(issues, in: text)
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testFilterProperNounsKeepsGrammarIssues() {
+        let text = "I met Naresh yesterday"
+        let issues = [
+            SpellCheckIssue(word: "Naresh", range: NSRange(location: 5, length: 6), kind: .grammar, suggestions: ["something"])
+        ]
+        let result = SpellCheckSupport.filterProperNouns(issues, in: text)
+        XCTAssertEqual(result.count, 1)
+    }
+
+    func testFilterProperNounsKeepsLowercaseSpelling() {
+        let text = "I have appls"
+        let issues = [
+            SpellCheckIssue(word: "appls", range: NSRange(location: 7, length: 5), kind: .spelling, suggestions: ["apples"])
+        ]
+        let result = SpellCheckSupport.filterProperNouns(issues, in: text)
+        XCTAssertEqual(result.count, 1)
+    }
+
+    func testFilterProperNounsKeepsSentenceStartCapitalized() {
+        let text = "Naresh went home"
+        let issues = [
+            SpellCheckIssue(word: "Naresh", range: NSRange(location: 0, length: 6), kind: .spelling, suggestions: ["Marsh"])
+        ]
+        let result = SpellCheckSupport.filterProperNouns(issues, in: text)
+        // At text start, we can't tell if it's a proper noun or not, so keep it
+        XCTAssertEqual(result.count, 1)
+    }
+
+    func testFilterProperNounsEmptyIssues() {
+        let result = SpellCheckSupport.filterProperNouns([], in: "Hello world")
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    // MARK: - isLikelyAcronym
+
+    func testIsLikelyAcronymAllCaps() {
+        XCTAssertTrue(SpellCheckSupport.isLikelyAcronym("LLM"))
+    }
+
+    func testIsLikelyAcronymAPI() {
+        XCTAssertTrue(SpellCheckSupport.isLikelyAcronym("API"))
+    }
+
+    func testIsLikelyAcronymNASA() {
+        XCTAssertTrue(SpellCheckSupport.isLikelyAcronym("NASA"))
+    }
+
+    func testIsLikelyAcronymAI() {
+        XCTAssertTrue(SpellCheckSupport.isLikelyAcronym("AI"))
+    }
+
+    func testIsLikelyAcronymWithNumbers() {
+        XCTAssertTrue(SpellCheckSupport.isLikelyAcronym("H264"))
+    }
+
+    func testIsLikelyAcronymSingleChar() {
+        XCTAssertFalse(SpellCheckSupport.isLikelyAcronym("A"))
+    }
+
+    func testIsLikelyAcronymMixedCase() {
+        XCTAssertFalse(SpellCheckSupport.isLikelyAcronym("Hello"))
+    }
+
+    func testIsLikelyAcronymLowercase() {
+        XCTAssertFalse(SpellCheckSupport.isLikelyAcronym("api"))
+    }
+
+    func testIsLikelyAcronymEmptyString() {
+        XCTAssertFalse(SpellCheckSupport.isLikelyAcronym(""))
+    }
+
+    // MARK: - filterAcronyms
+
+    func testFilterAcronymsRemovesAcronyms() {
+        let issues = [
+            SpellCheckIssue(word: "LLM", range: NSRange(location: 4, length: 3), kind: .spelling, suggestions: ["Elm"]),
+            SpellCheckIssue(word: "teh", range: NSRange(location: 10, length: 3), kind: .spelling, suggestions: ["the"]),
+        ]
+        let result = SpellCheckSupport.filterAcronyms(issues)
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].word, "teh")
+    }
+
+    func testFilterAcronymsKeepsGrammarIssues() {
+        let issues = [
+            SpellCheckIssue(word: "API", range: NSRange(location: 0, length: 3), kind: .grammar, suggestions: ["An API"]),
+        ]
+        let result = SpellCheckSupport.filterAcronyms(issues)
+        XCTAssertEqual(result.count, 1)
+    }
+
+    func testFilterAcronymsKeepsNonAcronyms() {
+        let issues = [
+            makeIssue(word: "teh", kind: .spelling),
+            makeIssue(word: "wrods", kind: .spelling),
+        ]
+        let result = SpellCheckSupport.filterAcronyms(issues)
+        XCTAssertEqual(result.count, 2)
+    }
+
+    func testFilterAcronymsEmptyInput() {
+        let result = SpellCheckSupport.filterAcronyms([])
+        XCTAssertTrue(result.isEmpty)
+    }
+
+    func testFilterAcronymsAllRemoved() {
+        let issues = [
+            SpellCheckIssue(word: "LLM", range: NSRange(location: 0, length: 3), kind: .spelling, suggestions: ["Elm"]),
+            SpellCheckIssue(word: "API", range: NSRange(location: 5, length: 3), kind: .spelling, suggestions: ["Ape"]),
+        ]
+        let result = SpellCheckSupport.filterAcronyms(issues)
+        XCTAssertTrue(result.isEmpty)
+    }
+
     // MARK: - issueDescription
 
     func testIssueDescriptionSpellingWithSuggestions() {

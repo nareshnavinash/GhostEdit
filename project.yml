@@ -20,6 +20,9 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
         SKIP_INSTALL: YES
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/build/harper
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/build/harper
+        OTHER_LDFLAGS: -lharper_bridge
   GhostEdit:
     type: application
     platform: macOS
@@ -35,9 +38,12 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.ghostedit.app
         INFOPLIST_FILE: GhostEdit/Info.plist
         CODE_SIGN_STYLE: Automatic
-        CURRENT_PROJECT_VERSION: 21
-        MARKETING_VERSION: 5.0.1
+        CURRENT_PROJECT_VERSION: 26
+        MARKETING_VERSION: 6.0.0
         ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/build/harper
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/build/harper
+        OTHER_LDFLAGS: -lharper_bridge
   GhostEditTests:
     type: bundle.unit-test
     platform: macOS
@@ -54,6 +60,9 @@ targets:
         CODE_SIGNING_REQUIRED: NO
         TEST_HOST: ""
         BUNDLE_LOADER: ""
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/build/harper
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/build/harper
+        OTHER_LDFLAGS: -lharper_bridge
 schemes:
   GhostEdit:
     build:
