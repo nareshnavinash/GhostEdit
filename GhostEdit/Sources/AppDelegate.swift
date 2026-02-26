@@ -19,6 +19,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusMenu: NSMenu?
     private var statusMenuItem: NSMenuItem?
+    private var statusDetailMenuItem: NSMenuItem?
     private var runNowMenuItem: NSMenuItem?
     private var undoMenuItem: NSMenuItem?
     private var historyMenuItem: NSMenuItem?
@@ -94,19 +95,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let provider = config.resolvedProvider
         let model = config.resolvedModel(for: provider)
         let modelDisplay = model.isEmpty ? provider.defaultModel : model
+
         let status = NSMenuItem(
-            title: "\(provider.displayName) · \(modelDisplay) · Ready",
+            title: "\(provider.displayName) · \(modelDisplay)",
             action: nil,
             keyEquivalent: ""
         )
         status.isEnabled = false
+        menu.addItem(status)
+        statusMenuItem = status
+
+        let detail = NSMenuItem(
+            title: "Ready",
+            action: nil,
+            keyEquivalent: ""
+        )
+        detail.isEnabled = false
         if let img = sfSymbol("circle.fill", size: 8) {
             img.isTemplate = false
             let tinted = tintedImage(img, color: .systemGreen)
-            status.image = tinted
+            detail.image = tinted
         }
-        menu.addItem(status)
-        statusMenuItem = status
+        menu.addItem(detail)
+        statusDetailMenuItem = detail
 
         menu.addItem(.separator())
 
@@ -1280,9 +1291,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let provider = config.resolvedProvider
         let model = config.resolvedModel(for: provider)
         let modelDisplay = model.isEmpty ? provider.defaultModel : model
-        statusMenuItem?.title = "\(provider.displayName) · \(modelDisplay) · \(text)"
+        statusMenuItem?.title = "\(provider.displayName) · \(modelDisplay)"
+        statusDetailMenuItem?.title = text
 
-        // Update status dot color
+        // Update status dot color on detail item
         let dotColor: NSColor
         if text == "Idle" || text.hasPrefix("Last correction") || text.hasPrefix("Settings saved") {
             dotColor = .systemGreen
@@ -1295,7 +1307,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if let img = sfSymbol("circle.fill", size: 8) {
             img.isTemplate = false
-            statusMenuItem?.image = tintedImage(img, color: dotColor)
+            statusDetailMenuItem?.image = tintedImage(img, color: dotColor)
         }
 
         statusItem.button?.toolTip = "GhostEdit\n\(provider.displayName) · \(modelDisplay)\n\(text)"
@@ -2840,7 +2852,6 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             defer: false
         )
         window.title = "General"
-        window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("GhostEditSettings")
         if !window.setFrameUsingName("GhostEditSettings") { window.center() }
@@ -3178,25 +3189,58 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     // MARK: - Layout Helpers
 
     private func makeTabStack(sections: [NSView]) -> NSView {
-        let stack = NSStackView(views: sections)
-        stack.orientation = .vertical
-        stack.spacing = SettingsLayoutSupport.sectionSpacing
-        stack.alignment = .leading
-        stack.edgeInsets = NSEdgeInsets(
+        // Separate the button row (last item) from content sections
+        let contentSections: [NSView]
+        let buttonRow: NSView?
+        if let last = sections.last, last is NSStackView,
+           (last as? NSStackView)?.arrangedSubviews.contains(where: { ($0 as? NSButton)?.title == "Save" }) == true {
+            contentSections = Array(sections.dropLast())
+            buttonRow = last
+        } else {
+            contentSections = sections
+            buttonRow = nil
+        }
+
+        let contentStack = NSStackView(views: contentSections)
+        contentStack.orientation = .vertical
+        contentStack.spacing = SettingsLayoutSupport.sectionSpacing
+        contentStack.alignment = .leading
+        contentStack.edgeInsets = NSEdgeInsets(
             top: SettingsLayoutSupport.verticalInset,
             left: 32,
             bottom: SettingsLayoutSupport.verticalInset,
             right: 32
         )
-        // Make the stack fill the window width
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        for section in sections {
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        for section in contentSections {
             section.translatesAutoresizingMaskIntoConstraints = false
             section.widthAnchor.constraint(
                 equalToConstant: SettingsLayoutSupport.windowWidth - 64
             ).isActive = true
         }
-        return stack
+
+        guard let buttonRow = buttonRow else { return contentStack }
+
+        // Container: content pinned to top, button row pinned to bottom
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(contentStack)
+        buttonRow.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(buttonRow)
+
+        NSLayoutConstraint.activate([
+            contentStack.topAnchor.constraint(equalTo: container.topAnchor),
+            contentStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            contentStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+
+            buttonRow.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 32),
+            buttonRow.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -32),
+            buttonRow.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -SettingsLayoutSupport.verticalInset),
+            buttonRow.topAnchor.constraint(greaterThanOrEqualTo: contentStack.bottomAnchor, constant: SettingsLayoutSupport.sectionSpacing),
+        ])
+
+        return container
     }
 
     private func makeSection(title: String, views: [NSView]) -> NSView {
@@ -3260,10 +3304,6 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let saveButton = NSButton(title: "Save", target: self, action: #selector(saveClicked))
         saveButton.bezelStyle = .rounded
         saveButton.keyEquivalent = "\r"
-        saveButton.contentTintColor = .white
-        saveButton.wantsLayer = true
-        saveButton.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-        saveButton.layer?.cornerRadius = 5
 
         let buttonSpacer = NSView()
         buttonSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -3609,7 +3649,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         // Show a brief "Settings Saved" overlay before closing
         let overlay = NSView()
         overlay.wantsLayer = true
-        overlay.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.9).cgColor
+        overlay.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.65).cgColor
         overlay.layer?.cornerRadius = 8
         overlay.translatesAutoresizingMaskIntoConstraints = false
 
@@ -4021,7 +4061,7 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         // Long text columns: limit display lines, lighter for preview
         if column == .original || column == .generated {
             cellView.textField?.maximumNumberOfLines = 3
-            cellView.textField?.lineBreakMode = .byTruncatingTail
+            cellView.textField?.lineBreakMode = .byWordWrapping
             cellView.textField?.textColor = .secondaryLabelColor
         } else {
             cellView.textField?.maximumNumberOfLines = 0
