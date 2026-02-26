@@ -17,6 +17,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var diffPreviewController: DiffPreviewController?
     private var streamingPreviewController: StreamingPreviewController?
     private var liveFeedbackController: LiveFeedbackController?
+    private var quickFixDiffPopup: QuickFixDiffPopupController?
 
     private var statusMenu: NSMenu?
     private var statusMenuItem: NSMenuItem?
@@ -698,6 +699,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         newTextLength: (trimmed as NSString).length, cursorDelta: 0
                     )
                     self.recordLocalFixHistoryEntry(original: currentText, fixed: trimmed)
+                    self.showQuickFixDiffPopup(original: currentText, fixed: trimmed, near: element)
                     self.showHUD(state: .success)
                 } catch {
                     // Foundation Model failed, fall back to rule-based
@@ -705,6 +707,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         text: currentText, pid: pid, element: element, cursorLocation: cursorLocation
                     ) {
                         self.recordLocalFixHistoryEntry(original: currentText, fixed: fixedText)
+                        self.showQuickFixDiffPopup(original: currentText, fixed: fixedText, near: element)
                     }
                 }
             }
@@ -713,6 +716,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 text: currentText, pid: pid, element: element, cursorLocation: cursorLocation
             ) {
                 recordLocalFixHistoryEntry(original: currentText, fixed: fixedText)
+                showQuickFixDiffPopup(original: currentText, fixed: fixedText, near: element)
             }
         }
     }
@@ -1355,6 +1359,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startProcessingIndicator() {
+        quickFixDiffPopup?.dismiss()
+        quickFixDiffPopup = nil
         runNowMenuItem?.isEnabled = false
         undoMenuItem?.isEnabled = false
         writingCoachMenuItem?.isEnabled = false
@@ -2172,6 +2178,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let limit = configManager.loadConfig().historyLimit
         try? historyStore.append(entry, limit: limit)
         refreshHistoryWindowIfVisible()
+    }
+
+    private func showQuickFixDiffPopup(original: String, fixed: String, near element: AXUIElement) {
+        let segments = DiffSupport.charDiff(old: original, new: fixed)
+        guard segments.contains(where: { $0.kind != .equal }) else { return }
+
+        quickFixDiffPopup?.dismiss()
+
+        let popup = QuickFixDiffPopupController()
+        popup.show(segments: segments, near: element, widgetFrame: liveFeedbackController?.widgetFrame)
+        quickFixDiffPopup = popup
     }
 
     private func showFatalAlert(title: String, message: String) {
@@ -5007,6 +5024,7 @@ final class LiveFeedbackController {
     private let backgroundQueue = DispatchQueue(label: "com.ghostedit.livefeedback", qos: .userInitiated)
 
     private var widgetWindow: NSPanel?
+    var widgetFrame: NSRect? { widgetWindow?.frame }
     private var widgetIconView: NSImageView?
     private var widgetDot: NSView?
     private var widgetDragOrigin: NSPoint?
@@ -6217,5 +6235,201 @@ final class LiveFeedbackController {
                 addCursorRect(bounds, cursor: .pointingHand)
             }
         }
+    }
+}
+
+// MARK: - QuickFixDiffPopupController
+
+final class QuickFixDiffPopupController {
+    static let autoDismissDelay: TimeInterval = 3.0
+    static let popupWidth: CGFloat = 300
+    static let popupMaxHeight: CGFloat = 120
+
+    private var panel: NSPanel?
+    private var dismissWorkItem: DispatchWorkItem?
+
+    func show(segments: [DiffSegment], near element: AXUIElement, widgetFrame: NSRect?) {
+        dismissWorkItem?.cancel()
+        panel?.orderOut(nil)
+        panel = nil
+
+        let newPanel = buildPanel(segments: segments)
+        positionPanel(newPanel, near: element, widgetFrame: widgetFrame)
+
+        newPanel.alphaValue = 0
+        newPanel.orderFrontRegardless()
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            newPanel.animator().alphaValue = 1
+        }
+
+        panel = newPanel
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.dismiss()
+        }
+        dismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.autoDismissDelay, execute: workItem)
+    }
+
+    func dismiss() {
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+
+        guard let panel else { return }
+        let fadeDuration: TimeInterval = 0.2
+
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = fadeDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            panel.orderOut(nil)
+            self?.panel = nil
+        })
+    }
+
+    private func buildPanel(segments: [DiffSegment]) -> NSPanel {
+        let panelWidth = Self.popupWidth
+
+        let newPanel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: Self.popupMaxHeight),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: true
+        )
+        newPanel.isFloatingPanel = true
+        newPanel.level = .floating
+        newPanel.hasShadow = true
+        newPanel.backgroundColor = .clear
+        newPanel.isOpaque = false
+        newPanel.hidesOnDeactivate = false
+        newPanel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
+
+        let effectView = NSVisualEffectView(
+            frame: NSRect(x: 0, y: 0, width: panelWidth, height: Self.popupMaxHeight)
+        )
+        effectView.material = .hudWindow
+        effectView.state = .active
+        effectView.blendingMode = .behindWindow
+        effectView.wantsLayer = true
+        effectView.layer?.cornerRadius = 8
+        effectView.layer?.masksToBounds = true
+
+        let textField = NSTextField(wrappingLabelWithString: "")
+        textField.isEditable = false
+        textField.isSelectable = false
+        textField.isBezeled = false
+        textField.drawsBackground = false
+        textField.backgroundColor = .clear
+        textField.font = NSFont.systemFont(ofSize: 12)
+        textField.translatesAutoresizingMaskIntoConstraints = false
+
+        let attrString = NSMutableAttributedString()
+        for segment in segments {
+            let attrs: [NSAttributedString.Key: Any]
+            switch segment.kind {
+            case .equal:
+                attrs = [
+                    .font: NSFont.systemFont(ofSize: 12),
+                    .foregroundColor: NSColor.labelColor
+                ]
+            case .insertion:
+                attrs = [
+                    .font: NSFont.systemFont(ofSize: 12),
+                    .foregroundColor: NSColor.systemGreen,
+                    .backgroundColor: NSColor.systemGreen.withAlphaComponent(0.15),
+                    .underlineStyle: NSUnderlineStyle.single.rawValue
+                ]
+            case .deletion:
+                attrs = [
+                    .font: NSFont.systemFont(ofSize: 12),
+                    .foregroundColor: NSColor.systemRed,
+                    .backgroundColor: NSColor.systemRed.withAlphaComponent(0.15),
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue
+                ]
+            }
+            attrString.append(NSAttributedString(string: segment.text, attributes: attrs))
+        }
+        textField.attributedStringValue = attrString
+
+        effectView.addSubview(textField)
+        NSLayoutConstraint.activate([
+            textField.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
+            textField.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
+            textField.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 8),
+            textField.bottomAnchor.constraint(lessThanOrEqualTo: effectView.bottomAnchor, constant: -8)
+        ])
+
+        effectView.layoutSubtreeIfNeeded()
+        let intrinsicHeight = textField.intrinsicContentSize.height + 16
+        let panelHeight = min(intrinsicHeight, Self.popupMaxHeight)
+
+        newPanel.setContentSize(NSSize(width: panelWidth, height: panelHeight))
+        effectView.frame = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
+        newPanel.contentView = effectView
+
+        let clickGesture = NSClickGestureRecognizer(target: self, action: #selector(handleClick))
+        effectView.addGestureRecognizer(clickGesture)
+
+        return newPanel
+    }
+
+    @objc private func handleClick() {
+        dismiss()
+    }
+
+    private func positionPanel(_ panel: NSPanel, near element: AXUIElement, widgetFrame: NSRect?) {
+        let panelSize = panel.frame.size
+        guard let screen = NSScreen.main else { return }
+
+        var targetOrigin: NSPoint
+
+        if let wf = widgetFrame {
+            // Position directly above the live feedback widget
+            targetOrigin = NSPoint(x: wf.origin.x, y: wf.origin.y + wf.height + 4)
+        } else {
+            // Query AX element position/size to place near the text field
+            var posValue: AnyObject?
+            var szValue: AnyObject?
+            let posResult = AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posValue)
+            let szResult = AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &szValue)
+
+            if posResult == .success, szResult == .success,
+               let pv = posValue, let sv = szValue {
+                var position = CGPoint.zero
+                var size = CGSize.zero
+                AXValueGetValue(pv as! AXValue, .cgPoint, &position)
+                AXValueGetValue(sv as! AXValue, .cgSize, &size)
+
+                // Convert from top-left screen coords to Cocoa bottom-left coords
+                let screenHeight = screen.frame.height
+                let fieldBottomY = screenHeight - (position.y + size.height)
+                // Position below the text field
+                targetOrigin = NSPoint(x: position.x, y: fieldBottomY - panelSize.height - 8)
+            } else {
+                // Fallback: bottom-right corner of screen
+                let sf = screen.visibleFrame
+                targetOrigin = NSPoint(x: sf.maxX - panelSize.width - 20, y: sf.minY + 20)
+            }
+        }
+
+        let sf = screen.visibleFrame
+
+        // Flip to above the field if below screen
+        if targetOrigin.y < sf.minY {
+            if let wf = widgetFrame {
+                targetOrigin.y = wf.origin.y - panelSize.height - 4
+            } else {
+                targetOrigin.y = targetOrigin.y + panelSize.height + 8
+            }
+        }
+
+        // Clamp X to screen bounds
+        targetOrigin.x = max(sf.minX, min(targetOrigin.x, sf.maxX - panelSize.width))
+
+        panel.setFrameOrigin(targetOrigin)
     }
 }
