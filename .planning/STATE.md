@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-26)
 ## Current Position
 
 Phase: 1 of 3 (Quick Fix UX)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-02-26 — Roadmap created, ready to plan Phase 1
+Plan: 1 of ? in current phase
+Status: In progress — checkpoint:human-verify (Task 3)
+Last activity: 2026-02-26 — Completed 01-01 Tasks 1-2, awaiting human verification
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 10%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
+- Total plans completed: 0 (01-01 in progress — awaiting human-verify)
 - Average duration: —
 - Total execution time: —
 
@@ -27,7 +27,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-quick-fix-ux | 0 complete (1 in progress) | ~4 min | — |
 
 **Recent Trend:**
 - Last 5 plans: —
@@ -46,6 +46,9 @@ Recent decisions affecting current work:
 - Cursor-line-only for Notes: minimal scope — fix just the line under cursor, not surrounding text
 - All incompatible apps get end-of-text cursor: consistent behavior across all AX-limited apps
 - Full comparison table in settings: users must understand local vs LLM trade-offs to make informed choices
+- 01-01: Use provider="Local", model="Harper" sentinel strings for local fix history entries — no schema changes
+- 01-01: applyRuleBasedFixes returns String? so caller receives fixed text without re-querying AX
+- 01-01: Popup positions above live feedback widget when visible, falls back to AX element bounds
 
 ### Pending Todos
 
@@ -58,5 +61,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Roadmap written. Phase 1 ready to plan.
-Resume file: None
+Stopped at: 01-01-PLAN.md Tasks 1-2 complete — paused at checkpoint:human-verify (Task 3)
+Resume file: .planning/phases/01-quick-fix-ux/01-01-PLAN.md

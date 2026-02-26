@@ -7,8 +7,8 @@
 
 ### Quick Fix UX
 
-- [ ] **QFX-01**: After cmd+E local fix, a before/after diff preview appears next to the floating widget for 3 seconds then auto-dismisses
-- [ ] **QFX-02**: Undo last correction menu item works correctly for local quick fix (cmd+E) corrections
+- [x] **QFX-01**: After cmd+E local fix, a before/after diff preview appears next to the floating widget for 3 seconds then auto-dismisses
+- [x] **QFX-02**: Undo last correction menu item works correctly for local quick fix (cmd+E) corrections
 
 ### Text Selection
 
@@ -50,8 +50,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| QFX-01 | Phase 1 | Pending |
-| QFX-02 | Phase 1 | Pending |
+| QFX-01 | Phase 1 | Complete |
+| QFX-02 | Phase 1 | Complete |
 | SEL-01 | Phase 2 | Pending |
 | SEL-02 | Phase 2 | Pending |
 | SET-01 | Phase 3 | Pending |
