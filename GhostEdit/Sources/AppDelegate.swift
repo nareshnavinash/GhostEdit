@@ -697,16 +697,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         pid: pid, cursorLocation: cursorLocation,
                         newTextLength: (trimmed as NSString).length, cursorDelta: 0
                     )
+                    self.recordLocalFixHistoryEntry(original: currentText, fixed: trimmed)
                     self.showHUD(state: .success)
                 } catch {
                     // Foundation Model failed, fall back to rule-based
-                    self.applyRuleBasedFixes(
+                    if let fixedText = self.applyRuleBasedFixes(
                         text: currentText, pid: pid, element: element, cursorLocation: cursorLocation
-                    )
+                    ) {
+                        self.recordLocalFixHistoryEntry(original: currentText, fixed: fixedText)
+                    }
                 }
             }
         } else {
-            applyRuleBasedFixes(text: currentText, pid: pid, element: element, cursorLocation: cursorLocation)
+            if let fixedText = applyRuleBasedFixes(
+                text: currentText, pid: pid, element: element, cursorLocation: cursorLocation
+            ) {
+                recordLocalFixHistoryEntry(original: currentText, fixed: fixedText)
+            }
         }
     }
 
@@ -730,7 +737,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Apply fixes using Harper + NSSpellChecker (rule-based fallback).
-    private func applyRuleBasedFixes(text: String, pid: pid_t, element: AXUIElement, cursorLocation: Int) {
+    @discardableResult
+    private func applyRuleBasedFixes(text: String, pid: pid_t, element: AXUIElement, cursorLocation: Int) -> String? {
         let harperIssues = HarperLinter.lint(text)
         let nsIssues = performLocalSpellCheck(text)
 
@@ -740,7 +748,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard !fixable.isEmpty else {
             showHUD(state: .success)
-            return
+            return nil
         }
 
         var nsText = text as NSString
@@ -772,8 +780,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
             showHUD(state: .successWithCount(fixCount))
+            return nsText as String
         } else {
             showHUD(state: .success)
+            return nil
         }
     }
 
@@ -2145,6 +2155,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         try? historyStore.append(entry, limit: historyLimit)
+        refreshHistoryWindowIfVisible()
+    }
+
+    private func recordLocalFixHistoryEntry(original: String, fixed: String) {
+        let entry = CorrectionHistoryEntry(
+            id: UUID(),
+            timestamp: Date(),
+            originalText: original,
+            generatedText: fixed,
+            provider: "Local",
+            model: "Harper",
+            durationMilliseconds: 0,
+            succeeded: true
+        )
+        let limit = configManager.loadConfig().historyLimit
+        try? historyStore.append(entry, limit: limit)
         refreshHistoryWindowIfVisible()
     }
 
