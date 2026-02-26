@@ -26,7 +26,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. After pressing cmd+E, a before/after diff popup appears next to the floating widget and auto-dismisses after 3 seconds
   2. The diff popup shows the exact text that changed (not a summary)
   3. Selecting "Undo Last Correction" from the menu bar reverses a cmd+E local fix in the active text field
-**Plans**: TBD
+**Plans:** 1 plan
+- [ ] 01-01-PLAN.md — Diff preview popup + undo history recording for local quick fix
 
 ### Phase 2: Text Selection Fixes
 **Goal**: Text selection scope and cursor placement are correct across Notes and all incompatible apps
@@ -56,6 +57,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Quick Fix UX | 0/? | Not started | - |
+| 1. Quick Fix UX | 0/1 | Planned | - |
 | 2. Text Selection Fixes | 0/? | Not started | - |
 | 3. Transparency | 0/? | Not started | - |
