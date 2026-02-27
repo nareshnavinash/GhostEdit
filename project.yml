@@ -31,6 +31,8 @@ targets:
       - path: GhostEdit/Sources/main.swift
       - path: GhostEdit/Assets.xcassets
         buildPhase: resources
+      - path: GhostEdit/Resources
+        buildPhase: resources
     dependencies:
       - target: GhostEditCore
     settings:

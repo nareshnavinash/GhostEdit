@@ -1,12 +1,12 @@
 # GhostEdit
 
-**Free, open-source offline grammar checker for macOS. Fix grammar, spelling, and punctuation in any app with a single hotkey — powered by Apple Intelligence, Claude, OpenAI Codex, or Gemini. The best free macOS grammar correction tool with on-device AI and no subscriptions.**
+**Free, open-source offline grammar checker for macOS. Fix grammar, spelling, and punctuation in any app with a single hotkey — powered by local Hugging Face models, Claude, OpenAI Codex, or Gemini. The best free macOS grammar correction tool with on-device AI and no subscriptions.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/Platform-macOS%2013%2B-black.svg)](https://github.com/nareshnavinash/GhostEdit/releases)
 [![Latest Release](https://img.shields.io/github/v/release/nareshnavinash/GhostEdit)](https://github.com/nareshnavinash/GhostEdit/releases/latest)
 
-> GhostEdit is a lightweight macOS menu bar app that corrects grammar, spelling, and punctuation in any text field system-wide. Press a hotkey and your text is fixed instantly — using Apple Intelligence on-device or your choice of Claude, Codex, or Gemini. No accounts, no subscriptions, no data leaves your Mac.
+> GhostEdit is a lightweight macOS menu bar app that corrects grammar, spelling, and punctuation in any text field system-wide. Press a hotkey and your text is fixed instantly — using local Hugging Face models on-device or your choice of Claude, Codex, or Gemini. No accounts, no subscriptions, no data leaves your Mac.
 
 ![GhostEdit launch preview](remotion/out/TwitterBanner.png)
 
@@ -48,11 +48,11 @@ You can now double-click the app to open it normally! (You only need to do this 
 - **Free and open source** no premium tiers, no word limits, no feature gates. Full grammar correction, writing coaching, and history all included.
 - **Works everywhere** correct text in any macOS app: Slack, Notion, VS Code, Mail, Pages, or any text field. One hotkey, any app.
 - **Bring your own AI** switch between Claude, OpenAI Codex, and Gemini from Settings. Pick the model that works best for you.
-- **On-device grammar** Apple Foundation Models and Harper provide instant local corrections with no API calls needed.
+- **On-device grammar** local Hugging Face models (CoEdIT) and Harper provide local corrections with no API calls needed.
 
 ## How It Works
 
-1. **Press cmd+E** for an instant local fix — Apple Intelligence (macOS 26+) or Harper corrects spelling and grammar offline in under 100ms
+1. **Press cmd+E** for a local fix — a local Hugging Face model (if configured) or Harper corrects spelling and grammar offline
 2. **Press cmd+shift+E** for a deep LLM fix — Claude, Codex, or Gemini rewrites and polishes your text with full contextual understanding
 3. **See what changed** — an optional diff preview highlights every correction before it's applied, and you can undo any fix instantly
 
@@ -62,7 +62,7 @@ No setup needed for local fixes. For LLM fixes, install any supported AI CLI and
 
 ### v6.0.0 Highlights
 
-- **Apple Foundation Models integration**: On-device grammar correction using Apple's built-in language models — no API keys, no network, instant results
+- **Local Hugging Face models**: On-device grammar correction using CoEdIT or any seq2seq model — no API keys, no network, fully offline
 - **Harper bundled grammar/spell checker**: Fast, offline grammar and style checking via the Harper linting engine for comprehensive rule-based detection
 - **Redesigned floating widget**: App icon with a colored status dot indicator, positioned below the active text field (never overlapping your typing)
 - **Draggable widget**: Drag the widget anywhere on screen — it stays where you put it until you switch apps
@@ -129,46 +129,58 @@ Here's how they compare:
 
 | | **cmd+E** (Local Fix) | **cmd+shift+E** (LLM Fix) |
 |---|---|---|
-| **Speed** | Instant (< 100ms) | 2-5 seconds |
+| **Speed** | Instant (Harper) or 2-10s (local model) | 2-5 seconds |
 | **Network** | None (fully offline) | Requires AI CLI |
-| **Engine** | Apple Intelligence (macOS 26+) or Harper + NSSpellChecker (macOS 13-25) | Claude, Codex, or Gemini |
+| **Engine** | Local Hugging Face model or Harper + NSSpellChecker | Claude, Codex, or Gemini |
 | **Spelling** | Yes | Yes |
-| **Grammar** | Yes (Apple Intelligence) / Basic (Harper) | Yes (contextual) |
-| **Punctuation** | Yes (Apple Intelligence) / No (Harper) | Yes |
+| **Grammar** | Yes (local model) / Basic (Harper) | Yes (contextual) |
+| **Punctuation** | Yes (local model) / No (Harper) | Yes |
 | **Rewrites** | Light corrections only | Full sentence restructuring |
 | **Best for** | Quick typo fixes, Slack messages, emails | Polishing important text, deep rewrites |
 
 For most day-to-day corrections (fixing typos in Slack, emails, quick notes), cmd+E handles it instantly. Use cmd+shift+E when you need deeper rewrites or the local fix didn't catch something.
 
-### Apple Intelligence (macOS 26+)
+### Local Models (Hugging Face)
 
-On supported hardware, cmd+E uses Apple's on-device Foundation Models for grammar, spelling, and punctuation correction — no API keys, no network, instant results.
+GhostEdit supports on-demand local model inference using Hugging Face seq2seq models (CoEdIT, T5, BART, mBART, Pegasus). Models run entirely on your Mac via Python — no API keys, no network, no data leaves your machine.
 
-Why this matters:
-- **No API keys** — works out of the box, nothing to configure
-- **No internet required** — corrections run entirely on-device
+**Why this matters:**
+- **No API keys** — download a model once, use it forever
+- **No internet required** — corrections run entirely on-device after download
 - **No data leaves your Mac** — your text stays private, always
-- **Instant results** — sub-100ms corrections, no waiting for a server
+- **Any seq2seq model** — use CoEdIT, or bring any Hugging Face model
+
+**How to set up:**
+1. Open **Settings > Local Models**
+2. Ensure Python 3.9+ is detected (install via Homebrew if needed: `brew install python`)
+3. Click **Install Packages** to install `transformers` and `torch` via pip
+4. Click **Pull** next to a model (e.g., CoEdIT Large, ~3GB)
+5. Select the model as active — cmd+E now uses it for corrections
+
+**Recommended models:**
+
+| Model | Parameters | Disk | Best for |
+|-------|-----------|------|----------|
+| CoEdIT Small | 77M | 0.3 GB | Fast corrections, low RAM |
+| CoEdIT Base | 220M | 0.9 GB | Good balance of speed and quality |
+| CoEdIT Large | 770M | 3.0 GB | Best quality for most users |
+| CoEdIT XL | 3B | 11 GB | Maximum quality, needs 16+ GB RAM |
+
+**Custom models:** Add any Hugging Face seq2seq model by entering its repo ID (e.g., `facebook/bart-large`) or URL in Settings > Local Models > Add Custom Model.
+
+**Fallback behavior:** If no local model is configured or the model fails, cmd+E automatically falls back to Harper (grammar rules) + NSSpellChecker (spelling).
 
 **Requirements:**
-- macOS 26 (Tahoe) or later
-- Apple Silicon (M1, M2, M3, or M4)
-- 16 GB RAM or more
-- Apple Intelligence enabled in **System Settings > Apple Intelligence & Siri**
-
-**How to enable:**
-1. Open **System Settings** > **Apple Intelligence & Siri**
-2. Turn on **Apple Intelligence**
-3. Wait for the on-device model to download (may take a few minutes on first enable)
-4. GhostEdit automatically detects Apple Intelligence — no configuration needed
-
-**Fallback behavior:** If Apple Intelligence is unavailable (older Mac, insufficient RAM, not enabled), cmd+E automatically falls back to Harper (grammar rules) + NSSpellChecker (spelling). Harper catches common grammar patterns but does not handle punctuation or contextual rewrites.
-
-**Verify availability:** Enable Developer Mode in GhostEdit (menu bar > Developer Mode) and press cmd+E. The console will show whether the Foundation Model path or the Harper fallback was used.
+- Python 3.9+ (install via Homebrew: `brew install python`)
+- `transformers` and `torch` Python packages
+- Sufficient disk space for the chosen model
+- 8+ GB RAM recommended (16+ GB for CoEdIT XL)
 
 ### Prerequisites
 
-You need at least one AI CLI installed for **cmd+shift+E** (LLM corrections):
+**For local model corrections (cmd+E):** Python 3.9+ is required. Install via Homebrew: `brew install python`. See **Settings > Local Models** to download models and install packages.
+
+**For LLM corrections (cmd+shift+E):** You need at least one AI CLI installed:
 
 | Provider | Install | Auth |
 |----------|---------|------|
@@ -230,7 +242,10 @@ Default `config.json`:
   "clipboardOnlyMode": false,
   "showDiffPreview": false,
   "liveFeedbackEnabled": false,
-  "diffPreviewDuration": 3
+  "diffPreviewDuration": 3,
+  "localModelRepoID": "",
+  "localModelCustomModels": "[]",
+  "localModelPythonPath": ""
 }
 ```
 
@@ -249,6 +264,9 @@ Notes:
 - `showDiffPreview` shows a word-level diff preview window before applying the correction.
 - `liveFeedbackEnabled` enables real-time spelling, grammar, and style checking in a floating widget.
 - `diffPreviewDuration` seconds to show the diff popup before auto-dismissing (1-30, default 3).
+- `localModelRepoID` active Hugging Face model repo ID (e.g., `"grammarly/coedit-large"`). Empty = no local model.
+- `localModelCustomModels` JSON-encoded array of custom model entries added by the user.
+- `localModelPythonPath` override for the Python 3 executable path. Empty = auto-detect.
 
 ### Per-App Profiles
 

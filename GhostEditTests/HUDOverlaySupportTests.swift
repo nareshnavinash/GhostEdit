@@ -35,6 +35,23 @@ final class HUDOverlaySupportTests: XCTestCase {
         )
     }
 
+    func testContentForFallbackState() {
+        let content = HUDOverlaySupport.content(for: .fallback)
+        XCTAssertEqual(content.emoji, "\u{1F47B}")
+        XCTAssertEqual(content.message, "Fixed (basic mode)")
+    }
+
+    func testFallbackSpectaclesIsFalse() {
+        XCTAssertFalse(HUDOverlaySupport.showsSpectacles(for: .fallback))
+    }
+
+    func testFallbackAutoDismissDelay() {
+        XCTAssertEqual(
+            HUDOverlaySupport.autoDismissDelay(for: .fallback),
+            HUDOverlaySupport.successAutoDismissDelay
+        )
+    }
+
     func testContentForErrorStateWithDetail() {
         let content = HUDOverlaySupport.content(for: .error("Network timeout"))
         XCTAssertEqual(content.emoji, "\u{1F47B}")
@@ -110,6 +127,7 @@ final class HUDOverlaySupportTests: XCTestCase {
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .success))
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .successWithCount(10)))
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .error("x")))
+        XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .fallback))
     }
 
     // MARK: - windowOrigin(screenSize:)
@@ -234,6 +252,9 @@ final class HUDOverlaySupportTests: XCTestCase {
         XCTAssertNotEqual(HUDOverlayState.error("a"), HUDOverlayState.error("b"))
         XCTAssertNotEqual(HUDOverlayState.working, HUDOverlayState.error("a"))
         XCTAssertNotEqual(HUDOverlayState.success, HUDOverlayState.error("a"))
+        XCTAssertEqual(HUDOverlayState.fallback, HUDOverlayState.fallback)
+        XCTAssertNotEqual(HUDOverlayState.fallback, HUDOverlayState.success)
+        XCTAssertNotEqual(HUDOverlayState.fallback, HUDOverlayState.working)
     }
 
     func testHUDOverlayContentEquatable() {
@@ -249,7 +270,7 @@ final class HUDOverlaySupportTests: XCTestCase {
     // MARK: - Content consistency
 
     func testAllStatesProduceNonEmptyContent() {
-        for state: HUDOverlayState in [.working, .success, .successWithCount(99), .error("test")] {
+        for state: HUDOverlayState in [.working, .success, .successWithCount(99), .error("test"), .fallback] {
             let content = HUDOverlaySupport.content(for: state)
             XCTAssertFalse(content.emoji.isEmpty, "emoji should not be empty for \(state)")
             XCTAssertFalse(content.message.isEmpty, "message should not be empty for \(state)")

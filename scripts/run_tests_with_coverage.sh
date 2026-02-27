@@ -82,6 +82,9 @@ REQUIRED_FILES=(
   "$ROOT_DIR/GhostEdit/Sources/StreamingPreviewSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/SpellCheckSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/LiveFeedbackSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/LocalModelSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/PythonEnvironmentSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/HardwareCompatibilitySupport.swift"
 )
 
 xcrun llvm-cov report \

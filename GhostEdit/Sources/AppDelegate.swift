@@ -18,6 +18,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var streamingPreviewController: StreamingPreviewController?
     private var liveFeedbackController: LiveFeedbackController?
     private var quickFixDiffPopup: QuickFixDiffPopupController?
+    private lazy var localModelRunner: LocalModelRunner? = LocalModelRunner()
 
     private var statusMenu: NSMenu?
     private var statusMenuItem: NSMenuItem?
@@ -63,6 +64,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try configManager.bootstrapIfNeeded()
+            // Copy bundled inference script to scripts directory (requires app bundle)
+            if let bundledScript = Bundle.main.path(forResource: "ghostedit_infer", ofType: "py") {
+                let destScript = configManager.scriptsDirectoryURL.appendingPathComponent("ghostedit_infer.py")
+                try? FileManager.default.removeItem(at: destScript)
+                try? FileManager.default.copyItem(
+                    at: URL(fileURLWithPath: bundledScript),
+                    to: destScript
+                )
+            }
             try historyStore.bootstrapIfNeeded()
         } catch {
             showFatalAlert(
@@ -86,6 +96,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager.unregister()
         stopLiveFeedback()
         shellRunner.killPersistentSession()
+        localModelRunner?.shutdown()
         stopProcessingIndicator()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
@@ -731,25 +742,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let textToFix = lineExtraction?.lineText ?? currentText
 
-        // Try Apple Foundation Models first (macOS 26+), fall back to Harper+NSSpellChecker
-        if #available(macOS 26, *), FoundationModelSupport.isAvailable {
+        // Try local Hugging Face model if configured, otherwise use Harper+NSSpellChecker
+        if !configManager.loadConfig().localModelRepoID.isEmpty,
+           let runner = localModelRunner {
+            let config = configManager.loadConfig()
+            let modelPath = LocalModelSupport.modelDirectoryURL(
+                baseDirectoryURL: configManager.baseDirectoryURL,
+                repoID: config.localModelRepoID
+            ).path
+            let pythonPath = config.localModelPythonPath.isEmpty ? "/usr/bin/python3" : config.localModelPythonPath
             showHUD(state: .working)
             Task { @MainActor in
                 do {
-                    let corrected = try await FoundationModelSupport.correctText(textToFix)
+                    let prefixed = LocalModelSupport.taskPrefix() + textToFix
+                    let corrected = try runner.correctText(prefixed, modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120)
                     let trimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                    // Detect refusals / non-corrections from the on-device model
-                    let isRefusal = trimmed.lowercased().hasPrefix("i'm sorry")
-                        || trimmed.lowercased().hasPrefix("i cannot")
-                        || trimmed.lowercased().hasPrefix("i can't")
-                        || trimmed.count > textToFix.count * 3
-
-                    guard !trimmed.isEmpty, trimmed != textToFix, !isRefusal else {
-                        // Model returned unchanged, empty, or a refusal — fall back to rule-based
-                        if isRefusal {
-                            self.devLog(.cliExecution, "Foundation Model refused: \(trimmed.prefix(80))… — falling back to rule-based")
-                        }
+                    guard !trimmed.isEmpty, trimmed != textToFix else {
+                        // Model returned unchanged — fall back to rule-based
                         if let fixedText = self.applyRuleBasedFixes(
                             text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
                             lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
@@ -790,14 +800,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.showHUD(state: .success)
                     targetApp.activate(options: [])
                 } catch {
-                    self.devLog(.cliExecution, "Foundation Model error: \(error.localizedDescription) — falling back to rule-based")
-                    // Foundation Model failed, fall back to rule-based
+                    self.devLog(.cliExecution, "Local model error: \(error.localizedDescription) — falling back to rule-based")
                     if let fixedText = self.applyRuleBasedFixes(
                         text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
                         lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
                     ) {
                         self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
                         self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
+                        self.showHUD(state: .fallback)
                     }
                     targetApp.activate(options: [])
                 }
@@ -1826,7 +1836,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showSettingsWindow() {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
-                configManager: configManager
+                configManager: configManager,
+                localModelRunner: localModelRunner
             ) { [weak self] config in
                 guard let self else {
                     return
@@ -3275,6 +3286,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         case general = "general"
         case hotkey = "hotkey"
         case behavior = "behavior"
+        case localModels = "localModels"
         case advanced = "advanced"
 
         var label: String {
@@ -3282,6 +3294,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             case .general: return "General"
             case .hotkey: return "Hotkey"
             case .behavior: return "Behavior"
+            case .localModels: return "Local Models"
             case .advanced: return "Advanced"
             }
         }
@@ -3291,6 +3304,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             case .general: return "globe"
             case .hotkey: return "keyboard"
             case .behavior: return "slider.horizontal.3"
+            case .localModels: return "cpu"
             case .advanced: return "wrench.and.screwdriver"
             }
         }
@@ -3302,6 +3316,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     private let configManager: ConfigManager
     private let onConfigSaved: (AppConfig) -> Void
+    private let localModelRunner: LocalModelRunner?
 
     private let providerPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let modelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -3365,8 +3380,9 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private let hotkeyKeyOptions = HotkeySupport.keyOptions
     private var modelOptions: [ModelOption] = []
 
-    init(configManager: ConfigManager, onConfigSaved: @escaping (AppConfig) -> Void) {
+    init(configManager: ConfigManager, localModelRunner: LocalModelRunner? = nil, onConfigSaved: @escaping (AppConfig) -> Void) {
         self.configManager = configManager
+        self.localModelRunner = localModelRunner
         self.onConfigSaved = onConfigSaved
 
         let window = NSWindow(
@@ -3494,7 +3510,598 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         tabViews[.general] = buildGeneralTab()
         tabViews[.hotkey] = buildHotkeyTab()
         tabViews[.behavior] = buildBehaviorTab()
+        tabViews[.localModels] = buildLocalModelsTab()
         tabViews[.advanced] = buildAdvancedTab()
+    }
+
+    // MARK: - Local Models Tab
+
+    private var localModelsPythonPathField = NSTextField(string: "")
+    private var localModelsStatusLabel = NSTextField(labelWithString: "")
+    private var localModelsStatusDot = NSTextField(labelWithString: "\u{25CF}")
+    private var localModelsModelRows: NSStackView = NSStackView()
+
+    private func buildLocalModelsTab() -> NSView {
+        let config = configManager.loadConfig()
+
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+
+        let outerStack = NSStackView()
+        outerStack.orientation = .vertical
+        outerStack.spacing = 20
+        outerStack.alignment = .leading
+        outerStack.translatesAutoresizingMaskIntoConstraints = false
+        outerStack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+
+        // Section 1: Python Environment
+        let pythonSection = buildLocalModelsPythonSection(config: config)
+        outerStack.addArrangedSubview(pythonSection)
+
+        // Section 2: Available Models
+        let modelsSection = buildLocalModelsModelSection(config: config)
+        outerStack.addArrangedSubview(modelsSection)
+
+        // Section 3: Hardware
+        let hardwareSection = buildLocalModelsHardwareSection()
+        outerStack.addArrangedSubview(hardwareSection)
+
+        scrollView.documentView = outerStack
+        NSLayoutConstraint.activate([
+            outerStack.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            outerStack.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
+            outerStack.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+        ])
+
+        refreshPythonStatus()
+
+        return scrollView
+    }
+
+    private func refreshPythonStatus() {
+        let pythonPath = localModelsPythonPathField.stringValue
+        Task {
+            do {
+                let packages = try localModelRunner?.checkPythonPackages(pythonPath: pythonPath) ?? [:]
+                let missing = packages.filter { !$0.value }.map(\.key)
+                await MainActor.run {
+                    if missing.isEmpty {
+                        localModelsStatusDot.textColor = .systemGreen
+                        localModelsStatusLabel.stringValue = "Python ready \u{2014} transformers, torch installed"
+                    } else {
+                        localModelsStatusDot.textColor = .systemOrange
+                        localModelsStatusLabel.stringValue = "Missing packages: \(missing.joined(separator: ", "))"
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    localModelsStatusDot.textColor = .systemRed
+                    localModelsStatusLabel.stringValue = "Python not found at \(pythonPath)"
+                }
+            }
+        }
+    }
+
+    private func buildLocalModelsPythonSection(config: AppConfig) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let header = NSTextField(labelWithString: "PYTHON ENVIRONMENT")
+        header.font = .systemFont(ofSize: 11, weight: .medium)
+        header.textColor = .secondaryLabelColor
+        header.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(header)
+
+        let card = NSBox()
+        card.boxType = .custom
+        card.cornerRadius = SettingsLayoutSupport.groupCornerRadius
+        card.fillColor = .controlBackgroundColor
+        card.borderColor = .separatorColor
+        card.borderWidth = 0.5
+        card.contentViewMargins = .zero
+        card.titlePosition = .noTitle
+        card.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(card)
+
+        let cardStack = NSStackView()
+        cardStack.orientation = .vertical
+        cardStack.spacing = 10
+        cardStack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Status line
+        let statusStack = NSStackView()
+        statusStack.orientation = .horizontal
+        statusStack.spacing = 6
+        localModelsStatusDot.font = .systemFont(ofSize: 10)
+        localModelsStatusDot.textColor = .systemGray
+        localModelsStatusLabel.font = .systemFont(ofSize: 12)
+        localModelsStatusLabel.textColor = .secondaryLabelColor
+        localModelsStatusLabel.stringValue = "Checking Python..."
+        statusStack.addArrangedSubview(localModelsStatusDot)
+        statusStack.addArrangedSubview(localModelsStatusLabel)
+        cardStack.addArrangedSubview(statusStack)
+
+        // Python path field
+        let pathStack = NSStackView()
+        pathStack.orientation = .horizontal
+        pathStack.spacing = 8
+        let pathLabel = NSTextField(labelWithString: "Python path:")
+        pathLabel.font = .systemFont(ofSize: 12)
+        pathLabel.setContentHuggingPriority(.required, for: .horizontal)
+        localModelsPythonPathField.stringValue = config.localModelPythonPath.isEmpty
+            ? "/usr/bin/python3" : config.localModelPythonPath
+        localModelsPythonPathField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        localModelsPythonPathField.placeholderString = "Auto-detect"
+        localModelsPythonPathField.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            localModelsPythonPathField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
+        ])
+        pathStack.addArrangedSubview(pathLabel)
+        pathStack.addArrangedSubview(localModelsPythonPathField)
+        cardStack.addArrangedSubview(pathStack)
+
+        // Install packages button
+        let installBtn = NSButton(title: "Install Packages (pip install transformers torch)", target: self, action: #selector(installPythonPackagesClicked(_:)))
+        installBtn.bezelStyle = .rounded
+        installBtn.font = .systemFont(ofSize: 11)
+        cardStack.addArrangedSubview(installBtn)
+
+        if let cardContent = card.contentView {
+            cardContent.addSubview(cardStack)
+            NSLayoutConstraint.activate([
+                cardStack.topAnchor.constraint(equalTo: cardContent.topAnchor, constant: 14),
+                cardStack.leadingAnchor.constraint(equalTo: cardContent.leadingAnchor, constant: 16),
+                cardStack.trailingAnchor.constraint(equalTo: cardContent.trailingAnchor, constant: -16),
+                cardStack.bottomAnchor.constraint(equalTo: cardContent.bottomAnchor, constant: -14),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: container.topAnchor),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+            card.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
+            card.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            card.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            card.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            container.widthAnchor.constraint(equalToConstant: SettingsLayoutSupport.windowWidth - 40),
+        ])
+
+        return container
+    }
+
+    private func buildLocalModelsModelSection(config: AppConfig) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let header = NSTextField(labelWithString: "AVAILABLE MODELS")
+        header.font = .systemFont(ofSize: 11, weight: .medium)
+        header.textColor = .secondaryLabelColor
+        header.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(header)
+
+        let card = NSBox()
+        card.boxType = .custom
+        card.cornerRadius = SettingsLayoutSupport.groupCornerRadius
+        card.fillColor = .controlBackgroundColor
+        card.borderColor = .separatorColor
+        card.borderWidth = 0.5
+        card.contentViewMargins = .zero
+        card.titlePosition = .noTitle
+        card.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(card)
+
+        let cardStack = NSStackView()
+        cardStack.orientation = .vertical
+        cardStack.spacing = 4
+        cardStack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Header row
+        let headerRow = makeModelRow(
+            name: "Model", params: "Params", disk: "Disk", status: "Status",
+            isHeader: true, repoID: "", isActive: false
+        )
+        cardStack.addArrangedSubview(headerRow)
+
+        // Model rows
+        localModelsModelRows = NSStackView()
+        localModelsModelRows.orientation = .vertical
+        localModelsModelRows.spacing = 2
+        refreshModelRows(config: config)
+        cardStack.addArrangedSubview(localModelsModelRows)
+
+        // Test Inference
+        let testBtn = NSButton(title: "Test Inference", target: self, action: #selector(testInferenceClicked(_:)))
+        testBtn.bezelStyle = .rounded
+        testBtn.font = .systemFont(ofSize: 11)
+        cardStack.addArrangedSubview(testBtn)
+
+        // Separator
+        let sep = NSBox()
+        sep.boxType = .separator
+        cardStack.addArrangedSubview(sep)
+
+        // Add custom model
+        let customStack = NSStackView()
+        customStack.orientation = .horizontal
+        customStack.spacing = 8
+        let customLabel = NSTextField(labelWithString: "Add Custom Model:")
+        customLabel.font = .systemFont(ofSize: 11)
+        customLabel.setContentHuggingPriority(.required, for: .horizontal)
+        let customField = NSTextField(string: "")
+        customField.placeholderString = "org/model or https://huggingface.co/org/model"
+        customField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        customField.translatesAutoresizingMaskIntoConstraints = false
+        customField.tag = 9990
+        NSLayoutConstraint.activate([
+            customField.widthAnchor.constraint(greaterThanOrEqualToConstant: 250),
+        ])
+        let addBtn = NSButton(title: "Add", target: self, action: #selector(addCustomModelClicked(_:)))
+        addBtn.bezelStyle = .rounded
+        addBtn.font = .systemFont(ofSize: 11)
+        customStack.addArrangedSubview(customLabel)
+        customStack.addArrangedSubview(customField)
+        customStack.addArrangedSubview(addBtn)
+        cardStack.addArrangedSubview(customStack)
+
+        if let cardContent = card.contentView {
+            cardContent.addSubview(cardStack)
+            NSLayoutConstraint.activate([
+                cardStack.topAnchor.constraint(equalTo: cardContent.topAnchor, constant: 14),
+                cardStack.leadingAnchor.constraint(equalTo: cardContent.leadingAnchor, constant: 16),
+                cardStack.trailingAnchor.constraint(equalTo: cardContent.trailingAnchor, constant: -16),
+                cardStack.bottomAnchor.constraint(equalTo: cardContent.bottomAnchor, constant: -14),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: container.topAnchor),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+            card.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
+            card.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            card.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            card.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            container.widthAnchor.constraint(equalToConstant: SettingsLayoutSupport.windowWidth - 40),
+        ])
+
+        return container
+    }
+
+    private func buildLocalModelsHardwareSection() -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let header = NSTextField(labelWithString: "HARDWARE")
+        header.font = .systemFont(ofSize: 11, weight: .medium)
+        header.textColor = .secondaryLabelColor
+        header.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(header)
+
+        let card = NSBox()
+        card.boxType = .custom
+        card.cornerRadius = SettingsLayoutSupport.groupCornerRadius
+        card.fillColor = .controlBackgroundColor
+        card.borderColor = .separatorColor
+        card.borderWidth = 0.5
+        card.contentViewMargins = .zero
+        card.titlePosition = .noTitle
+        card.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(card)
+
+        let cardStack = NSStackView()
+        cardStack.orientation = .vertical
+        cardStack.spacing = 6
+        cardStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let hw = LocalModelRunner().gatherHardwareInfo()
+        let ramGB = String(format: "%.1f", Double(hw.totalRAMBytes) / 1_073_741_824.0)
+        let diskGB = String(format: "%.1f", Double(hw.availableDiskBytes) / 1_073_741_824.0)
+
+        let ramLabel = NSTextField(labelWithString: "RAM: \(ramGB) GB total")
+        ramLabel.font = .systemFont(ofSize: 12)
+        cardStack.addArrangedSubview(ramLabel)
+
+        let diskLabel = NSTextField(labelWithString: "Disk: \(diskGB) GB available")
+        diskLabel.font = .systemFont(ofSize: 12)
+        cardStack.addArrangedSubview(diskLabel)
+
+        let archLabel = NSTextField(labelWithString: "Architecture: \(hw.architecture == "arm64" ? "Apple Silicon" : hw.architecture)")
+        archLabel.font = .systemFont(ofSize: 12)
+        cardStack.addArrangedSubview(archLabel)
+
+        if let cardContent = card.contentView {
+            cardContent.addSubview(cardStack)
+            NSLayoutConstraint.activate([
+                cardStack.topAnchor.constraint(equalTo: cardContent.topAnchor, constant: 14),
+                cardStack.leadingAnchor.constraint(equalTo: cardContent.leadingAnchor, constant: 16),
+                cardStack.trailingAnchor.constraint(equalTo: cardContent.trailingAnchor, constant: -16),
+                cardStack.bottomAnchor.constraint(equalTo: cardContent.bottomAnchor, constant: -14),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: container.topAnchor),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+            card.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
+            card.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            card.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            card.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            container.widthAnchor.constraint(equalToConstant: SettingsLayoutSupport.windowWidth - 40),
+        ])
+
+        return container
+    }
+
+    private func refreshModelRows(config: AppConfig) {
+        localModelsModelRows.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        // Determine which models are actually downloaded
+        let modelsDir = LocalModelSupport.modelsDirectoryURL(baseDirectoryURL: configManager.baseDirectoryURL)
+        var downloadedSet = Set<String>()
+        for model in LocalModelSupport.recommendedModels {
+            let modelDir = LocalModelSupport.modelDirectoryURL(
+                baseDirectoryURL: configManager.baseDirectoryURL, repoID: model.repoID
+            )
+            if FileManager.default.fileExists(atPath: modelDir.path) {
+                downloadedSet.insert(model.repoID)
+            }
+        }
+
+        // Parse custom models
+        var savedCustom: [LocalModelEntry] = []
+        if let data = config.localModelCustomModels.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([LocalModelEntry].self, from: data) {
+            savedCustom = decoded
+            for custom in savedCustom {
+                let dir = LocalModelSupport.modelDirectoryURL(
+                    baseDirectoryURL: configManager.baseDirectoryURL, repoID: custom.repoID
+                )
+                if FileManager.default.fileExists(atPath: dir.path) {
+                    downloadedSet.insert(custom.repoID)
+                }
+            }
+        }
+
+        let merged = LocalModelSupport.mergedModelList(saved: savedCustom, downloaded: downloadedSet)
+
+        for entry in merged {
+            let isActive = entry.repoID == config.localModelRepoID
+            let row = makeModelRow(
+                name: entry.displayName, params: entry.parameterCount,
+                disk: String(format: "%.1f GB", entry.approxDiskGB),
+                status: entry.status == .ready ? "Ready" : "Not downloaded",
+                isHeader: false, repoID: entry.repoID, isActive: isActive
+            )
+            localModelsModelRows.addArrangedSubview(row)
+        }
+    }
+
+    private func makeModelRow(
+        name: String, params: String, disk: String, status: String,
+        isHeader: Bool, repoID: String, isActive: Bool
+    ) -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 8
+        row.alignment = .centerY
+
+        let nameLabel = NSTextField(labelWithString: name)
+        nameLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
+        nameLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([nameLabel.widthAnchor.constraint(equalToConstant: 120)])
+
+        let paramsLabel = NSTextField(labelWithString: params)
+        paramsLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
+        paramsLabel.textColor = .secondaryLabelColor
+        paramsLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([paramsLabel.widthAnchor.constraint(equalToConstant: 60)])
+
+        let diskLabel = NSTextField(labelWithString: disk)
+        diskLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
+        diskLabel.textColor = .secondaryLabelColor
+        diskLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([diskLabel.widthAnchor.constraint(equalToConstant: 60)])
+
+        let statusLabel = NSTextField(labelWithString: status)
+        statusLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
+        statusLabel.textColor = status == "Ready" ? .systemGreen : .secondaryLabelColor
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([statusLabel.widthAnchor.constraint(equalToConstant: 100)])
+
+        row.addArrangedSubview(nameLabel)
+        row.addArrangedSubview(paramsLabel)
+        row.addArrangedSubview(diskLabel)
+        row.addArrangedSubview(statusLabel)
+
+        if !isHeader {
+            if status == "Ready" {
+                let selectBtn = NSButton(
+                    checkboxWithTitle: isActive ? "Active" : "Select",
+                    target: self, action: #selector(selectModelClicked(_:))
+                )
+                selectBtn.state = isActive ? .on : .off
+                selectBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
+                selectBtn.font = .systemFont(ofSize: 10)
+                row.addArrangedSubview(selectBtn)
+
+                let deleteBtn = NSButton(title: "Delete", target: self, action: #selector(deleteModelClicked(_:)))
+                deleteBtn.bezelStyle = .rounded
+                deleteBtn.font = .systemFont(ofSize: 10)
+                deleteBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
+                row.addArrangedSubview(deleteBtn)
+            } else {
+                let pullBtn = NSButton(title: "Pull", target: self, action: #selector(pullModelClicked(_:)))
+                pullBtn.bezelStyle = .rounded
+                pullBtn.font = .systemFont(ofSize: 10)
+                pullBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
+                row.addArrangedSubview(pullBtn)
+            }
+        }
+
+        return row
+    }
+
+    @objc private func installPythonPackagesClicked(_ sender: NSButton) {
+        let pythonPath = localModelsPythonPathField.stringValue
+        let cmd = PythonEnvironmentSupport.pipInstallCommand(pythonPath: pythonPath)
+        localModelsStatusLabel.stringValue = "Installing packages..."
+        Task {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = ["-c", cmd]
+            try? process.run()
+            process.waitUntilExit()
+            await MainActor.run {
+                if process.terminationStatus == 0 {
+                    localModelsStatusLabel.stringValue = "Packages installed successfully"
+                } else {
+                    localModelsStatusLabel.stringValue = "Package installation failed (exit \(process.terminationStatus))"
+                }
+            }
+        }
+    }
+
+    @objc private func pullModelClicked(_ sender: NSButton) {
+        guard let repoID = sender.identifier?.rawValue, !repoID.isEmpty else { return }
+        let config = configManager.loadConfig()
+        let destPath = LocalModelSupport.modelDirectoryURL(
+            baseDirectoryURL: configManager.baseDirectoryURL, repoID: repoID
+        ).path
+        let pythonPath = config.localModelPythonPath.isEmpty
+            ? localModelsPythonPathField.stringValue : config.localModelPythonPath
+        sender.isEnabled = false
+        sender.title = "Pulling..."
+
+        Task {
+            do {
+                try (self.localModelRunner ?? LocalModelRunner()).downloadModel(
+                    repoID: repoID, destPath: destPath, pythonPath: pythonPath,
+                    onProgress: { line in
+                        if let data = line.data(using: .utf8),
+                           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                           let message = json["message"] as? String {
+                            DispatchQueue.main.async { sender.title = message }
+                        }
+                    }
+                )
+                await MainActor.run {
+                    sender.title = "Done"
+                    self.refreshModelRows(config: self.configManager.loadConfig())
+                }
+            } catch {
+                await MainActor.run {
+                    sender.isEnabled = true
+                    sender.title = "Pull"
+                    let alert = NSAlert()
+                    alert.messageText = "Download Failed"
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    @objc private func selectModelClicked(_ sender: NSButton) {
+        guard let repoID = sender.identifier?.rawValue else { return }
+        var config = configManager.loadConfig()
+        config.localModelRepoID = sender.state == .on ? repoID : ""
+        try? configManager.saveConfig(config)
+        onConfigSaved(config)
+        refreshModelRows(config: config)
+    }
+
+    @objc private func deleteModelClicked(_ sender: NSButton) {
+        guard let repoID = sender.identifier?.rawValue else { return }
+        let modelDir = LocalModelSupport.modelDirectoryURL(
+            baseDirectoryURL: configManager.baseDirectoryURL, repoID: repoID
+        )
+        try? FileManager.default.removeItem(at: modelDir)
+        var config = configManager.loadConfig()
+        if config.localModelRepoID == repoID {
+            config.localModelRepoID = ""
+            try? configManager.saveConfig(config)
+            onConfigSaved(config)
+        }
+        refreshModelRows(config: configManager.loadConfig())
+    }
+
+    @objc private func addCustomModelClicked(_ sender: NSButton) {
+        guard let parentStack = sender.superview as? NSStackView else { return }
+        let customField = parentStack.arrangedSubviews.first(where: { $0.tag == 9990 }) as? NSTextField
+        guard let input = customField?.stringValue, !input.isEmpty else { return }
+        guard let repoID = LocalModelSupport.extractRepoID(from: input) else {
+            let alert = NSAlert()
+            alert.messageText = "Invalid Model"
+            alert.informativeText = "Enter a valid Hugging Face repo ID (org/model) or URL."
+            alert.runModal()
+            return
+        }
+
+        var config = configManager.loadConfig()
+        var customModels: [LocalModelEntry] = []
+        if let data = config.localModelCustomModels.data(using: .utf8) {
+            customModels = (try? JSONDecoder().decode([LocalModelEntry].self, from: data)) ?? []
+        }
+        guard !customModels.contains(where: { $0.repoID == repoID }) else { return }
+
+        let entry = LocalModelEntry(
+            repoID: repoID,
+            displayName: repoID.components(separatedBy: "/").last ?? repoID,
+            parameterCount: "?",
+            approxDiskGB: 0
+        )
+        customModels.append(entry)
+        if let encoded = try? JSONEncoder().encode(customModels),
+           let jsonStr = String(data: encoded, encoding: .utf8) {
+            config.localModelCustomModels = jsonStr
+            try? configManager.saveConfig(config)
+        }
+        customField?.stringValue = ""
+        refreshModelRows(config: configManager.loadConfig())
+    }
+
+    @objc private func testInferenceClicked(_ sender: NSButton) {
+        let config = configManager.loadConfig()
+        guard !config.localModelRepoID.isEmpty else {
+            let alert = NSAlert()
+            alert.messageText = "No Model Selected"
+            alert.informativeText = "Select a downloaded model first."
+            alert.runModal()
+            return
+        }
+        let modelPath = LocalModelSupport.modelDirectoryURL(
+            baseDirectoryURL: configManager.baseDirectoryURL, repoID: config.localModelRepoID
+        ).path
+        let pythonPath = config.localModelPythonPath.isEmpty
+            ? localModelsPythonPathField.stringValue : config.localModelPythonPath
+        sender.isEnabled = false
+        sender.title = "Testing..."
+        Task {
+            do {
+                let result = try localModelRunner?.correctText(
+                    "Fix grammatical errors in this sentence: She go to the store yesterday and buyed some food.",
+                    modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120
+                ) ?? ""
+                await MainActor.run {
+                    sender.isEnabled = true
+                    sender.title = "Test Inference"
+                    let alert = NSAlert()
+                    alert.messageText = "Test Result"
+                    alert.informativeText = result
+                    alert.runModal()
+                }
+            } catch {
+                await MainActor.run {
+                    sender.isEnabled = true
+                    sender.title = "Test Inference"
+                    let alert = NSAlert()
+                    alert.messageText = "Test Failed"
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
+        }
     }
 
     private func buildCorrectionModesSection() -> NSView {
@@ -3527,13 +4134,8 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
         let colWidths: (feature: CGFloat, local: CGFloat, llm: CGFloat) = (80, 145, 170)
 
-        // Detect OS capabilities for dynamic labels
-        let hasAppleIntelligence: Bool
-        if #available(macOS 26, *) {
-            hasAppleIntelligence = FoundationModelSupport.isAvailable
-        } else {
-            hasAppleIntelligence = false
-        }
+        // Detect local model configuration
+        let hasLocalModel = !configManager.loadConfig().localModelRepoID.isEmpty
 
         // Header row
         let headerRow = makeComparisonRow(
@@ -3544,16 +4146,16 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
         // Data rows
         let rows: [(String, String, String)] = [
-            ("Speed", "Instant", "2–5 seconds"),
+            ("Speed", hasLocalModel ? "2–10 seconds" : "Instant", "2–5 seconds"),
             ("Network", "None (offline)", "Requires AI CLI"),
             ("Spelling", "Yes", "Yes"),
             ("Grammar",
-             hasAppleIntelligence ? "Yes (Apple Intelligence)" : "Basic (Harper)",
+             hasLocalModel ? "Yes (Local Model)" : "Basic (Harper)",
              "Yes (contextual)"),
             ("Punctuation",
-             hasAppleIntelligence ? "Yes (Apple Intelligence)" : "No",
+             hasLocalModel ? "Yes (Local Model)" : "No",
              "Yes"),
-            ("Rewrites", "Light corrections", "Full restructuring"),
+            ("Rewrites", hasLocalModel ? "Light corrections" : "Light corrections", "Full restructuring"),
         ]
 
         for (index, row) in rows.enumerated() {
@@ -3594,17 +4196,13 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         engineLabel.maximumNumberOfLines = 2
         engineLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        if #available(macOS 26, *) {
-            if FoundationModelSupport.isAvailable {
-                dotView.textColor = .systemGreen
-                engineLabel.stringValue = "Local engine: Apple Intelligence (Foundation Models)"
-            } else {
-                dotView.textColor = .systemOrange
-                engineLabel.stringValue = "Local engine: Harper + NSSpellChecker — enable Apple Intelligence in System Settings for better results"
-            }
+        if hasLocalModel {
+            let modelName = configManager.loadConfig().localModelRepoID
+            dotView.textColor = .systemGreen
+            engineLabel.stringValue = "Local engine: \(modelName) (Hugging Face)"
         } else {
-            dotView.textColor = .systemGray
-            engineLabel.stringValue = "Local engine: Harper + NSSpellChecker (Apple Intelligence requires macOS 26+)"
+            dotView.textColor = .systemOrange
+            engineLabel.stringValue = "Local engine: Harper + NSSpellChecker (no local model) — configure in Settings > Local Models"
         }
 
         engineStack.addArrangedSubview(dotView)
@@ -4356,6 +4954,10 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         config.historyLimit = historyLimit
         config.timeoutSeconds = timeoutSeconds
         config.diffPreviewDuration = diffPreviewDuration
+
+        // Local Models tab: save python path override
+        let pythonPathValue = localModelsPythonPathField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        config.localModelPythonPath = pythonPathValue == "/usr/bin/python3" ? "" : pythonPathValue
 
         do {
             try configManager.saveConfig(config)
@@ -5242,6 +5844,8 @@ final class HUDOverlayController {
             tintColor = NSColor.systemBlue.withAlphaComponent(0.06)
         case .success, .successWithCount:
             tintColor = NSColor.systemGreen.withAlphaComponent(0.06)
+        case .fallback:
+            tintColor = NSColor.systemOrange.withAlphaComponent(0.06)
         case .error:
             tintColor = NSColor.systemRed.withAlphaComponent(0.06)
         }

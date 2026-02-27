@@ -38,6 +38,13 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.launchAtLogin, AppConfig.default.launchAtLogin)
         XCTAssertEqual(config.historyLimit, AppConfig.default.historyLimit)
         XCTAssertEqual(config.developerMode, AppConfig.default.developerMode)
+        XCTAssertEqual(config.localModelRepoID, AppConfig.default.localModelRepoID)
+        XCTAssertEqual(config.localModelCustomModels, AppConfig.default.localModelCustomModels)
+        XCTAssertEqual(config.localModelPythonPath, AppConfig.default.localModelPythonPath)
+
+        // Scripts directory should be created
+        let scriptsDir = manager.baseDirectoryURL.appendingPathComponent("scripts", isDirectory: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: scriptsDir.path))
     }
 
     func testBootstrapMigratesLegacyDirectory() throws {
@@ -710,6 +717,61 @@ final class ConfigManagerTests: XCTestCase {
     func testPromptForPresetIsCaseInsensitive() {
         XCTAssertNotNil(AppConfig.promptForPreset("CASUAL"))
         XCTAssertNotNil(AppConfig.promptForPreset(" Professional "))
+    }
+
+    // MARK: - Local Model Config Fields
+
+    func testLocalModelFieldsDefaultValues() {
+        let config = AppConfig.default
+        XCTAssertEqual(config.localModelRepoID, "")
+        XCTAssertEqual(config.localModelCustomModels, "[]")
+        XCTAssertEqual(config.localModelPythonPath, "")
+    }
+
+    func testLocalModelFieldsRoundTrip() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        config.localModelRepoID = "grammarly/coedit-large"
+        config.localModelCustomModels = "[{\"repoID\":\"custom/model\"}]"
+        config.localModelPythonPath = "/opt/homebrew/bin/python3"
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+
+        let reloaded = manager.loadConfig()
+        XCTAssertEqual(reloaded.localModelRepoID, "grammarly/coedit-large")
+        XCTAssertEqual(reloaded.localModelCustomModels, "[{\"repoID\":\"custom/model\"}]")
+        XCTAssertEqual(reloaded.localModelPythonPath, "/opt/homebrew/bin/python3")
+    }
+
+    func testScriptsDirectoryURL() {
+        let (manager, homeURL) = makeManager()
+        let expected = homeURL.appendingPathComponent(".ghostedit/scripts", isDirectory: true)
+        XCTAssertEqual(manager.scriptsDirectoryURL, expected)
+    }
+
+    func testLocalModelFieldsBackwardCompatibility() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        // Write JSON without the new fields (simulating an old config)
+        let oldJSON = """
+        {
+            "provider": "claude",
+            "model": "sonnet",
+            "timeoutSeconds": 60,
+            "hotkeyKeyCode": 14,
+            "hotkeyModifiers": 256
+        }
+        """
+        try oldJSON.write(to: manager.configURL, atomically: true, encoding: .utf8)
+        manager.invalidateCache()
+
+        let config = manager.loadConfig()
+        XCTAssertEqual(config.localModelRepoID, "")
+        XCTAssertEqual(config.localModelCustomModels, "[]")
+        XCTAssertEqual(config.localModelPythonPath, "")
     }
 
     func testTonePresetNormalizesToDefaultForInvalidValue() throws {

@@ -101,6 +101,9 @@ struct AppConfig: Codable, Equatable {
     var showDiffPreview: Bool
     var liveFeedbackEnabled: Bool
     var diffPreviewDuration: Int
+    var localModelRepoID: String
+    var localModelCustomModels: String
+    var localModelPythonPath: String
 
     static let `default` = AppConfig(
         claudePath: "",
@@ -121,7 +124,10 @@ struct AppConfig: Codable, Equatable {
         tonePreset: "default",
         showDiffPreview: false,
         liveFeedbackEnabled: false,
-        diffPreviewDuration: 3
+        diffPreviewDuration: 3,
+        localModelRepoID: "",
+        localModelCustomModels: "[]",
+        localModelPythonPath: ""
     )
 
     static let supportedPresets: [String] = [
@@ -199,6 +205,9 @@ struct AppConfig: Codable, Equatable {
         case showDiffPreview
         case liveFeedbackEnabled
         case diffPreviewDuration
+        case localModelRepoID
+        case localModelCustomModels
+        case localModelPythonPath
     }
 
     init(
@@ -220,7 +229,10 @@ struct AppConfig: Codable, Equatable {
         tonePreset: String = "default",
         showDiffPreview: Bool = false,
         liveFeedbackEnabled: Bool = false,
-        diffPreviewDuration: Int = 3
+        diffPreviewDuration: Int = 3,
+        localModelRepoID: String = "",
+        localModelCustomModels: String = "[]",
+        localModelPythonPath: String = ""
     ) {
         self.claudePath = claudePath
         self.codexPath = codexPath
@@ -241,6 +253,9 @@ struct AppConfig: Codable, Equatable {
         self.showDiffPreview = showDiffPreview
         self.liveFeedbackEnabled = liveFeedbackEnabled
         self.diffPreviewDuration = diffPreviewDuration
+        self.localModelRepoID = localModelRepoID
+        self.localModelCustomModels = localModelCustomModels
+        self.localModelPythonPath = localModelPythonPath
     }
 
     init(from decoder: Decoder) throws {
@@ -265,6 +280,9 @@ struct AppConfig: Codable, Equatable {
         showDiffPreview = try container.decodeIfPresent(Bool.self, forKey: .showDiffPreview) ?? AppConfig.default.showDiffPreview
         liveFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .liveFeedbackEnabled) ?? AppConfig.default.liveFeedbackEnabled
         diffPreviewDuration = try container.decodeIfPresent(Int.self, forKey: .diffPreviewDuration) ?? AppConfig.default.diffPreviewDuration
+        localModelRepoID = try container.decodeIfPresent(String.self, forKey: .localModelRepoID) ?? AppConfig.default.localModelRepoID
+        localModelCustomModels = try container.decodeIfPresent(String.self, forKey: .localModelCustomModels) ?? AppConfig.default.localModelCustomModels
+        localModelPythonPath = try container.decodeIfPresent(String.self, forKey: .localModelPythonPath) ?? AppConfig.default.localModelPythonPath
     }
 
     var resolvedClaudePath: String? {
@@ -383,6 +401,16 @@ final class ConfigManager {
         if !fileManager.fileExists(atPath: historyURL.path) {
             try "[]\n".write(to: historyURL, atomically: true, encoding: .utf8)
         }
+
+        // Ensure scripts directory exists for local model inference
+        let scriptsDir = baseDirectoryURL.appendingPathComponent("scripts", isDirectory: true)
+        if !fileManager.fileExists(atPath: scriptsDir.path) {
+            try fileManager.createDirectory(at: scriptsDir, withIntermediateDirectories: true)
+        }
+    }
+
+    var scriptsDirectoryURL: URL {
+        baseDirectoryURL.appendingPathComponent("scripts", isDirectory: true)
     }
 
     func loadPrompt() throws -> String {
@@ -455,7 +483,11 @@ final class ConfigManager {
             clipboardOnlyMode: config.clipboardOnlyMode,
             tonePreset: tonePreset,
             showDiffPreview: config.showDiffPreview,
-            liveFeedbackEnabled: config.liveFeedbackEnabled
+            liveFeedbackEnabled: config.liveFeedbackEnabled,
+            diffPreviewDuration: config.diffPreviewDuration,
+            localModelRepoID: config.localModelRepoID,
+            localModelCustomModels: config.localModelCustomModels,
+            localModelPythonPath: config.localModelPythonPath
         )
     }
 
