@@ -185,6 +185,35 @@ final class PythonEnvironmentSupportTests: XCTestCase {
 
     // MARK: - pythonSearchPaths
 
+    // MARK: - detectPythonPath
+
+    func testDetectPythonPathReturnsExistingPath() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let result = PythonEnvironmentSupport.detectPythonPath(homeDirectoryPath: home)
+        XCTAssertFalse(result.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result))
+    }
+
+    func testDetectPythonPathWithCustomSearchPaths() {
+        // Provide a known-existing path to verify it's picked up
+        let result = PythonEnvironmentSupport.detectPythonPath(
+            homeDirectoryPath: "/nonexistent",
+            searchPaths: ["/nonexistent/python3", "/usr/bin/python3"]
+        )
+        // /usr/bin/python3 exists on macOS
+        XCTAssertEqual(result, "/usr/bin/python3")
+    }
+
+    func testDetectPythonPathFallsBackWhenNoneExist() {
+        let result = PythonEnvironmentSupport.detectPythonPath(
+            homeDirectoryPath: "/nonexistent",
+            searchPaths: ["/nonexistent/a", "/nonexistent/b"]
+        )
+        XCTAssertEqual(result, "/usr/bin/python3")
+    }
+
+    // MARK: - pythonSearchPaths
+
     func testPythonSearchPathsContainsExpectedPaths() {
         let paths = PythonEnvironmentSupport.pythonSearchPaths(homeDirectoryPath: "/Users/testuser")
         XCTAssertTrue(paths.contains("/opt/homebrew/bin/python3"))

@@ -750,66 +750,75 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 baseDirectoryURL: configManager.baseDirectoryURL,
                 repoID: config.localModelRepoID
             ).path
-            let pythonPath = config.localModelPythonPath.isEmpty ? "/usr/bin/python3" : config.localModelPythonPath
+            let pythonPath = config.localModelPythonPath.isEmpty
+                ? PythonEnvironmentSupport.detectPythonPath(homeDirectoryPath: FileManager.default.homeDirectoryForCurrentUser.path)
+                : config.localModelPythonPath
             showHUD(state: .working)
-            Task { @MainActor in
+            let repoID = config.localModelRepoID
+            Task.detached { [weak self] in
                 do {
-                    let prefixed = LocalModelSupport.taskPrefix(for: config.localModelRepoID) + textToFix
+                    let prefixed = LocalModelSupport.taskPrefix(for: repoID) + textToFix
                     let corrected = try runner.correctText(prefixed, modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120)
                     let trimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                    guard !trimmed.isEmpty, trimmed != textToFix else {
-                        // Model returned unchanged — fall back to rule-based
+                    await MainActor.run {
+                        guard let self else { return }
+                        guard !trimmed.isEmpty, trimmed != textToFix else {
+                            // Model returned unchanged — fall back to rule-based
+                            if let fixedText = self.applyRuleBasedFixes(
+                                text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
+                                lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
+                            ) {
+                                self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
+                                self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
+                            } else {
+                                self.showHUD(state: .success)
+                            }
+                            targetApp.activate(options: [])
+                            return
+                        }
+
+                        // Reconstruct full text when fixing a single line in Notes
+                        if let extraction = lineExtraction {
+                            let nsFullText = currentText as NSString
+                            let originalLine = nsFullText.substring(with: extraction.lineRange)
+                            let reconstructed: String
+                            if originalLine.hasSuffix("\n") {
+                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: trimmed + "\n")
+                            } else {
+                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: trimmed)
+                            }
+                            AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
+                            self.restoreCursorPosition(
+                                pid: pid, cursorLocation: cursorLocation,
+                                newTextLength: (reconstructed as NSString).length, cursorDelta: 0
+                            )
+                        } else {
+                            AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, trimmed as CFTypeRef)
+                            self.restoreCursorPosition(
+                                pid: pid, cursorLocation: cursorLocation,
+                                newTextLength: (trimmed as NSString).length, cursorDelta: 0
+                            )
+                        }
+                        self.recordLocalFixHistoryEntry(original: textToFix, fixed: trimmed)
+                        self.showQuickFixDiffPopup(original: textToFix, fixed: trimmed, near: element)
+                        self.showHUD(state: .success)
+                        targetApp.activate(options: [])
+                    }
+                } catch {
+                    await MainActor.run {
+                        guard let self else { return }
+                        self.devLog(.cliExecution, "Local model error: \(error.localizedDescription) — falling back to rule-based")
                         if let fixedText = self.applyRuleBasedFixes(
                             text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
                             lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
                         ) {
                             self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
                             self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
-                        } else {
-                            self.showHUD(state: .success)
+                            self.showHUD(state: .fallback)
                         }
                         targetApp.activate(options: [])
-                        return
                     }
-
-                    // Reconstruct full text when fixing a single line in Notes
-                    if let extraction = lineExtraction {
-                        let nsFullText = currentText as NSString
-                        let originalLine = nsFullText.substring(with: extraction.lineRange)
-                        let reconstructed: String
-                        if originalLine.hasSuffix("\n") {
-                            reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: trimmed + "\n")
-                        } else {
-                            reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: trimmed)
-                        }
-                        AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
-                        self.restoreCursorPosition(
-                            pid: pid, cursorLocation: cursorLocation,
-                            newTextLength: (reconstructed as NSString).length, cursorDelta: 0
-                        )
-                    } else {
-                        AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, trimmed as CFTypeRef)
-                        self.restoreCursorPosition(
-                            pid: pid, cursorLocation: cursorLocation,
-                            newTextLength: (trimmed as NSString).length, cursorDelta: 0
-                        )
-                    }
-                    self.recordLocalFixHistoryEntry(original: textToFix, fixed: trimmed)
-                    self.showQuickFixDiffPopup(original: textToFix, fixed: trimmed, near: element)
-                    self.showHUD(state: .success)
-                    targetApp.activate(options: [])
-                } catch {
-                    self.devLog(.cliExecution, "Local model error: \(error.localizedDescription) — falling back to rule-based")
-                    if let fixedText = self.applyRuleBasedFixes(
-                        text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
-                        lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
-                    ) {
-                        self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
-                        self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
-                        self.showHUD(state: .fallback)
-                    }
-                    targetApp.activate(options: [])
                 }
             }
         } else {
@@ -3562,12 +3571,9 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     private func detectPythonPath() -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-
-        // Try known search paths (ordered by preference)
-        for path in PythonEnvironmentSupport.pythonSearchPaths(homeDirectoryPath: home) {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
+        let detected = PythonEnvironmentSupport.detectPythonPath(homeDirectoryPath: home)
+        if detected != "/usr/bin/python3" {
+            return detected
         }
 
         // Also try resolving via shell (user's login shell has full PATH)
@@ -3589,52 +3595,53 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             }
         } catch {}
 
-        return "/usr/bin/python3"
+        return detected
     }
 
     private func refreshPythonStatus() {
         let pythonPath = localModelsPythonPathField.stringValue
-        Task {
+        let runner = localModelRunner
+        Task.detached { [weak self] in
             // First check if the Python binary actually exists
             let exists = FileManager.default.fileExists(atPath: pythonPath)
             guard exists else {
                 await MainActor.run {
-                    localModelsStatusDot.textColor = .systemRed
-                    localModelsStatusLabel.stringValue = "Python not found at \(pythonPath)"
+                    self?.localModelsStatusDot.textColor = .systemRed
+                    self?.localModelsStatusLabel.stringValue = "Python not found at \(pythonPath)"
                 }
                 return
             }
 
             do {
-                let packages = try localModelRunner?.checkPythonPackages(pythonPath: pythonPath) ?? [:]
+                let packages = try runner?.checkPythonPackages(pythonPath: pythonPath) ?? [:]
                 let missing = packages.filter { !$0.value }.map(\.key)
-                await MainActor.run {
+                await MainActor.run { [weak self] in
                     if missing.isEmpty {
-                        localModelsStatusDot.textColor = .systemGreen
-                        localModelsStatusLabel.stringValue = "Python ready \u{2014} transformers, torch installed"
+                        self?.localModelsStatusDot.textColor = .systemGreen
+                        self?.localModelsStatusLabel.stringValue = "Python ready \u{2014} transformers, torch installed"
                     } else {
-                        localModelsStatusDot.textColor = .systemOrange
-                        localModelsStatusLabel.stringValue = "Missing packages: \(missing.joined(separator: ", "))"
+                        self?.localModelsStatusDot.textColor = .systemOrange
+                        self?.localModelsStatusLabel.stringValue = "Missing packages: \(missing.joined(separator: ", "))"
                     }
                 }
             } catch let error as LocalModelRunnerError {
-                await MainActor.run {
+                await MainActor.run { [weak self] in
                     switch error {
                     case .scriptNotFound:
-                        localModelsStatusDot.textColor = .systemRed
-                        localModelsStatusLabel.stringValue = "Inference script not found in app bundle"
+                        self?.localModelsStatusDot.textColor = .systemRed
+                        self?.localModelsStatusLabel.stringValue = "Inference script not found in app bundle"
                     case .processExitedWithError(let code):
-                        localModelsStatusDot.textColor = .systemOrange
-                        localModelsStatusLabel.stringValue = "Python check failed (exit \(code)) \u{2014} packages may be broken"
+                        self?.localModelsStatusDot.textColor = .systemOrange
+                        self?.localModelsStatusLabel.stringValue = "Python check failed (exit \(code)) \u{2014} packages may be broken"
                     default:
-                        localModelsStatusDot.textColor = .systemRed
-                        localModelsStatusLabel.stringValue = "Python check error: \(error.localizedDescription)"
+                        self?.localModelsStatusDot.textColor = .systemRed
+                        self?.localModelsStatusLabel.stringValue = "Python check error: \(error.localizedDescription)"
                     }
                 }
             } catch {
-                await MainActor.run {
-                    localModelsStatusDot.textColor = .systemRed
-                    localModelsStatusLabel.stringValue = "Python check error: \(error.localizedDescription)"
+                await MainActor.run { [weak self] in
+                    self?.localModelsStatusDot.textColor = .systemRed
+                    self?.localModelsStatusLabel.stringValue = "Python check error: \(error.localizedDescription)"
                 }
             }
         }
@@ -4004,7 +4011,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         sender.isEnabled = false
         localModelsStatusLabel.stringValue = "Installing packages..."
         localModelsStatusDot.textColor = .systemGray
-        Task {
+        Task.detached { [weak self] in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/bash")
             process.arguments = ["-c", cmd]
@@ -4017,20 +4024,20 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             await MainActor.run {
                 sender.isEnabled = true
                 if process.terminationStatus == 0 {
-                    localModelsStatusDot.textColor = .systemGreen
-                    localModelsStatusLabel.stringValue = "Packages installed successfully"
+                    self?.localModelsStatusDot.textColor = .systemGreen
+                    self?.localModelsStatusLabel.stringValue = "Packages installed successfully"
                     // Re-check status after install
-                    self.refreshPythonStatus()
+                    self?.refreshPythonStatus()
                 } else {
-                    localModelsStatusDot.textColor = .systemRed
+                    self?.localModelsStatusDot.textColor = .systemRed
                     // Show the last meaningful line of pip output
                     let lastLine = errStr.components(separatedBy: .newlines)
                         .map { $0.trimmingCharacters(in: .whitespaces) }
                         .last(where: { !$0.isEmpty && !$0.hasPrefix("[notice]") }) ?? ""
                     if lastLine.isEmpty {
-                        localModelsStatusLabel.stringValue = "Package installation failed (exit \(process.terminationStatus))"
+                        self?.localModelsStatusLabel.stringValue = "Package installation failed (exit \(process.terminationStatus))"
                     } else {
-                        localModelsStatusLabel.stringValue = "Install failed: \(lastLine)"
+                        self?.localModelsStatusLabel.stringValue = "Install failed: \(lastLine)"
                     }
                 }
             }
@@ -4048,9 +4055,10 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         sender.isEnabled = false
         sender.title = "Pulling..."
 
-        Task {
+        let runner = self.localModelRunner ?? LocalModelRunner()
+        Task.detached {
             do {
-                try (self.localModelRunner ?? LocalModelRunner()).downloadModel(
+                try runner.downloadModel(
                     repoID: repoID, destPath: destPath, pythonPath: pythonPath,
                     onProgress: { line in
                         if let data = line.data(using: .utf8),
@@ -4060,9 +4068,9 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                         }
                     }
                 )
-                await MainActor.run {
+                await MainActor.run { [weak self] in
                     sender.title = "Done"
-                    self.refreshModelRows(config: self.configManager.loadConfig())
+                    if let self { self.refreshModelRows(config: self.configManager.loadConfig()) }
                 }
             } catch {
                 await MainActor.run {
@@ -4152,9 +4160,10 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             ? localModelsPythonPathField.stringValue : config.localModelPythonPath
         sender.isEnabled = false
         sender.title = "Testing..."
-        Task {
+        let runner = localModelRunner
+        Task.detached {
             do {
-                let result = try localModelRunner?.correctText(
+                let result = try runner?.correctText(
                     "Fix grammatical errors in this sentence: She go to the store yesterday and buyed some food.",
                     modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120
                 ) ?? ""

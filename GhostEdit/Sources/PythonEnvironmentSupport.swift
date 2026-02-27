@@ -61,6 +61,15 @@ enum PythonEnvironmentSupport {
         return requiredPackages.filter { !normalizedInstalled.contains($0.lowercased()) }
     }
 
+    static func detectPythonPath(homeDirectoryPath: String, searchPaths: [String]? = nil) -> String {
+        for path in (searchPaths ?? pythonSearchPaths(homeDirectoryPath: homeDirectoryPath)) {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+        return "/usr/bin/python3"
+    }
+
     static func pythonSearchPaths(homeDirectoryPath: String) -> [String] {
         [
             // Python.framework installs (pip works without --break-system-packages)
