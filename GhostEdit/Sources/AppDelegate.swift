@@ -4001,18 +4001,37 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     @objc private func installPythonPackagesClicked(_ sender: NSButton) {
         let pythonPath = localModelsPythonPathField.stringValue
         let cmd = PythonEnvironmentSupport.pipInstallCommand(pythonPath: pythonPath)
+        sender.isEnabled = false
         localModelsStatusLabel.stringValue = "Installing packages..."
+        localModelsStatusDot.textColor = .systemGray
         Task {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/bash")
             process.arguments = ["-c", cmd]
+            let errPipe = Pipe()
+            process.standardError = errPipe
             try? process.run()
             process.waitUntilExit()
+            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+            let errStr = String(data: errData, encoding: .utf8) ?? ""
             await MainActor.run {
+                sender.isEnabled = true
                 if process.terminationStatus == 0 {
+                    localModelsStatusDot.textColor = .systemGreen
                     localModelsStatusLabel.stringValue = "Packages installed successfully"
+                    // Re-check status after install
+                    self.refreshPythonStatus()
                 } else {
-                    localModelsStatusLabel.stringValue = "Package installation failed (exit \(process.terminationStatus))"
+                    localModelsStatusDot.textColor = .systemRed
+                    // Show the last meaningful line of pip output
+                    let lastLine = errStr.components(separatedBy: .newlines)
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                        .last(where: { !$0.isEmpty && !$0.hasPrefix("[notice]") }) ?? ""
+                    if lastLine.isEmpty {
+                        localModelsStatusLabel.stringValue = "Package installation failed (exit \(process.terminationStatus))"
+                    } else {
+                        localModelsStatusLabel.stringValue = "Install failed: \(lastLine)"
+                    }
                 }
             }
         }

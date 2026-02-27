@@ -103,12 +103,17 @@ final class PythonEnvironmentSupportTests: XCTestCase {
 
     func testPipInstallCommand() {
         let cmd = PythonEnvironmentSupport.pipInstallCommand(pythonPath: "/usr/bin/python3")
-        XCTAssertEqual(cmd, "/usr/bin/python3 -m pip install transformers torch")
+        XCTAssertTrue(cmd.contains("--index-url https://pypi.org/simple/"))
+        XCTAssertTrue(cmd.contains("transformers"))
+        XCTAssertTrue(cmd.contains("torch"))
+        XCTAssertTrue(cmd.contains("--upgrade"))
+        XCTAssertTrue(cmd.hasPrefix("/usr/bin/python3"))
     }
 
     func testPipInstallCommandCustomPath() {
         let cmd = PythonEnvironmentSupport.pipInstallCommand(pythonPath: "/opt/homebrew/bin/python3")
-        XCTAssertEqual(cmd, "/opt/homebrew/bin/python3 -m pip install transformers torch")
+        XCTAssertTrue(cmd.hasPrefix("/opt/homebrew/bin/python3"))
+        XCTAssertTrue(cmd.contains("transformers"))
     }
 
     // MARK: - parseInstalledPackages

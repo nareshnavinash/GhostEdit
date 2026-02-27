@@ -36,7 +36,7 @@ enum PythonEnvironmentSupport {
     }
 
     static func pipInstallCommand(pythonPath: String) -> String {
-        "\(pythonPath) -m pip install transformers torch"
+        "\(pythonPath) -m pip install --upgrade --index-url https://pypi.org/simple/ transformers torch jinja2 markupsafe"
     }
 
     static func parseInstalledPackages(_ output: String) -> Set<String> {
