@@ -36,7 +36,7 @@ enum PythonEnvironmentSupport {
     }
 
     static func pipInstallCommand(pythonPath: String) -> String {
-        "\(pythonPath) -m pip install --upgrade --index-url https://pypi.org/simple/ transformers torch jinja2 markupsafe"
+        "\(pythonPath) -m pip install --upgrade --break-system-packages --index-url https://pypi.org/simple/ transformers torch jinja2 markupsafe"
     }
 
     static func parseInstalledPackages(_ output: String) -> Set<String> {
@@ -63,16 +63,20 @@ enum PythonEnvironmentSupport {
 
     static func pythonSearchPaths(homeDirectoryPath: String) -> [String] {
         [
-            "/opt/homebrew/bin/python3",
-            "/usr/local/bin/python3",
+            // Python.framework installs (pip works without --break-system-packages)
             "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
             "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
             "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
+            // Homebrew (PEP 668 externally-managed, needs --break-system-packages)
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            // User-local installs
             "\(homeDirectoryPath)/Library/Python/3.13/bin/python3",
             "\(homeDirectoryPath)/Library/Python/3.12/bin/python3",
             "\(homeDirectoryPath)/Library/Python/3.11/bin/python3",
             "\(homeDirectoryPath)/Library/Python/3.10/bin/python3",
             "\(homeDirectoryPath)/Library/Python/3.9/bin/python3",
+            // System Python (last resort)
             "/usr/bin/python3",
         ]
     }

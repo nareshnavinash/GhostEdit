@@ -107,6 +107,7 @@ final class PythonEnvironmentSupportTests: XCTestCase {
         XCTAssertTrue(cmd.contains("transformers"))
         XCTAssertTrue(cmd.contains("torch"))
         XCTAssertTrue(cmd.contains("--upgrade"))
+        XCTAssertTrue(cmd.contains("--break-system-packages"))
         XCTAssertTrue(cmd.hasPrefix("/usr/bin/python3"))
     }
 
