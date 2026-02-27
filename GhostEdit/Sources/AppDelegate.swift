@@ -1960,14 +1960,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Update status dot color on detail item
         let dotColor: NSColor
-        if text == "Idle" || text.hasPrefix("Last correction") || text.hasPrefix("Settings saved") {
-            dotColor = .systemGreen
-        } else if text.contains("Processing") || text.contains("Working") || text.contains("Copying") || text.contains("Analyzing") || text.contains("Checking") || text.contains("Retrying") {
-            dotColor = .systemOrange
-        } else if text.contains("failed") || text.contains("not found") || text.contains("required") || text.contains("No text") || text.contains("permission") {
-            dotColor = .systemRed
-        } else {
-            dotColor = .systemGreen
+        switch StatusDisplaySupport.statusColor(for: text) {
+        case .green:  dotColor = .systemGreen
+        case .orange: dotColor = .systemOrange
+        case .red:    dotColor = .systemRed
         }
         if let img = sfSymbol("circle.fill", size: 8) {
             img.isTemplate = false

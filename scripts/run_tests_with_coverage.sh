@@ -86,6 +86,7 @@ REQUIRED_FILES=(
   "$ROOT_DIR/GhostEdit/Sources/PythonEnvironmentSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/HardwareCompatibilitySupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/LocalFixSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/StatusDisplaySupport.swift"
 )
 
 xcrun llvm-cov report \
