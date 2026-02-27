@@ -26,6 +26,7 @@
 		2BE3116303CA994B950F4580 /* LocalModelSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2F809FE69EBCC85427E5E9 /* LocalModelSupport.swift */; };
 		2E57ADE767A226EDFD2CA771 /* ghostedit_infer.py in Resources */ = {isa = PBXBuildFile; fileRef = 9ED557689309DBED721A8612 /* ghostedit_infer.py */; };
 		2FEC073EDBBA2687B680572F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02CA262A37DF28DF09D5B7E /* AppDelegate.swift */; };
+		379924ECCF2BF6142A3FF927 /* StreamingPreviewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF2CC7D1BA5E6060A5D1D8B /* StreamingPreviewController.swift */; };
 		3AEA75847CCEB11F7BF67F48 /* FallbackSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBF7F14278D1215EDEA709EC /* FallbackSupportTests.swift */; };
 		4903927ED8098469CCFA5DBC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B5DAB86AE24B9D4BB2A49EE7 /* Assets.xcassets */; };
 		4BDCC10437332C8E0D2C9A91 /* DiffSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 670081DD9C8EDE346D111598 /* DiffSupport.swift */; };
@@ -176,6 +177,7 @@
 		9ED557689309DBED721A8612 /* ghostedit_infer.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = ghostedit_infer.py; sourceTree = "<group>"; };
 		A05ACB85766D7C938F9F5AAF /* LiveFeedbackSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveFeedbackSupport.swift; sourceTree = "<group>"; };
 		A8C4CE476890917152AD2D72 /* TokenEstimationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEstimationSupport.swift; sourceTree = "<group>"; };
+		ACF2CC7D1BA5E6060A5D1D8B /* StreamingPreviewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingPreviewController.swift; sourceTree = "<group>"; };
 		AD5EF585F9FEAF33C5AB8E6A /* PersistentCLISession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistentCLISession.swift; sourceTree = "<group>"; };
 		B0B0521B581F2BFEB2E51729 /* PythonEnvironmentSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PythonEnvironmentSupport.swift; sourceTree = "<group>"; };
 		B25C010234BF1FE78E81978F /* WritingCoachSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingCoachSupportTests.swift; sourceTree = "<group>"; };
@@ -279,6 +281,7 @@
 				48F2DC407FC987FB7499B2ED /* SettingsLayoutSupport.swift */,
 				2D4EA327528B55DB5C2AD64D /* ShellRunner.swift */,
 				DE703C320386E6D54BB34E6D /* SpellCheckSupport.swift */,
+				ACF2CC7D1BA5E6060A5D1D8B /* StreamingPreviewController.swift */,
 				0079C8A54842D4B2BCCA4D98 /* StreamingPreviewSupport.swift */,
 				A8C4CE476890917152AD2D72 /* TokenEstimationSupport.swift */,
 				704994054E3FDD6C0A36E787 /* TokenPreservationSupport.swift */,
@@ -505,6 +508,7 @@
 				1247CC94014D6011C95AA3EA /* SettingsLayoutSupport.swift in Sources */,
 				63CA5F9E9DD8660BAF3991C1 /* ShellRunner.swift in Sources */,
 				0598E9B12485EA12DEB0A81E /* SpellCheckSupport.swift in Sources */,
+				379924ECCF2BF6142A3FF927 /* StreamingPreviewController.swift in Sources */,
 				8AC654218F152A9A5FFFE81A /* StreamingPreviewSupport.swift in Sources */,
 				A414C75E07E7F97A19211BD4 /* TokenEstimationSupport.swift in Sources */,
 				FA2A86184131E1A97E235361 /* TokenPreservationSupport.swift in Sources */,
