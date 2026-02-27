@@ -874,17 +874,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Extract the line containing the cursor position.
     /// Returns the line text (trimmed of trailing newline for correction) and its range in the full text.
     private func extractLineAtCursor(text: String, cursorLocation: Int) -> (lineText: String, lineRange: NSRange)? {
-        let nsText = text as NSString
-        let clampedLocation = max(0, min(cursorLocation, nsText.length))
-        let lineRange = nsText.lineRange(for: NSRange(location: clampedLocation, length: 0))
-        guard lineRange.length > 0 else { return nil }
-        var lineText = nsText.substring(with: lineRange)
-        // Trim trailing newline for correction but preserve range for reconstruction
-        if lineText.hasSuffix("\n") {
-            lineText = String(lineText.dropLast())
-        }
-        guard !lineText.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        return (lineText, lineRange)
+        LocalFixSupport.extractLineAtCursor(text: text, cursorLocation: cursorLocation)
     }
 
     /// Write back a corrected line into the full text field, placing cursor at end of fixed line.
@@ -1150,19 +1140,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Merge Harper and NSSpellChecker issues, preferring Harper when ranges overlap.
     private func mergeIssues(harper: [SpellCheckIssue], nsChecker: [SpellCheckIssue], text: String) -> [SpellCheckIssue] {
-        var merged = harper
-        for nsIssue in nsChecker {
-            let overlaps = harper.contains { h in
-                h.range.intersection(nsIssue.range) != nil
-            }
-            if !overlaps {
-                merged.append(nsIssue)
-            }
-        }
-        // Filter out likely proper nouns (names) and acronyms from spelling issues
-        merged = SpellCheckSupport.filterProperNouns(merged, in: text)
-        merged = SpellCheckSupport.filterAcronyms(merged)
-        return SpellCheckSupport.truncateForDisplay(merged)
+        LocalFixSupport.mergeIssues(harper: harper, nsChecker: nsChecker, text: text)
     }
 
     private func handleHotkeyTrigger() {
