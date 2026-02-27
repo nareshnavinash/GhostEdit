@@ -3560,9 +3560,51 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         return scrollView
     }
 
+    private func detectPythonPath() -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+
+        // Try known search paths (ordered by preference)
+        for path in PythonEnvironmentSupport.pythonSearchPaths(homeDirectoryPath: home) {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Also try resolving via shell (user's login shell has full PATH)
+        let shellProcess = Process()
+        shellProcess.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        shellProcess.arguments = ["-l", "-c", "which python3"]
+        let pipe = Pipe()
+        shellProcess.standardOutput = pipe
+        shellProcess.standardError = FileHandle.nullDevice
+        do {
+            try shellProcess.run()
+            shellProcess.waitUntilExit()
+            if shellProcess.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !path.isEmpty && FileManager.default.fileExists(atPath: path) {
+                    return path
+                }
+            }
+        } catch {}
+
+        return "/usr/bin/python3"
+    }
+
     private func refreshPythonStatus() {
         let pythonPath = localModelsPythonPathField.stringValue
         Task {
+            // First check if the Python binary actually exists
+            let exists = FileManager.default.fileExists(atPath: pythonPath)
+            guard exists else {
+                await MainActor.run {
+                    localModelsStatusDot.textColor = .systemRed
+                    localModelsStatusLabel.stringValue = "Python not found at \(pythonPath)"
+                }
+                return
+            }
+
             do {
                 let packages = try localModelRunner?.checkPythonPackages(pythonPath: pythonPath) ?? [:]
                 let missing = packages.filter { !$0.value }.map(\.key)
@@ -3575,10 +3617,24 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                         localModelsStatusLabel.stringValue = "Missing packages: \(missing.joined(separator: ", "))"
                     }
                 }
+            } catch let error as LocalModelRunnerError {
+                await MainActor.run {
+                    switch error {
+                    case .scriptNotFound:
+                        localModelsStatusDot.textColor = .systemRed
+                        localModelsStatusLabel.stringValue = "Inference script not found in app bundle"
+                    case .processExitedWithError(let code):
+                        localModelsStatusDot.textColor = .systemOrange
+                        localModelsStatusLabel.stringValue = "Python check failed (exit \(code)) \u{2014} packages may be broken"
+                    default:
+                        localModelsStatusDot.textColor = .systemRed
+                        localModelsStatusLabel.stringValue = "Python check error: \(error.localizedDescription)"
+                    }
+                }
             } catch {
                 await MainActor.run {
                     localModelsStatusDot.textColor = .systemRed
-                    localModelsStatusLabel.stringValue = "Python not found at \(pythonPath)"
+                    localModelsStatusLabel.stringValue = "Python check error: \(error.localizedDescription)"
                 }
             }
         }
@@ -3631,7 +3687,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         pathLabel.font = .systemFont(ofSize: 12)
         pathLabel.setContentHuggingPriority(.required, for: .horizontal)
         localModelsPythonPathField.stringValue = config.localModelPythonPath.isEmpty
-            ? "/usr/bin/python3" : config.localModelPythonPath
+            ? detectPythonPath() : config.localModelPythonPath
         localModelsPythonPathField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         localModelsPythonPathField.placeholderString = "Auto-detect"
         localModelsPythonPathField.translatesAutoresizingMaskIntoConstraints = false

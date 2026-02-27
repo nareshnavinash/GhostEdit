@@ -65,6 +65,11 @@ enum PythonEnvironmentSupport {
         [
             "/opt/homebrew/bin/python3",
             "/usr/local/bin/python3",
+            "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+            "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+            "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
+            "\(homeDirectoryPath)/Library/Python/3.13/bin/python3",
+            "\(homeDirectoryPath)/Library/Python/3.12/bin/python3",
             "\(homeDirectoryPath)/Library/Python/3.11/bin/python3",
             "\(homeDirectoryPath)/Library/Python/3.10/bin/python3",
             "\(homeDirectoryPath)/Library/Python/3.9/bin/python3",

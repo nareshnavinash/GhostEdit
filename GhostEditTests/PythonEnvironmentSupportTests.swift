@@ -184,18 +184,24 @@ final class PythonEnvironmentSupportTests: XCTestCase {
         XCTAssertTrue(paths.contains("/opt/homebrew/bin/python3"))
         XCTAssertTrue(paths.contains("/usr/local/bin/python3"))
         XCTAssertTrue(paths.contains("/usr/bin/python3"))
+        XCTAssertTrue(paths.contains("/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"))
+        XCTAssertTrue(paths.contains("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"))
+        XCTAssertTrue(paths.contains("/Library/Frameworks/Python.framework/Versions/3.11/bin/python3"))
+        XCTAssertTrue(paths.contains("/Users/testuser/Library/Python/3.13/bin/python3"))
+        XCTAssertTrue(paths.contains("/Users/testuser/Library/Python/3.12/bin/python3"))
         XCTAssertTrue(paths.contains("/Users/testuser/Library/Python/3.11/bin/python3"))
         XCTAssertTrue(paths.contains("/Users/testuser/Library/Python/3.10/bin/python3"))
         XCTAssertTrue(paths.contains("/Users/testuser/Library/Python/3.9/bin/python3"))
     }
 
-    func testPythonSearchPathsCountSix() {
+    func testPythonSearchPathsCount() {
         let paths = PythonEnvironmentSupport.pythonSearchPaths(homeDirectoryPath: "/home/user")
-        XCTAssertEqual(paths.count, 6)
+        XCTAssertEqual(paths.count, 11)
     }
 
     func testPythonSearchPathsUsesHomeDirectory() {
         let paths = PythonEnvironmentSupport.pythonSearchPaths(homeDirectoryPath: "/custom/home")
         XCTAssertTrue(paths.contains("/custom/home/Library/Python/3.11/bin/python3"))
+        XCTAssertTrue(paths.contains("/custom/home/Library/Python/3.13/bin/python3"))
     }
 }

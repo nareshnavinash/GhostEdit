@@ -278,7 +278,7 @@ final class LocalModelRunner {
     }
 }
 
-enum LocalModelRunnerError: Error {
+enum LocalModelRunnerError: LocalizedError {
     case scriptNotFound
     case inferenceFailed(String)
     case downloadFailed(String)
@@ -286,4 +286,23 @@ enum LocalModelRunnerError: Error {
     case processExitedWithError(Int)
     case invalidResponse
     case persistentProcessTimeout
+
+    var errorDescription: String? {
+        switch self {
+        case .scriptNotFound:
+            return "Inference script (ghostedit_infer.py) not found"
+        case .inferenceFailed(let msg):
+            return "Inference failed: \(msg)"
+        case .downloadFailed(let msg):
+            return "Download failed: \(msg)"
+        case .packageCheckFailed(let msg):
+            return "Package check failed: \(msg)"
+        case .processExitedWithError(let code):
+            return "Python process exited with code \(code)"
+        case .invalidResponse:
+            return "Invalid response from Python script"
+        case .persistentProcessTimeout:
+            return "Persistent Python process timed out"
+        }
+    }
 }
