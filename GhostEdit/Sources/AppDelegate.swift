@@ -4488,12 +4488,16 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                     sender.isEnabled = true
                     sender.title = "Pull"
                     let errMsg = error.localizedDescription
-                    let isAuthError = errMsg.contains("401")
-                        || errMsg.lowercased().contains("gated repo")
+                    let isGatedAccessError = errMsg.lowercased().contains("gated repo")
                         || errMsg.lowercased().contains("access to model")
+                        || errMsg.contains("403")
+                    let isNoTokenError = errMsg.contains("401")
                         || errMsg.lowercased().contains("authorization")
                     let alert = NSAlert()
-                    if isAuthError {
+                    if isGatedAccessError {
+                        alert.messageText = "Model Access Required"
+                        alert.informativeText = "This model is gated and requires you to accept the license on HuggingFace.\n\n1. Visit the model page (link in the error below)\n2. Click \"Agree and access repository\"\n3. Wait for approval, then try Pull again\n\n\(errMsg)"
+                    } else if isNoTokenError {
                         alert.messageText = "Authentication Required"
                         alert.informativeText = "This model requires HuggingFace authentication. Please add your token in the Hugging Face Account section below.\n\nOriginal error: \(errMsg)"
                     } else {
