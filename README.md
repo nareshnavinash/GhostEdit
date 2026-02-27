@@ -142,13 +142,13 @@ For most day-to-day corrections (fixing typos in Slack, emails, quick notes), cm
 
 ### Local Models (Hugging Face)
 
-GhostEdit supports on-demand local model inference using Hugging Face seq2seq models (CoEdIT, T5, BART, mBART, Pegasus). Models run entirely on your Mac via Python — no API keys, no network, no data leaves your machine.
+GhostEdit supports on-demand local model inference using Hugging Face models (CoEdIT, T5, Gemma, Llama, and more). Both seq2seq and causal LM architectures are auto-detected. Models run entirely on your Mac via Python — no API keys, no network, no data leaves your machine.
 
 **Why this matters:**
 - **No API keys** — download a model once, use it forever
 - **No internet required** — corrections run entirely on-device after download
 - **No data leaves your Mac** — your text stays private, always
-- **Any seq2seq model** — use CoEdIT, or bring any Hugging Face model
+- **Any Hugging Face model** — use CoEdIT, Gemma, Llama, or bring any model (seq2seq and causal LM auto-detected)
 
 **How to set up:**
 1. Open **Settings > Local Models**
@@ -166,13 +166,21 @@ GhostEdit supports on-demand local model inference using Hugging Face seq2seq mo
 | CoEdIT Large | 770M | 3.0 GB | Best quality for most users |
 | CoEdIT XL | 3B | 11 GB | Maximum quality, needs 16+ GB RAM |
 
-**Custom models:** Add any Hugging Face seq2seq model by entering its repo ID (e.g., `facebook/bart-large`) or URL in Settings > Local Models > Add Custom Model.
+**Custom models:** Add any Hugging Face model by entering its repo ID (e.g., `google/gemma-3-4b-it`) or URL in Settings > Local Models > Add Custom Model. GhostEdit auto-detects whether the model is seq2seq or causal LM and uses the appropriate inference strategy. Custom models can be removed via the Delete button.
+
+**Hugging Face Authentication:**
+Some models (e.g., Gemma, Llama) are "gated" and require a HuggingFace account and access token. Three ways to authenticate:
+1. **Settings UI** — paste your token in Settings > Local Models > Hugging Face Account > Save Token
+2. **CLI** — run `huggingface-cli login` in your terminal (GhostEdit auto-detects this)
+3. **Environment variable** — set `HF_TOKEN` in your shell profile
+
+Your token is stored at `~/.huggingface/token` (the standard HuggingFace location). If you've already authenticated via the HuggingFace CLI, GhostEdit detects it automatically.
 
 **Fallback behavior:** If no local model is configured or the model fails, cmd+E automatically falls back to Harper (grammar rules) + NSSpellChecker (spelling).
 
 **Requirements:**
 - Python 3.9+ (install via Homebrew: `brew install python`)
-- `transformers` and `torch` Python packages
+- `transformers`, `torch`, and `huggingface_hub` Python packages
 - Sufficient disk space for the chosen model
 - 8+ GB RAM recommended (16+ GB for CoEdIT XL)
 

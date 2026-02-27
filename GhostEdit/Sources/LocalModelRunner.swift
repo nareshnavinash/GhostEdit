@@ -75,6 +75,38 @@ final class LocalModelRunner {
         return result
     }
 
+    func checkHFLogin(pythonPath: String) throws -> (loggedIn: Bool, username: String, tokenSource: String) {
+        let request: [String: Any] = ["command": "check_hf_login"]
+        let response = try runScript(request: request, pythonPath: pythonPath, timeoutSeconds: 30)
+        guard let status = response["status"] as? String, status == "ok" else {
+            let message = response["message"] as? String ?? "HF login check failed"
+            throw LocalModelRunnerError.hfAuthFailed(message)
+        }
+        let loggedIn = response["logged_in"] as? Bool ?? false
+        let username = response["username"] as? String ?? ""
+        let tokenSource = response["token_source"] as? String ?? "none"
+        return (loggedIn, username, tokenSource)
+    }
+
+    func saveHFToken(token: String, pythonPath: String) throws -> String {
+        let request: [String: Any] = ["command": "save_hf_token", "token": token]
+        let response = try runScript(request: request, pythonPath: pythonPath, timeoutSeconds: 30)
+        guard let status = response["status"] as? String, status == "ok" else {
+            let message = response["message"] as? String ?? "Failed to save token"
+            throw LocalModelRunnerError.hfAuthFailed(message)
+        }
+        return response["username"] as? String ?? ""
+    }
+
+    func logoutHF(pythonPath: String) throws {
+        let request: [String: Any] = ["command": "logout_hf"]
+        let response = try runScript(request: request, pythonPath: pythonPath, timeoutSeconds: 10)
+        guard let status = response["status"] as? String, status == "ok" else {
+            let message = response["message"] as? String ?? "Logout failed"
+            throw LocalModelRunnerError.hfAuthFailed(message)
+        }
+    }
+
     func gatherHardwareInfo() -> HardwareInfo {
         let memOutput = shell("/usr/sbin/sysctl", ["-n", "hw.memsize"])
         let dfOutput = shell("/bin/df", ["-k", "/"])
@@ -286,6 +318,7 @@ enum LocalModelRunnerError: LocalizedError {
     case processExitedWithError(Int)
     case invalidResponse
     case persistentProcessTimeout
+    case hfAuthFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -303,6 +336,8 @@ enum LocalModelRunnerError: LocalizedError {
             return "Invalid response from Python script"
         case .persistentProcessTimeout:
             return "Persistent Python process timed out"
+        case .hfAuthFailed(let msg):
+            return "HuggingFace auth failed: \(msg)"
         }
     }
 }

@@ -3693,6 +3693,12 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private var localModelsStatusLabel = NSTextField(labelWithString: "")
     private var localModelsStatusDot = NSTextField(labelWithString: "\u{25CF}")
     private var localModelsModelRows: NSStackView = NSStackView()
+    private var hfAccountStatusDot = NSTextField(labelWithString: "\u{25CF}")
+    private var hfAccountStatusLabel = NSTextField(labelWithString: "Checking...")
+    private var hfAccountTokenField = NSSecureTextField(string: "")
+    private var hfAccountSaveBtn = NSButton(title: "Save Token", target: nil, action: nil)
+    private var hfAccountLogoutBtn = NSButton(title: "Logout", target: nil, action: nil)
+    private var hfAccountDetailLabel = NSTextField(labelWithString: "")
 
     private func buildLocalModelsTab() -> NSView {
         let config = configManager.loadConfig()
@@ -3722,7 +3728,11 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let modelsSection = buildLocalModelsModelSection(config: config)
         outerStack.addArrangedSubview(modelsSection)
 
-        // Section 3: Hardware
+        // Section 3: Hugging Face Account
+        let hfSection = buildLocalModelsHFAccountSection()
+        outerStack.addArrangedSubview(hfSection)
+
+        // Section 4: Hardware
         let hardwareSection = buildLocalModelsHardwareSection()
         outerStack.addArrangedSubview(hardwareSection)
 
@@ -4002,6 +4012,224 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         return container
     }
 
+    private func buildLocalModelsHFAccountSection() -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let header = NSTextField(labelWithString: "HUGGING FACE ACCOUNT")
+        header.font = .systemFont(ofSize: 11, weight: .medium)
+        header.textColor = .secondaryLabelColor
+        header.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(header)
+
+        let card = NSBox()
+        card.boxType = .custom
+        card.cornerRadius = SettingsLayoutSupport.groupCornerRadius
+        card.fillColor = .controlBackgroundColor
+        card.borderColor = .separatorColor
+        card.borderWidth = 0.5
+        card.contentViewMargins = .zero
+        card.titlePosition = .noTitle
+        card.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(card)
+
+        let cardStack = NSStackView()
+        cardStack.orientation = .vertical
+        cardStack.spacing = 8
+        cardStack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Status row: dot + label + logout button
+        let statusRow = NSStackView()
+        statusRow.orientation = .horizontal
+        statusRow.spacing = 6
+        statusRow.alignment = .centerY
+
+        hfAccountStatusDot.font = .systemFont(ofSize: 10)
+        hfAccountStatusDot.textColor = .secondaryLabelColor
+        hfAccountStatusDot.setContentHuggingPriority(.required, for: .horizontal)
+        statusRow.addArrangedSubview(hfAccountStatusDot)
+
+        hfAccountStatusLabel.font = .systemFont(ofSize: 12)
+        hfAccountStatusLabel.stringValue = "Checking..."
+        hfAccountStatusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        statusRow.addArrangedSubview(hfAccountStatusLabel)
+
+        hfAccountLogoutBtn.bezelStyle = .rounded
+        hfAccountLogoutBtn.font = .systemFont(ofSize: 11)
+        hfAccountLogoutBtn.target = self
+        hfAccountLogoutBtn.action = #selector(hfLogoutClicked(_:))
+        hfAccountLogoutBtn.isHidden = true
+        statusRow.addArrangedSubview(hfAccountLogoutBtn)
+
+        cardStack.addArrangedSubview(statusRow)
+
+        // Detail label (token source info)
+        hfAccountDetailLabel.font = .systemFont(ofSize: 11)
+        hfAccountDetailLabel.textColor = .secondaryLabelColor
+        hfAccountDetailLabel.stringValue = ""
+        cardStack.addArrangedSubview(hfAccountDetailLabel)
+
+        // Token input row
+        let tokenRow = NSStackView()
+        tokenRow.orientation = .horizontal
+        tokenRow.spacing = 8
+        tokenRow.alignment = .centerY
+
+        let tokenLabel = NSTextField(labelWithString: "Token:")
+        tokenLabel.font = .systemFont(ofSize: 11)
+        tokenLabel.setContentHuggingPriority(.required, for: .horizontal)
+        tokenRow.addArrangedSubview(tokenLabel)
+
+        hfAccountTokenField.placeholderString = "hf_..."
+        hfAccountTokenField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        hfAccountTokenField.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            hfAccountTokenField.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
+        ])
+        tokenRow.addArrangedSubview(hfAccountTokenField)
+
+        hfAccountSaveBtn.bezelStyle = .rounded
+        hfAccountSaveBtn.font = .systemFont(ofSize: 11)
+        hfAccountSaveBtn.target = self
+        hfAccountSaveBtn.action = #selector(hfSaveTokenClicked(_:))
+        tokenRow.addArrangedSubview(hfAccountSaveBtn)
+
+        cardStack.addArrangedSubview(tokenRow)
+
+        // Help text
+        let helpLabel = NSTextField(wrappingLabelWithString: "Get your token at huggingface.co/settings/tokens. Already logged in via huggingface-cli? Your token is auto-detected.")
+        helpLabel.font = .systemFont(ofSize: 10)
+        helpLabel.textColor = .tertiaryLabelColor
+        cardStack.addArrangedSubview(helpLabel)
+
+        if let cardContent = card.contentView {
+            cardContent.addSubview(cardStack)
+            NSLayoutConstraint.activate([
+                cardStack.topAnchor.constraint(equalTo: cardContent.topAnchor, constant: 14),
+                cardStack.leadingAnchor.constraint(equalTo: cardContent.leadingAnchor, constant: 16),
+                cardStack.trailingAnchor.constraint(equalTo: cardContent.trailingAnchor, constant: -16),
+                cardStack.bottomAnchor.constraint(equalTo: cardContent.bottomAnchor, constant: -14),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: container.topAnchor),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+            card.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
+            card.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            card.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            card.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            container.widthAnchor.constraint(equalToConstant: SettingsLayoutSupport.windowWidth - 40),
+        ])
+
+        // Check login status in background
+        refreshHFAccountStatus()
+
+        return container
+    }
+
+    private func refreshHFAccountStatus() {
+        let config = configManager.loadConfig()
+        let pythonPath = config.localModelPythonPath.isEmpty
+            ? localModelsPythonPathField.stringValue : config.localModelPythonPath
+        guard !pythonPath.isEmpty else {
+            hfAccountStatusDot.textColor = .systemOrange
+            hfAccountStatusLabel.stringValue = "Set Python path first"
+            hfAccountDetailLabel.stringValue = ""
+            hfAccountLogoutBtn.isHidden = true
+            return
+        }
+
+        let runner = self.localModelRunner ?? LocalModelRunner()
+        Task.detached {
+            do {
+                let result = try runner.checkHFLogin(pythonPath: pythonPath)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    if result.loggedIn {
+                        self.hfAccountStatusDot.textColor = .systemGreen
+                        self.hfAccountStatusLabel.stringValue = "Logged in as: \(result.username)"
+                        self.hfAccountLogoutBtn.isHidden = false
+                        let sourceDesc = result.tokenSource == "env" ? "HF_TOKEN env var" : "~/.huggingface/token"
+                        self.hfAccountDetailLabel.stringValue = "Token source: \(sourceDesc)"
+                    } else {
+                        self.hfAccountStatusDot.textColor = .systemRed
+                        self.hfAccountStatusLabel.stringValue = "Not logged in"
+                        self.hfAccountLogoutBtn.isHidden = true
+                        self.hfAccountDetailLabel.stringValue = ""
+                    }
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.hfAccountStatusDot.textColor = .systemOrange
+                    self?.hfAccountStatusLabel.stringValue = "Could not check login"
+                    self?.hfAccountDetailLabel.stringValue = ""
+                    self?.hfAccountLogoutBtn.isHidden = true
+                }
+            }
+        }
+    }
+
+    @objc private func hfSaveTokenClicked(_ sender: NSButton) {
+        let token = hfAccountTokenField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return }
+
+        let config = configManager.loadConfig()
+        let pythonPath = config.localModelPythonPath.isEmpty
+            ? localModelsPythonPathField.stringValue : config.localModelPythonPath
+        guard !pythonPath.isEmpty else {
+            let alert = NSAlert()
+            alert.messageText = "Python Path Required"
+            alert.informativeText = "Please set a Python path in the Python Environment section above."
+            alert.runModal()
+            return
+        }
+
+        sender.isEnabled = false
+        sender.title = "Saving..."
+        let runner = self.localModelRunner ?? LocalModelRunner()
+        Task.detached {
+            do {
+                let username = try runner.saveHFToken(token: token, pythonPath: pythonPath)
+                await MainActor.run { [weak self] in
+                    sender.isEnabled = true
+                    sender.title = "Save Token"
+                    self?.hfAccountTokenField.stringValue = ""
+                    self?.hfAccountStatusDot.textColor = .systemGreen
+                    self?.hfAccountStatusLabel.stringValue = "Logged in as: \(username)"
+                    self?.hfAccountLogoutBtn.isHidden = false
+                    self?.hfAccountDetailLabel.stringValue = "Token source: ~/.huggingface/token"
+                }
+            } catch {
+                await MainActor.run {
+                    sender.isEnabled = true
+                    sender.title = "Save Token"
+                    let alert = NSAlert()
+                    alert.messageText = "Token Validation Failed"
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    @objc private func hfLogoutClicked(_ sender: NSButton) {
+        let config = configManager.loadConfig()
+        let pythonPath = config.localModelPythonPath.isEmpty
+            ? localModelsPythonPathField.stringValue : config.localModelPythonPath
+
+        let runner = self.localModelRunner ?? LocalModelRunner()
+        Task.detached {
+            try? runner.logoutHF(pythonPath: pythonPath)
+            await MainActor.run { [weak self] in
+                self?.hfAccountStatusDot.textColor = .systemRed
+                self?.hfAccountStatusLabel.stringValue = "Not logged in"
+                self?.hfAccountLogoutBtn.isHidden = true
+                self?.hfAccountDetailLabel.stringValue = ""
+            }
+        }
+    }
+
     private func buildLocalModelsHardwareSection() -> NSView {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
@@ -4098,14 +4326,17 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         }
 
         let merged = LocalModelSupport.mergedModelList(saved: savedCustom, downloaded: downloadedSet)
+        let recommendedRepoIDs = Set(LocalModelSupport.recommendedModels.map(\.repoID))
 
         for entry in merged {
             let isActive = entry.repoID == config.localModelRepoID
+            let isCustom = !recommendedRepoIDs.contains(entry.repoID)
             let row = makeModelRow(
                 name: entry.displayName, params: entry.parameterCount,
                 disk: String(format: "%.1f GB", entry.approxDiskGB),
                 status: entry.status == .ready ? "Ready" : "Not downloaded",
-                isHeader: false, repoID: entry.repoID, isActive: isActive
+                isHeader: false, repoID: entry.repoID, isActive: isActive,
+                isCustom: isCustom
             )
             localModelsModelRows.addArrangedSubview(row)
         }
@@ -4113,7 +4344,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     private func makeModelRow(
         name: String, params: String, disk: String, status: String,
-        isHeader: Bool, repoID: String, isActive: Bool
+        isHeader: Bool, repoID: String, isActive: Bool, isCustom: Bool = false
     ) -> NSView {
         let row = NSStackView()
         row.orientation = .horizontal
@@ -4170,6 +4401,15 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                 pullBtn.font = .systemFont(ofSize: 10)
                 pullBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
                 row.addArrangedSubview(pullBtn)
+
+                // Custom models also get a Delete (remove) button when not downloaded
+                if isCustom {
+                    let removeBtn = NSButton(title: "Delete", target: self, action: #selector(deleteModelClicked(_:)))
+                    removeBtn.bezelStyle = .rounded
+                    removeBtn.font = .systemFont(ofSize: 10)
+                    removeBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
+                    row.addArrangedSubview(removeBtn)
+                }
             }
         }
 
@@ -4247,9 +4487,19 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                 await MainActor.run {
                     sender.isEnabled = true
                     sender.title = "Pull"
+                    let errMsg = error.localizedDescription
+                    let isAuthError = errMsg.contains("401")
+                        || errMsg.lowercased().contains("gated repo")
+                        || errMsg.lowercased().contains("access to model")
+                        || errMsg.lowercased().contains("authorization")
                     let alert = NSAlert()
-                    alert.messageText = "Download Failed"
-                    alert.informativeText = error.localizedDescription
+                    if isAuthError {
+                        alert.messageText = "Authentication Required"
+                        alert.informativeText = "This model requires HuggingFace authentication. Please add your token in the Hugging Face Account section below.\n\nOriginal error: \(errMsg)"
+                    } else {
+                        alert.messageText = "Download Failed"
+                        alert.informativeText = errMsg
+                    }
                     alert.runModal()
                 }
             }
@@ -4267,16 +4517,34 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     @objc private func deleteModelClicked(_ sender: NSButton) {
         guard let repoID = sender.identifier?.rawValue else { return }
+
+        // Delete model files if they exist
         let modelDir = LocalModelSupport.modelDirectoryURL(
             baseDirectoryURL: configManager.baseDirectoryURL, repoID: repoID
         )
         try? FileManager.default.removeItem(at: modelDir)
+
         var config = configManager.loadConfig()
+
+        // Remove from custom models list if present
+        if let data = config.localModelCustomModels.data(using: .utf8),
+           var customModels = try? JSONDecoder().decode([LocalModelEntry].self, from: data) {
+            let countBefore = customModels.count
+            customModels.removeAll { $0.repoID == repoID }
+            if customModels.count != countBefore {
+                if let encoded = try? JSONEncoder().encode(customModels),
+                   let jsonStr = String(data: encoded, encoding: .utf8) {
+                    config.localModelCustomModels = jsonStr
+                }
+            }
+        }
+
+        // Clear active if it was selected
         if config.localModelRepoID == repoID {
             config.localModelRepoID = ""
-            try? configManager.saveConfig(config)
-            onConfigSaved(config)
         }
+        try? configManager.saveConfig(config)
+        onConfigSaved(config)
         refreshModelRows(config: configManager.loadConfig())
     }
 
