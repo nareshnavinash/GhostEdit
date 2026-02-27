@@ -28,6 +28,7 @@
 		2FEC073EDBBA2687B680572F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D02CA262A37DF28DF09D5B7E /* AppDelegate.swift */; };
 		379924ECCF2BF6142A3FF927 /* StreamingPreviewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF2CC7D1BA5E6060A5D1D8B /* StreamingPreviewController.swift */; };
 		3AEA75847CCEB11F7BF67F48 /* FallbackSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBF7F14278D1215EDEA709EC /* FallbackSupportTests.swift */; };
+		46A854238A600756E8AA3A45 /* HistoryWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FADF75757FBA728CAFA2A52 /* HistoryWindowController.swift */; };
 		4903927ED8098469CCFA5DBC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B5DAB86AE24B9D4BB2A49EE7 /* Assets.xcassets */; };
 		4BDCC10437332C8E0D2C9A91 /* DiffSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 670081DD9C8EDE346D111598 /* DiffSupport.swift */; };
 		4DDA466A2460169F7BF32F3D /* TooltipSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 957B3F4706D4B5DB6324050F /* TooltipSupport.swift */; };
@@ -177,6 +178,7 @@
 		9A07F8A57CF75EFEDBE13B5A /* AppProfileSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppProfileSupport.swift; sourceTree = "<group>"; };
 		9C996DDEE9C8B3F039E6ABBE /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		9ED557689309DBED721A8612 /* ghostedit_infer.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = ghostedit_infer.py; sourceTree = "<group>"; };
+		9FADF75757FBA728CAFA2A52 /* HistoryWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryWindowController.swift; sourceTree = "<group>"; };
 		A05ACB85766D7C938F9F5AAF /* LiveFeedbackSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveFeedbackSupport.swift; sourceTree = "<group>"; };
 		A8C4CE476890917152AD2D72 /* TokenEstimationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenEstimationSupport.swift; sourceTree = "<group>"; };
 		ACF2CC7D1BA5E6060A5D1D8B /* StreamingPreviewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingPreviewController.swift; sourceTree = "<group>"; };
@@ -266,6 +268,7 @@
 				55A0F4FF596DB2FF492071DD /* HarperBridge.swift */,
 				7472BEE4D60D247C3C5D0A8D /* HistoryCSVExporter.swift */,
 				FDB823432C740C6B3C712BC2 /* HistoryTableModel.swift */,
+				9FADF75757FBA728CAFA2A52 /* HistoryWindowController.swift */,
 				9C996DDEE9C8B3F039E6ABBE /* HotkeyManager.swift */,
 				B906B851893CA488140981F6 /* HotkeySupport.swift */,
 				147F68940A034561B6462123 /* HUDOverlaySupport.swift */,
@@ -496,6 +499,7 @@
 				E988A014CDD0B5C721068C25 /* HarperBridge.swift in Sources */,
 				B1EED691F16254A97CFA03D3 /* HistoryCSVExporter.swift in Sources */,
 				13F49DF808DEEFA0F50A3114 /* HistoryTableModel.swift in Sources */,
+				46A854238A600756E8AA3A45 /* HistoryWindowController.swift in Sources */,
 				0C90930E75E434709A91E54F /* HotkeyManager.swift in Sources */,
 				C1AB2C3DBB5F800D48AFD07F /* HotkeySupport.swift in Sources */,
 				5A164E9FAA1017AE15ADD622 /* LaunchAtLoginManager.swift in Sources */,
