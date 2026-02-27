@@ -65,6 +65,7 @@
 		BFAFBA2ABD6484DFF8E7770C /* CorrectionStatisticsSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33DC75050963064D2F08EA7F /* CorrectionStatisticsSupportTests.swift */; };
 		C1AB2C3DBB5F800D48AFD07F /* HotkeySupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B906B851893CA488140981F6 /* HotkeySupport.swift */; };
 		C34640B7FB93D719302A58AA /* HistoryCSVExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9777490B774BC665A96882DD /* HistoryCSVExporterTests.swift */; };
+		C9918A68EAD5FB7717F6ABA8 /* DeveloperConsoleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F90DEE034E4727FC1DA5FC5C /* DeveloperConsoleController.swift */; };
 		CA780C7EE5E804CBF8103584 /* ConfigManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B642D84E35DFABB1886A46EA /* ConfigManagerTests.swift */; };
 		CC18A92B98B78199268BB570 /* GhostEditCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 33C90B5A383CE8E06047A674 /* GhostEditCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		CE239D990DBC779AB199C450 /* UpdateCheckSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B61C377B726ACD8506F9C4E /* UpdateCheckSupportTests.swift */; };
@@ -201,6 +202,7 @@
 		F1E4999151E25E3611DF482A /* WritingCoachLayoutSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingCoachLayoutSupportTests.swift; sourceTree = "<group>"; };
 		F479A47545C9BCF85C4025BA /* ShellRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRunnerTests.swift; sourceTree = "<group>"; };
 		F48762FEE0ADD0B53660C76D /* CorrectionHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionHistoryStore.swift; sourceTree = "<group>"; };
+		F90DEE034E4727FC1DA5FC5C /* DeveloperConsoleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperConsoleController.swift; sourceTree = "<group>"; };
 		FAF34CFADA7B460E42534704 /* TooltipSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TooltipSupportTests.swift; sourceTree = "<group>"; };
 		FBF7F14278D1215EDEA709EC /* FallbackSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackSupportTests.swift; sourceTree = "<group>"; };
 		FD69B09E5A0F1173B476BD23 /* CorrectionHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionHistoryStoreTests.swift; sourceTree = "<group>"; };
@@ -249,6 +251,7 @@
 				60A7425688D277A0486D28B0 /* ConfigManager.swift */,
 				F48762FEE0ADD0B53660C76D /* CorrectionHistoryStore.swift */,
 				D56DA768CB4AF49CDA4EFC17 /* CorrectionStatisticsSupport.swift */,
+				F90DEE034E4727FC1DA5FC5C /* DeveloperConsoleController.swift */,
 				08E00CB90B746D6516FC1859 /* DeveloperModeSupport.swift */,
 				670081DD9C8EDE346D111598 /* DiffSupport.swift */,
 				2C25E0F9AD4C6598FD964114 /* FallbackSupport.swift */,
@@ -474,6 +477,7 @@
 				E84DD5B8C999394B5375C717 /* ConfigManager.swift in Sources */,
 				91B7EA74641364F535A763AC /* CorrectionHistoryStore.swift in Sources */,
 				7EBB0060D652EF08D3406178 /* CorrectionStatisticsSupport.swift in Sources */,
+				C9918A68EAD5FB7717F6ABA8 /* DeveloperConsoleController.swift in Sources */,
 				DCE7C03D74AFAA0D5ADCA492 /* DeveloperModeSupport.swift in Sources */,
 				4BDCC10437332C8E0D2C9A91 /* DiffSupport.swift in Sources */,
 				8C0B6E33DF3B6B893538D158 /* FallbackSupport.swift in Sources */,
@@ -575,7 +579,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 26;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = GhostEdit/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -584,7 +588,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/build/harper";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 7.4.0;
+				MARKETING_VERSION = 6.0.0;
 				OTHER_LDFLAGS = "-lharper_bridge";
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
@@ -621,7 +625,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 34;
+				CURRENT_PROJECT_VERSION = 26;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = GhostEdit/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -630,7 +634,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/build/harper";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 7.4.0;
+				MARKETING_VERSION = 6.0.0;
 				OTHER_LDFLAGS = "-lharper_bridge";
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
