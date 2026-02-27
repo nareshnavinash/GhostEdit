@@ -60,6 +60,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.setActivationPolicy(.accessory)
+        setupEditMenu()
         configureStatusItem()
 
         do {
@@ -414,7 +415,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startLiveFeedback() {
         guard liveFeedbackController == nil else { return }
-        liveFeedbackController = LiveFeedbackController()
+        liveFeedbackController = LiveFeedbackController(
+            configManager: configManager, localModelRunner: localModelRunner
+        )
         liveFeedbackController?.start()
     }
 
@@ -423,19 +426,40 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         liveFeedbackController = nil
     }
 
+    private func setupEditMenu() {
+        let mainMenu = NSMenu()
+        let appMenuItem = NSMenuItem()
+        appMenuItem.submenu = NSMenu()
+        mainMenu.addItem(appMenuItem)
+
+        let editMenuItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+        NSApp.mainMenu = mainMenu
+    }
+
     private func registerHotkey() {
         let config = configManager.loadConfig()
 
-        hotkeyManager.registerWithVariant(
-            keyCode: config.hotkeyKeyCode,
-            modifiers: config.hotkeyModifiers
+        hotkeyManager.registerDual(
+            localKeyCode: config.hotkeyKeyCode,
+            localModifiers: config.hotkeyModifiers,
+            cloudKeyCode: config.cloudHotkeyKeyCode,
+            cloudModifiers: config.cloudHotkeyModifiers
         ) { [weak self] variant in
             DispatchQueue.main.async {
                 if variant == 0 {
-                    // Base hotkey (e.g. Cmd+E) → local fix-all
+                    // Local hotkey (e.g. Cmd+E) → local fix-all
                     self?.handleLocalFixHotkey()
                 } else {
-                    // Shift variant (e.g. Cmd+Shift+E) → LLM correction
+                    // Cloud hotkey (e.g. Cmd+Shift+E) → LLM correction
                     self?.handleHotkeyTrigger()
                 }
             }
@@ -675,8 +699,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // If live feedback is active and has issues, apply all fixes
-        if let controller = liveFeedbackController {
+        // If live feedback is active and no local model is configured, apply spell-checker fixes
+        if let controller = liveFeedbackController,
+           configManager.loadConfig().localModelRepoID.isEmpty {
             if let result = controller.applyAllFixes() {
                 recordLocalFixHistoryEntry(original: result.original, fixed: result.fixed)
                 // Get the focused AX element for popup positioning
@@ -688,13 +713,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     ) == .success, let focused = fv {
                         showQuickFixDiffPopup(
                             original: result.original, fixed: result.fixed,
-                            near: focused as! AXUIElement
+                            near: focused as! AXUIElement,
+                            toolsUsed: "Harper + Dictionary"
                         )
                     }
                 }
             }
             return
         }
+        // When a local model is configured, fall through to model-based correction below
 
         // Fallback: trigger a one-shot local fix on the focused text field
         guard let targetApp = NSWorkspace.shared.frontmostApplication else {
@@ -778,15 +805,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             return
                         }
 
+                        // Polish model output with Harper + Dictionary for remaining spelling fixes
+                        let polished = self.applyRuleBasedTextFixes(trimmed)
+                        let toolLabel = polished != trimmed ? "Local Model + Harper" : "Local Model"
+
                         // Reconstruct full text when fixing a single line in Notes
                         if let extraction = lineExtraction {
                             let nsFullText = currentText as NSString
                             let originalLine = nsFullText.substring(with: extraction.lineRange)
                             let reconstructed: String
                             if originalLine.hasSuffix("\n") {
-                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: trimmed + "\n")
+                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: polished + "\n")
                             } else {
-                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: trimmed)
+                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: polished)
                             }
                             AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
                             self.restoreCursorPosition(
@@ -794,14 +825,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                 newTextLength: (reconstructed as NSString).length, cursorDelta: 0
                             )
                         } else {
-                            AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, trimmed as CFTypeRef)
+                            AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, polished as CFTypeRef)
                             self.restoreCursorPosition(
                                 pid: pid, cursorLocation: cursorLocation,
-                                newTextLength: (trimmed as NSString).length, cursorDelta: 0
+                                newTextLength: (polished as NSString).length, cursorDelta: 0
                             )
                         }
-                        self.recordLocalFixHistoryEntry(original: textToFix, fixed: trimmed)
-                        self.showQuickFixDiffPopup(original: textToFix, fixed: trimmed, near: element, toolsUsed: "Local Model")
+                        self.recordLocalFixHistoryEntry(original: textToFix, fixed: polished)
+                        self.showQuickFixDiffPopup(original: textToFix, fixed: polished, near: element, toolsUsed: toolLabel)
                         self.showHUD(state: .success)
                         targetApp.activate(options: [])
                     }
@@ -887,6 +918,26 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 freshElement, kAXSelectedTextRangeAttribute as CFString, cursorValue
             )
         }
+    }
+
+    /// Pure-text spell polish using Harper + NSSpellChecker (no AX writes).
+    /// Returns the corrected text, or the original if no fixes were found.
+    private func applyRuleBasedTextFixes(_ text: String) -> String {
+        let harperIssues = HarperLinter.lint(text)
+        let nsIssues = performLocalSpellCheck(text)
+        let allIssues = mergeIssues(harper: harperIssues, nsChecker: nsIssues, text: text)
+        let fixable = allIssues.filter { !$0.suggestions.isEmpty }
+            .sorted { $0.range.location > $1.range.location }
+        guard !fixable.isEmpty else { return text }
+        var nsText = text as NSString
+        for issue in fixable {
+            let range = issue.range
+            guard range.location + range.length <= nsText.length else { continue }
+            let wordAtRange = nsText.substring(with: range)
+            guard wordAtRange == issue.word, let replacement = issue.suggestions.first else { continue }
+            nsText = nsText.replacingCharacters(in: range, with: replacement) as NSString
+        }
+        return nsText as String
     }
 
     /// Apply fixes using Harper + NSSpellChecker (rule-based fallback).
@@ -3388,6 +3439,16 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private let hotkeyBadgeView = NSView()
     private let hotkeyBadgeLabel = NSTextField(labelWithString: "")
 
+    // Cloud hotkey UI controls
+    private let cloudHotkeyKeyPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let cloudCommandModifierCheckbox = NSButton(checkboxWithTitle: "Command", target: nil, action: nil)
+    private let cloudOptionModifierCheckbox = NSButton(checkboxWithTitle: "Option", target: nil, action: nil)
+    private let cloudControlModifierCheckbox = NSButton(checkboxWithTitle: "Control", target: nil, action: nil)
+    private let cloudShiftModifierCheckbox = NSButton(checkboxWithTitle: "Shift", target: nil, action: nil)
+    private let cloudHotkeyPreviewLabel = NSTextField(labelWithString: "")
+    private let cloudHotkeyBadgeView = NSView()
+    private let cloudHotkeyBadgeLabel = NSTextField(labelWithString: "")
+
     private var tabViews: [Tab: NSView] = [:]
     private var currentTab: Tab = .general
 
@@ -3808,6 +3869,8 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         customField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         customField.translatesAutoresizingMaskIntoConstraints = false
         customField.tag = 9990
+        customField.isEditable = true
+        customField.isSelectable = true
         NSLayoutConstraint.activate([
             customField.widthAnchor.constraint(greaterThanOrEqualToConstant: 250),
         ])
@@ -4235,8 +4298,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
         // Dynamic hotkey labels from config
         let baseHotkey = HotkeySupport.symbolString(keyCode: config.hotkeyKeyCode, modifiers: config.hotkeyModifiers)
-        let shiftMod = config.hotkeyModifiers | HotkeySupport.makeModifiers(command: false, option: false, control: false, shift: true)
-        let shiftHotkey = HotkeySupport.symbolString(keyCode: config.hotkeyKeyCode, modifiers: shiftMod)
+        let shiftHotkey = HotkeySupport.symbolString(keyCode: config.cloudHotkeyKeyCode, modifiers: config.cloudHotkeyModifiers)
 
         // Header row
         let headerRow = makeComparisonRow(
@@ -4469,6 +4531,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     private func buildHotkeyTab() -> NSView {
+        // Local hotkey controls
         hotkeyKeyPopup.removeAllItems()
         hotkeyKeyOptions.forEach { hotkeyKeyPopup.addItem(withTitle: $0.title) }
         hotkeyKeyPopup.target = self
@@ -4521,12 +4584,71 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         badgeRow.addArrangedSubview(makeFieldLabel("Current"))
         badgeRow.addArrangedSubview(hotkeyBadgeView)
 
+        // Cloud hotkey controls
+        cloudHotkeyKeyPopup.removeAllItems()
+        hotkeyKeyOptions.forEach { cloudHotkeyKeyPopup.addItem(withTitle: $0.title) }
+        cloudHotkeyKeyPopup.target = self
+        cloudHotkeyKeyPopup.action = #selector(cloudHotkeyInputChanged)
+
+        cloudCommandModifierCheckbox.target = self
+        cloudCommandModifierCheckbox.action = #selector(cloudHotkeyInputChanged)
+        cloudOptionModifierCheckbox.target = self
+        cloudOptionModifierCheckbox.action = #selector(cloudHotkeyInputChanged)
+        cloudControlModifierCheckbox.target = self
+        cloudControlModifierCheckbox.action = #selector(cloudHotkeyInputChanged)
+        cloudShiftModifierCheckbox.target = self
+        cloudShiftModifierCheckbox.action = #selector(cloudHotkeyInputChanged)
+
+        let cloudModStack = NSStackView()
+        cloudModStack.orientation = .horizontal
+        cloudModStack.spacing = 6
+        cloudModStack.addArrangedSubview(cloudCommandModifierCheckbox)
+        cloudModStack.addArrangedSubview(cloudOptionModifierCheckbox)
+        cloudModStack.addArrangedSubview(cloudControlModifierCheckbox)
+        cloudModStack.addArrangedSubview(cloudShiftModifierCheckbox)
+
+        cloudHotkeyPreviewLabel.textColor = .secondaryLabelColor
+        cloudHotkeyPreviewLabel.font = .systemFont(ofSize: 12, weight: .medium)
+
+        cloudHotkeyBadgeView.wantsLayer = true
+        cloudHotkeyBadgeView.layer?.cornerRadius = 6
+        cloudHotkeyBadgeView.layer?.backgroundColor = NSColor.systemIndigo.withAlphaComponent(0.08).cgColor
+        cloudHotkeyBadgeView.layer?.borderWidth = 1
+        cloudHotkeyBadgeView.layer?.borderColor = NSColor.systemIndigo.withAlphaComponent(0.25).cgColor
+        cloudHotkeyBadgeView.translatesAutoresizingMaskIntoConstraints = false
+
+        cloudHotkeyBadgeLabel.font = .monospacedSystemFont(ofSize: 16, weight: .medium)
+        cloudHotkeyBadgeLabel.textColor = .systemIndigo
+        cloudHotkeyBadgeLabel.alignment = .center
+        cloudHotkeyBadgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        cloudHotkeyBadgeView.addSubview(cloudHotkeyBadgeLabel)
+
+        NSLayoutConstraint.activate([
+            cloudHotkeyBadgeLabel.topAnchor.constraint(equalTo: cloudHotkeyBadgeView.topAnchor, constant: 8),
+            cloudHotkeyBadgeLabel.bottomAnchor.constraint(equalTo: cloudHotkeyBadgeView.bottomAnchor, constant: -8),
+            cloudHotkeyBadgeLabel.leadingAnchor.constraint(equalTo: cloudHotkeyBadgeView.leadingAnchor, constant: 16),
+            cloudHotkeyBadgeLabel.trailingAnchor.constraint(equalTo: cloudHotkeyBadgeView.trailingAnchor, constant: -16),
+        ])
+
+        let cloudBadgeRow = NSStackView()
+        cloudBadgeRow.orientation = .horizontal
+        cloudBadgeRow.spacing = 8
+        cloudBadgeRow.alignment = .centerY
+        cloudBadgeRow.addArrangedSubview(makeFieldLabel("Current"))
+        cloudBadgeRow.addArrangedSubview(cloudHotkeyBadgeView)
+
         let stack = makeTabStack(sections: [
-            makeSection(title: "Keyboard Shortcut", views: [
+            makeSection(title: "Local Hotkey", views: [
                 badgeRow,
                 makeRow(label: makeFieldLabel("Key"), field: hotkeyKeyPopup),
                 makeRow(label: makeFieldLabel("Modifiers"), field: modStack),
                 hotkeyPreviewLabel,
+            ]),
+            makeSection(title: "Cloud Hotkey (LLM)", views: [
+                cloudBadgeRow,
+                makeRow(label: makeFieldLabel("Key"), field: cloudHotkeyKeyPopup),
+                makeRow(label: makeFieldLabel("Modifiers"), field: cloudModStack),
+                cloudHotkeyPreviewLabel,
             ]),
             makeButtonRow(),
         ])
@@ -4840,6 +4962,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         timeoutField.stringValue = "\(config.timeoutSeconds)"
         diffPreviewDurationField.stringValue = "\(config.diffPreviewDuration)"
         loadHotkeyValues(from: config)
+        loadCloudHotkeyValues(from: config)
 
         let rawModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
         let selectedModel = rawModel.isEmpty ? AppConfig.defaultModel(for: provider) : rawModel
@@ -4858,6 +4981,10 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     @objc private func hotkeyInputChanged() {
         updateHotkeyPreview()
+    }
+
+    @objc private func cloudHotkeyInputChanged() {
+        updateCloudHotkeyPreview()
     }
 
     private func reloadModelOptions(for provider: CLIProvider, selectedModel: String) {
@@ -4926,15 +5053,63 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     private func updateHotkeyPreview() {
         guard let keyCode = selectedHotkeyKeyCode() else {
-            hotkeyPreviewLabel.stringValue = "Current hotkey: unavailable"
+            hotkeyPreviewLabel.stringValue = "Local hotkey: unavailable"
             hotkeyBadgeLabel.stringValue = "—"
             return
         }
 
         let modifiers = selectedHotkeyModifiers()
         let display = HotkeySupport.displayString(keyCode: keyCode, modifiers: modifiers)
-        hotkeyPreviewLabel.stringValue = "Current hotkey: \(display)"
+        hotkeyPreviewLabel.stringValue = "Local hotkey: \(display)"
         hotkeyBadgeLabel.stringValue = display
+    }
+
+    private func loadCloudHotkeyValues(from config: AppConfig) {
+        if let index = hotkeyKeyOptions.firstIndex(where: { $0.keyCode == config.cloudHotkeyKeyCode }) {
+            cloudHotkeyKeyPopup.selectItem(at: index)
+        } else if let defaultIndex = hotkeyKeyOptions.firstIndex(where: { $0.keyCode == HotkeySupport.defaultKeyCode }) {
+            cloudHotkeyKeyPopup.selectItem(at: defaultIndex)
+        } else {
+            cloudHotkeyKeyPopup.selectItem(at: 0)
+        }
+
+        let split = HotkeySupport.splitModifiers(config.cloudHotkeyModifiers)
+        cloudCommandModifierCheckbox.state = split.command ? .on : .off
+        cloudOptionModifierCheckbox.state = split.option ? .on : .off
+        cloudControlModifierCheckbox.state = split.control ? .on : .off
+        cloudShiftModifierCheckbox.state = split.shift ? .on : .off
+
+        updateCloudHotkeyPreview()
+    }
+
+    private func selectedCloudHotkeyKeyCode() -> UInt32? {
+        let index = cloudHotkeyKeyPopup.indexOfSelectedItem
+        guard hotkeyKeyOptions.indices.contains(index) else {
+            return nil
+        }
+        return hotkeyKeyOptions[index].keyCode
+    }
+
+    private func selectedCloudHotkeyModifiers() -> UInt32 {
+        HotkeySupport.makeModifiers(
+            command: cloudCommandModifierCheckbox.state == .on,
+            option: cloudOptionModifierCheckbox.state == .on,
+            control: cloudControlModifierCheckbox.state == .on,
+            shift: cloudShiftModifierCheckbox.state == .on
+        )
+    }
+
+    private func updateCloudHotkeyPreview() {
+        guard let keyCode = selectedCloudHotkeyKeyCode() else {
+            cloudHotkeyPreviewLabel.stringValue = "Cloud hotkey: unavailable"
+            cloudHotkeyBadgeLabel.stringValue = "—"
+            return
+        }
+
+        let modifiers = selectedCloudHotkeyModifiers()
+        let display = HotkeySupport.displayString(keyCode: keyCode, modifiers: modifiers)
+        cloudHotkeyPreviewLabel.stringValue = "Cloud hotkey: \(display)"
+        cloudHotkeyBadgeLabel.stringValue = display
     }
 
     private func refreshCustomFieldVisibility() {
@@ -4999,8 +5174,36 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             NSSound.beep()
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Hotkey modifiers are required"
-            alert.informativeText = "Select at least one modifier key (Command, Option, Control, or Shift)."
+            alert.messageText = "Local hotkey modifiers are required"
+            alert.informativeText = "Select at least one modifier key (Command, Option, Control, or Shift) for the local hotkey."
+            alert.runModal()
+            return
+        }
+        guard let cloudHotkeyKeyCode = selectedCloudHotkeyKeyCode() else {
+            NSSound.beep()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Cloud hotkey key is required"
+            alert.informativeText = "Choose a key for the cloud hotkey before saving."
+            alert.runModal()
+            return
+        }
+        let cloudHotkeyModifiers = selectedCloudHotkeyModifiers()
+        if cloudHotkeyModifiers == 0 {
+            NSSound.beep()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Cloud hotkey modifiers are required"
+            alert.informativeText = "Select at least one modifier key (Command, Option, Control, or Shift) for the cloud hotkey."
+            alert.runModal()
+            return
+        }
+        if hotkeyKeyCode == cloudHotkeyKeyCode && hotkeyModifiers == cloudHotkeyModifiers {
+            NSSound.beep()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Hotkeys must be different"
+            alert.informativeText = "The local and cloud hotkeys cannot use the same key combination."
             alert.runModal()
             return
         }
@@ -5055,6 +5258,8 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         config.historyLimit = historyLimit
         config.timeoutSeconds = timeoutSeconds
         config.diffPreviewDuration = diffPreviewDuration
+        config.cloudHotkeyKeyCode = cloudHotkeyKeyCode
+        config.cloudHotkeyModifiers = cloudHotkeyModifiers
 
         // Local Models tab: save python path override
         let pythonPathValue = localModelsPythonPathField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -6139,6 +6344,20 @@ final class LiveFeedbackController {
         return home.appendingPathComponent(".ghostedit/ignored_words.json")
     }()
 
+    // Model-based feedback
+    private var modelDebounceTimer: Timer?
+    private var modelCheckInProgress = false
+    private var lastModelCheckedText: String?
+    private var modelCheckGeneration: UInt64 = 0
+    private weak var configManagerRef: ConfigManager?
+    private var localModelRunnerRef: LocalModelRunner?
+    static let modelDebounceInterval: TimeInterval = 2.5
+
+    init(configManager: ConfigManager? = nil, localModelRunner: LocalModelRunner? = nil) {
+        self.configManagerRef = configManager
+        self.localModelRunnerRef = localModelRunner
+    }
+
     // MARK: - Lifecycle
 
     func start() {
@@ -6150,6 +6369,23 @@ final class LiveFeedbackController {
         ) { [weak self] _ in
             self?.schedulePoll()
         }
+
+        // Pre-warm local model if configured
+        if let configManager = configManagerRef {
+            let config = configManager.loadConfig()
+            if !config.localModelRepoID.isEmpty, let runner = localModelRunnerRef {
+                let modelPath = LocalModelSupport.modelDirectoryURL(
+                    baseDirectoryURL: configManager.baseDirectoryURL,
+                    repoID: config.localModelRepoID
+                ).path
+                let pythonPath = config.localModelPythonPath.isEmpty
+                    ? PythonEnvironmentSupport.detectPythonPath(homeDirectoryPath: FileManager.default.homeDirectoryForCurrentUser.path)
+                    : config.localModelPythonPath
+                backgroundQueue.async {
+                    _ = try? runner.correctText("Hello.", modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 30)
+                }
+            }
+        }
     }
 
     func stop() {
@@ -6157,17 +6393,22 @@ final class LiveFeedbackController {
         pollingTimer = nil
         debounceTimer?.invalidate()
         debounceTimer = nil
+        modelDebounceTimer?.invalidate()
+        modelDebounceTimer = nil
         popoverDismissTimer?.invalidate()
         popoverDismissTimer = nil
         dismissWidget()
         dismissPopover()
         lastCheckedText = nil
         currentCheckedText = nil
+        lastModelCheckedText = nil
         currentIssues = []
         currentFocusedPID = nil
         state = .idle
         isPolling = false
         isMouseInsidePopover = false
+        modelCheckInProgress = false
+        modelCheckGeneration &+= 1
     }
 
     // MARK: - Polling
@@ -6251,6 +6492,7 @@ final class LiveFeedbackController {
             DispatchQueue.main.async { [weak self] in
                 self?.lastCheckedText = text
                 self?.applyResults(issues, element: element)
+                self?.scheduleModelCheck(text, element: element)
             }
         }
     }
@@ -6378,6 +6620,148 @@ final class LiveFeedbackController {
 
     private func applyResults(_ issues: [SpellCheckIssue], element: AXUIElement) {
         let filtered = SpellCheckSupport.filterIssues(issues, ignoredWords: ignoredWords)
+        let displayIssues = SpellCheckSupport.truncateForDisplay(filtered)
+        currentIssues = displayIssues
+
+        if displayIssues.isEmpty {
+            updateState(.clean)
+            dismissPopover()
+        } else {
+            updateState(.issues(displayIssues.count))
+        }
+
+        positionWidget(near: element)
+    }
+
+    // MARK: - Model-Based Check
+
+    private func scheduleModelCheck(_ text: String, element: AXUIElement) {
+        guard let config = configManagerRef?.loadConfig(),
+              !config.localModelRepoID.isEmpty,
+              localModelRunnerRef != nil else {
+            return
+        }
+
+        // Skip if text hasn't changed since last model check
+        if text == lastModelCheckedText { return }
+
+        modelDebounceTimer?.invalidate()
+        modelDebounceTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.modelDebounceInterval,
+            repeats: false
+        ) { [weak self] _ in
+            self?.triggerModelCheck(text, element: element)
+        }
+    }
+
+    private func triggerModelCheck(_ text: String, element: AXUIElement) {
+        guard !modelCheckInProgress,
+              let configManager = configManagerRef,
+              let runner = localModelRunnerRef else {
+            return
+        }
+        let config = configManager.loadConfig()
+        guard !config.localModelRepoID.isEmpty else { return }
+
+        modelCheckInProgress = true
+        let generation = modelCheckGeneration
+        let pythonPath = config.localModelPythonPath.isEmpty
+            ? PythonEnvironmentSupport.detectPythonPath(homeDirectoryPath: FileManager.default.homeDirectoryForCurrentUser.path)
+            : config.localModelPythonPath
+        let modelPath = LocalModelSupport.modelDirectoryURL(
+            baseDirectoryURL: configManager.baseDirectoryURL,
+            repoID: config.localModelRepoID
+        ).path
+
+        backgroundQueue.async { [weak self] in
+            let corrected = try? runner.correctText(text, modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 30)
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.modelCheckInProgress = false
+
+                // Discard stale results
+                guard generation == self.modelCheckGeneration,
+                      text == self.lastCheckedText else {
+                    return
+                }
+
+                self.lastModelCheckedText = text
+
+                guard let corrected, corrected != text else { return }
+
+                let modelIssues = Self.extractIssuesFromDiff(original: text, corrected: corrected)
+                if !modelIssues.isEmpty {
+                    self.mergeModelIssues(modelIssues, element: element)
+                }
+            }
+        }
+    }
+
+    static func extractIssuesFromDiff(original: String, corrected: String) -> [SpellCheckIssue] {
+        let segments = DiffSupport.wordDiff(old: original, new: corrected)
+        var issues: [SpellCheckIssue] = []
+        let nsOriginal = original as NSString
+        var scanOffset = 0
+
+        var i = 0
+        while i < segments.count {
+            let seg = segments[i]
+
+            if seg.kind == .deletion {
+                // Find matching range in original
+                let searchRange = NSRange(location: scanOffset, length: nsOriginal.length - scanOffset)
+                let foundRange = nsOriginal.range(of: seg.text, range: searchRange)
+                guard foundRange.location != NSNotFound else {
+                    i += 1
+                    continue
+                }
+
+                // Check if next segment is an insertion (replacement pair)
+                var suggestion = ""
+                if i + 1 < segments.count && segments[i + 1].kind == .insertion {
+                    suggestion = segments[i + 1].text
+                    i += 1
+                }
+
+                if !suggestion.isEmpty {
+                    issues.append(SpellCheckIssue(
+                        word: seg.text,
+                        range: foundRange,
+                        kind: .grammar,
+                        suggestions: [suggestion]
+                    ))
+                }
+
+                scanOffset = foundRange.location + foundRange.length
+            } else if seg.kind == .equal {
+                // Advance scan offset past equal text
+                let searchRange = NSRange(location: scanOffset, length: nsOriginal.length - scanOffset)
+                let foundRange = nsOriginal.range(of: seg.text, range: searchRange)
+                if foundRange.location != NSNotFound {
+                    scanOffset = foundRange.location + foundRange.length
+                }
+            }
+
+            i += 1
+        }
+
+        return issues
+    }
+
+    private func mergeModelIssues(_ modelIssues: [SpellCheckIssue], element: AXUIElement) {
+        var merged = currentIssues
+        for issue in modelIssues {
+            let overlaps = merged.contains { existing in
+                existing.range.intersection(issue.range) != nil
+            }
+            if !overlaps {
+                merged.append(issue)
+            }
+        }
+        merged.sort { $0.range.location < $1.range.location }
+
+        let filtered = SpellCheckSupport.filterIssues(merged, ignoredWords: ignoredWords)
         let displayIssues = SpellCheckSupport.truncateForDisplay(filtered)
         currentIssues = displayIssues
 

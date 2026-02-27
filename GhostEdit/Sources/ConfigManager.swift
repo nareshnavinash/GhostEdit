@@ -104,6 +104,8 @@ struct AppConfig: Codable, Equatable {
     var localModelRepoID: String
     var localModelCustomModels: String
     var localModelPythonPath: String
+    var cloudHotkeyKeyCode: UInt32
+    var cloudHotkeyModifiers: UInt32
 
     static let `default` = AppConfig(
         claudePath: "",
@@ -127,7 +129,9 @@ struct AppConfig: Codable, Equatable {
         diffPreviewDuration: 5,
         localModelRepoID: "",
         localModelCustomModels: "[]",
-        localModelPythonPath: ""
+        localModelPythonPath: "",
+        cloudHotkeyKeyCode: 14,
+        cloudHotkeyModifiers: 768
     )
 
     static let supportedPresets: [String] = [
@@ -208,6 +212,8 @@ struct AppConfig: Codable, Equatable {
         case localModelRepoID
         case localModelCustomModels
         case localModelPythonPath
+        case cloudHotkeyKeyCode
+        case cloudHotkeyModifiers
     }
 
     init(
@@ -232,7 +238,9 @@ struct AppConfig: Codable, Equatable {
         diffPreviewDuration: Int = 5,
         localModelRepoID: String = "",
         localModelCustomModels: String = "[]",
-        localModelPythonPath: String = ""
+        localModelPythonPath: String = "",
+        cloudHotkeyKeyCode: UInt32 = 14,
+        cloudHotkeyModifiers: UInt32 = 768
     ) {
         self.claudePath = claudePath
         self.codexPath = codexPath
@@ -256,6 +264,8 @@ struct AppConfig: Codable, Equatable {
         self.localModelRepoID = localModelRepoID
         self.localModelCustomModels = localModelCustomModels
         self.localModelPythonPath = localModelPythonPath
+        self.cloudHotkeyKeyCode = cloudHotkeyKeyCode
+        self.cloudHotkeyModifiers = cloudHotkeyModifiers
     }
 
     init(from decoder: Decoder) throws {
@@ -283,6 +293,8 @@ struct AppConfig: Codable, Equatable {
         localModelRepoID = try container.decodeIfPresent(String.self, forKey: .localModelRepoID) ?? AppConfig.default.localModelRepoID
         localModelCustomModels = try container.decodeIfPresent(String.self, forKey: .localModelCustomModels) ?? AppConfig.default.localModelCustomModels
         localModelPythonPath = try container.decodeIfPresent(String.self, forKey: .localModelPythonPath) ?? AppConfig.default.localModelPythonPath
+        cloudHotkeyKeyCode = try container.decodeIfPresent(UInt32.self, forKey: .cloudHotkeyKeyCode) ?? hotkeyKeyCode
+        cloudHotkeyModifiers = try container.decodeIfPresent(UInt32.self, forKey: .cloudHotkeyModifiers) ?? (hotkeyModifiers | 512)
     }
 
     var resolvedClaudePath: String? {
@@ -487,7 +499,9 @@ final class ConfigManager {
             diffPreviewDuration: config.diffPreviewDuration,
             localModelRepoID: config.localModelRepoID,
             localModelCustomModels: config.localModelCustomModels,
-            localModelPythonPath: config.localModelPythonPath
+            localModelPythonPath: config.localModelPythonPath,
+            cloudHotkeyKeyCode: config.cloudHotkeyKeyCode,
+            cloudHotkeyModifiers: config.cloudHotkeyModifiers
         )
     }
 

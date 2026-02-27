@@ -41,6 +41,8 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.localModelRepoID, AppConfig.default.localModelRepoID)
         XCTAssertEqual(config.localModelCustomModels, AppConfig.default.localModelCustomModels)
         XCTAssertEqual(config.localModelPythonPath, AppConfig.default.localModelPythonPath)
+        XCTAssertEqual(config.cloudHotkeyKeyCode, AppConfig.default.cloudHotkeyKeyCode)
+        XCTAssertEqual(config.cloudHotkeyModifiers, AppConfig.default.cloudHotkeyModifiers)
 
         // Scripts directory should be created
         let scriptsDir = manager.baseDirectoryURL.appendingPathComponent("scripts", isDirectory: true)
@@ -783,6 +785,71 @@ final class ConfigManagerTests: XCTestCase {
         try manager.saveConfig(config)
         manager.invalidateCache()
         XCTAssertEqual(manager.loadConfig().tonePreset, "default")
+    }
+
+    // MARK: - Cloud Hotkey Tests
+
+    func testCloudHotkeyDefaultValues() {
+        let config = AppConfig.default
+        XCTAssertEqual(config.cloudHotkeyKeyCode, 14) // E key
+        XCTAssertEqual(config.cloudHotkeyModifiers, 768) // Cmd+Shift
+    }
+
+    func testCloudHotkeyDecoderFallsBackToBaseWithShift() throws {
+        // Old JSON without cloud hotkey fields — should default to base key + Shift
+        let json = """
+        {"hotkeyKeyCode": 0, "hotkeyModifiers": 256}
+        """
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertEqual(config.cloudHotkeyKeyCode, 0) // same key as base
+        XCTAssertEqual(config.cloudHotkeyModifiers, 768) // 256 (Cmd) | 512 (Shift) = 768
+    }
+
+    func testCloudHotkeyRoundTrip() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        config.cloudHotkeyKeyCode = 1 // S key
+        config.cloudHotkeyModifiers = 4352 // Cmd+Option+Shift
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+
+        let reloaded = manager.loadConfig()
+        XCTAssertEqual(reloaded.cloudHotkeyKeyCode, 1)
+        XCTAssertEqual(reloaded.cloudHotkeyModifiers, 4352)
+    }
+
+    func testCloudHotkeyExplicitValuesPreservedOnDecode() throws {
+        let json = """
+        {"hotkeyKeyCode": 14, "hotkeyModifiers": 256, "cloudHotkeyKeyCode": 3, "cloudHotkeyModifiers": 2048}
+        """
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+        XCTAssertEqual(config.cloudHotkeyKeyCode, 3) // F key
+        XCTAssertEqual(config.cloudHotkeyModifiers, 2048) // Control
+    }
+
+    func testCloudHotkeyBackwardCompatibility() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        // Write JSON without cloud hotkey fields (simulating an old config)
+        let oldJSON = """
+        {
+            "provider": "claude",
+            "model": "sonnet",
+            "timeoutSeconds": 60,
+            "hotkeyKeyCode": 14,
+            "hotkeyModifiers": 256
+        }
+        """
+        try oldJSON.write(to: manager.configURL, atomically: true, encoding: .utf8)
+        manager.invalidateCache()
+
+        let config = manager.loadConfig()
+        // Should fall back to base key + Shift
+        XCTAssertEqual(config.cloudHotkeyKeyCode, 14)
+        XCTAssertEqual(config.cloudHotkeyModifiers, 768) // 256 | 512
     }
 
     private func makeManager() -> (ConfigManager, URL) {
