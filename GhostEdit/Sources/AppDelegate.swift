@@ -3196,6 +3196,12 @@ final class StreamingPreviewController: NSWindowController {
     }
 }
 
+// MARK: - Flipped Clip View (top-aligned scroll content)
+
+private final class FlippedClipView: NSClipView {
+    override var isFlipped: Bool { true }
+}
+
 // MARK: - Line Number Ruler View (Item 29)
 
 private final class LineNumberRulerView: NSRulerView {
@@ -3537,6 +3543,11 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
+
+        // Use a flipped clip view so content starts at the top
+        let flippedClip = FlippedClipView()
+        flippedClip.drawsBackground = false
+        scrollView.contentView = flippedClip
 
         let outerStack = NSStackView()
         outerStack.orientation = .vertical
@@ -3946,31 +3957,31 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     ) -> NSView {
         let row = NSStackView()
         row.orientation = .horizontal
-        row.spacing = 8
+        row.spacing = 6
         row.alignment = .centerY
 
         let nameLabel = NSTextField(labelWithString: name)
         nameLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([nameLabel.widthAnchor.constraint(equalToConstant: 120)])
+        NSLayoutConstraint.activate([nameLabel.widthAnchor.constraint(equalToConstant: 100)])
 
         let paramsLabel = NSTextField(labelWithString: params)
         paramsLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
         paramsLabel.textColor = .secondaryLabelColor
         paramsLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([paramsLabel.widthAnchor.constraint(equalToConstant: 60)])
+        NSLayoutConstraint.activate([paramsLabel.widthAnchor.constraint(equalToConstant: 45)])
 
         let diskLabel = NSTextField(labelWithString: disk)
         diskLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
         diskLabel.textColor = .secondaryLabelColor
         diskLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([diskLabel.widthAnchor.constraint(equalToConstant: 60)])
+        NSLayoutConstraint.activate([diskLabel.widthAnchor.constraint(equalToConstant: 50)])
 
         let statusLabel = NSTextField(labelWithString: status)
         statusLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
         statusLabel.textColor = status == "Ready" ? .systemGreen : .secondaryLabelColor
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([statusLabel.widthAnchor.constraint(equalToConstant: 100)])
+        NSLayoutConstraint.activate([statusLabel.widthAnchor.constraint(equalToConstant: 80)])
 
         row.addArrangedSubview(nameLabel)
         row.addArrangedSubview(paramsLabel)
