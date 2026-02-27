@@ -81,6 +81,7 @@
 		DE81A390B54F942070E1D204 /* LiveFeedbackSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18FD6ED267C05B144B92FE46 /* LiveFeedbackSupportTests.swift */; };
 		DF1EEAD2D1B1A6CCECBEA81D /* GhostEditCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 33C90B5A383CE8E06047A674 /* GhostEditCore.framework */; };
 		E727A8F2AFA9ED4690374768 /* DeveloperModeSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 047AA0330BDDF80E7320B051 /* DeveloperModeSupportTests.swift */; };
+		E795C8998244C34C171B24F0 /* LiveFeedbackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61A87A6786CDB4111D87A104 /* LiveFeedbackController.swift */; };
 		E84DD5B8C999394B5375C717 /* ConfigManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60A7425688D277A0486D28B0 /* ConfigManager.swift */; };
 		E988A014CDD0B5C721068C25 /* HarperBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A0F4FF596DB2FF492071DD /* HarperBridge.swift */; };
 		E98CA2278B6B62F776552722 /* SettingsLayoutSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E061DD0958AC85DA7B2882 /* SettingsLayoutSupportTests.swift */; };
@@ -163,6 +164,7 @@
 		55A0F4FF596DB2FF492071DD /* HarperBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarperBridge.swift; sourceTree = "<group>"; };
 		59343EEF22DDA4756F942EB8 /* HardwareCompatibilitySupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareCompatibilitySupportTests.swift; sourceTree = "<group>"; };
 		60A7425688D277A0486D28B0 /* ConfigManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigManager.swift; sourceTree = "<group>"; };
+		61A87A6786CDB4111D87A104 /* LiveFeedbackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveFeedbackController.swift; sourceTree = "<group>"; };
 		670081DD9C8EDE346D111598 /* DiffSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffSupport.swift; sourceTree = "<group>"; };
 		68A4F86B3D16DC119EF3D144 /* MenuBarIconSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconSupportTests.swift; sourceTree = "<group>"; };
 		6A19352959464C2B26B64C91 /* MenuBarIconSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconSupport.swift; sourceTree = "<group>"; };
@@ -276,6 +278,7 @@
 				F76FB8702B610390C0F22382 /* HUDOverlayController.swift */,
 				147F68940A034561B6462123 /* HUDOverlaySupport.swift */,
 				EA9C5D9A20D47E1D5A0B997E /* LaunchAtLoginManager.swift */,
+				61A87A6786CDB4111D87A104 /* LiveFeedbackController.swift */,
 				A05ACB85766D7C938F9F5AAF /* LiveFeedbackSupport.swift */,
 				8E563251AC2DCA82E5775479 /* LocalModelRunner.swift */,
 				1A2F809FE69EBCC85427E5E9 /* LocalModelSupport.swift */,
@@ -507,6 +510,7 @@
 				0C90930E75E434709A91E54F /* HotkeyManager.swift in Sources */,
 				C1AB2C3DBB5F800D48AFD07F /* HotkeySupport.swift in Sources */,
 				5A164E9FAA1017AE15ADD622 /* LaunchAtLoginManager.swift in Sources */,
+				E795C8998244C34C171B24F0 /* LiveFeedbackController.swift in Sources */,
 				8DD8208652F10248BF4E5767 /* LiveFeedbackSupport.swift in Sources */,
 				227137409996C228E6CA461E /* LocalModelRunner.swift in Sources */,
 				2BE3116303CA994B950F4580 /* LocalModelSupport.swift in Sources */,
