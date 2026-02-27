@@ -32,6 +32,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var checkUpdatesMenuItem: NSMenuItem?
     private var liveFeedbackMenuItem: NSMenuItem?
 
+    private var pendingDiffOriginalText: String?
     private var isProcessing = false
     private var isShowingAccessibilityAlert = false
     private var didShowAccessibilityGuidance = false
@@ -468,6 +469,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         targetAppAtTrigger = targetApp
         showHUD(state: .working)
 
+        // Local fixes replace the entire field content — use AXValueAttribute directly
+        if entry.provider == "Local" {
+            let appElement = AXUIElementCreateApplication(targetApp.processIdentifier)
+            var focusedValue: AnyObject?
+            if AXUIElementCopyAttributeValue(
+                appElement, kAXFocusedUIElementAttribute as CFString, &focusedValue
+            ) == .success, let focused = focusedValue {
+                let element = focused as! AXUIElement
+                let result = AXUIElementSetAttributeValue(
+                    element, kAXValueAttribute as CFString, entry.originalText as CFTypeRef
+                )
+                if result == .success {
+                    devLog(.pasteBack, "Undo: local fix AX value replacement succeeded")
+                    let time = timeFormatter.string(from: Date())
+                    setStatus("Undo succeeded at \(time)")
+                    updateHUD(state: .success)
+                    finishProcessing()
+                    return
+                }
+            }
+            // Fall through to existing clipboard fallback if AX fails
+        }
+
         // Try AX replacement first.
         if AccessibilityTextSupport.replaceSelectedText(
             appPID: targetApp.processIdentifier,
@@ -642,7 +666,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // If live feedback is active and has issues, apply all fixes
         if let controller = liveFeedbackController {
-            controller.applyAllFixes()
+            if let result = controller.applyAllFixes() {
+                recordLocalFixHistoryEntry(original: result.original, fixed: result.fixed)
+                // Get the focused AX element for popup positioning
+                if let targetApp = NSWorkspace.shared.frontmostApplication {
+                    let appEl = AXUIElementCreateApplication(targetApp.processIdentifier)
+                    var fv: AnyObject?
+                    if AXUIElementCopyAttributeValue(
+                        appEl, kAXFocusedUIElementAttribute as CFString, &fv
+                    ) == .success, let focused = fv {
+                        showQuickFixDiffPopup(
+                            original: result.original, fixed: result.fixed,
+                            near: focused as! AXUIElement
+                        )
+                    }
+                }
+            }
             return
         }
 
@@ -682,42 +721,133 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // In Notes, only fix the line at the cursor (not the entire document)
+        let isNotesApp = targetApp.bundleIdentifier == "com.apple.Notes"
+        let lineExtraction: (lineText: String, lineRange: NSRange)?
+        if isNotesApp {
+            lineExtraction = extractLineAtCursor(text: currentText, cursorLocation: cursorLocation)
+        } else {
+            lineExtraction = nil
+        }
+        let textToFix = lineExtraction?.lineText ?? currentText
+
         // Try Apple Foundation Models first (macOS 26+), fall back to Harper+NSSpellChecker
         if #available(macOS 26, *), FoundationModelSupport.isAvailable {
             showHUD(state: .working)
             Task { @MainActor in
                 do {
-                    let corrected = try await FoundationModelSupport.correctText(currentText)
+                    let corrected = try await FoundationModelSupport.correctText(textToFix)
                     let trimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty, trimmed != currentText else {
-                        self.showHUD(state: .success)
+
+                    // Detect refusals / non-corrections from the on-device model
+                    let isRefusal = trimmed.lowercased().hasPrefix("i'm sorry")
+                        || trimmed.lowercased().hasPrefix("i cannot")
+                        || trimmed.lowercased().hasPrefix("i can't")
+                        || trimmed.count > textToFix.count * 3
+
+                    guard !trimmed.isEmpty, trimmed != textToFix, !isRefusal else {
+                        // Model returned unchanged, empty, or a refusal — fall back to rule-based
+                        if isRefusal {
+                            self.devLog(.cliExecution, "Foundation Model refused: \(trimmed.prefix(80))… — falling back to rule-based")
+                        }
+                        if let fixedText = self.applyRuleBasedFixes(
+                            text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
+                            lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
+                        ) {
+                            self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
+                            self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
+                        } else {
+                            self.showHUD(state: .success)
+                        }
+                        targetApp.activate(options: [])
                         return
                     }
-                    AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, trimmed as CFTypeRef)
-                    self.restoreCursorPosition(
-                        pid: pid, cursorLocation: cursorLocation,
-                        newTextLength: (trimmed as NSString).length, cursorDelta: 0
-                    )
-                    self.recordLocalFixHistoryEntry(original: currentText, fixed: trimmed)
-                    self.showQuickFixDiffPopup(original: currentText, fixed: trimmed, near: element)
+
+                    // Reconstruct full text when fixing a single line in Notes
+                    if let extraction = lineExtraction {
+                        let nsFullText = currentText as NSString
+                        let originalLine = nsFullText.substring(with: extraction.lineRange)
+                        let reconstructed: String
+                        if originalLine.hasSuffix("\n") {
+                            reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: trimmed + "\n")
+                        } else {
+                            reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: trimmed)
+                        }
+                        AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
+                        self.restoreCursorPosition(
+                            pid: pid, cursorLocation: cursorLocation,
+                            newTextLength: (reconstructed as NSString).length, cursorDelta: 0
+                        )
+                    } else {
+                        AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, trimmed as CFTypeRef)
+                        self.restoreCursorPosition(
+                            pid: pid, cursorLocation: cursorLocation,
+                            newTextLength: (trimmed as NSString).length, cursorDelta: 0
+                        )
+                    }
+                    self.recordLocalFixHistoryEntry(original: textToFix, fixed: trimmed)
+                    self.showQuickFixDiffPopup(original: textToFix, fixed: trimmed, near: element)
                     self.showHUD(state: .success)
+                    targetApp.activate(options: [])
                 } catch {
+                    self.devLog(.cliExecution, "Foundation Model error: \(error.localizedDescription) — falling back to rule-based")
                     // Foundation Model failed, fall back to rule-based
                     if let fixedText = self.applyRuleBasedFixes(
-                        text: currentText, pid: pid, element: element, cursorLocation: cursorLocation
+                        text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
+                        lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
                     ) {
-                        self.recordLocalFixHistoryEntry(original: currentText, fixed: fixedText)
-                        self.showQuickFixDiffPopup(original: currentText, fixed: fixedText, near: element)
+                        self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
+                        self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
                     }
+                    targetApp.activate(options: [])
                 }
             }
         } else {
             if let fixedText = applyRuleBasedFixes(
-                text: currentText, pid: pid, element: element, cursorLocation: cursorLocation
+                text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
+                lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
             ) {
-                recordLocalFixHistoryEntry(original: currentText, fixed: fixedText)
-                showQuickFixDiffPopup(original: currentText, fixed: fixedText, near: element)
+                recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
+                showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
             }
+            targetApp.activate(options: [])
+        }
+    }
+
+    /// Extract the line containing the cursor position.
+    /// Returns the line text (trimmed of trailing newline for correction) and its range in the full text.
+    private func extractLineAtCursor(text: String, cursorLocation: Int) -> (lineText: String, lineRange: NSRange)? {
+        let nsText = text as NSString
+        let clampedLocation = max(0, min(cursorLocation, nsText.length))
+        let lineRange = nsText.lineRange(for: NSRange(location: clampedLocation, length: 0))
+        guard lineRange.length > 0 else { return nil }
+        var lineText = nsText.substring(with: lineRange)
+        // Trim trailing newline for correction but preserve range for reconstruction
+        if lineText.hasSuffix("\n") {
+            lineText = String(lineText.dropLast())
+        }
+        guard !lineText.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return (lineText, lineRange)
+    }
+
+    /// Position cursor at the end of text in the focused element (for Electron apps after paste).
+    private func positionCursorAtEnd(pid: pid_t) {
+        let appElement = AXUIElementCreateApplication(pid)
+        var focusedValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            appElement, kAXFocusedUIElementAttribute as CFString, &focusedValue
+        ) == .success, let focused = focusedValue else { return }
+        let element = focused as! AXUIElement
+        var textValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            element, kAXValueAttribute as CFString, &textValue
+        ) == .success, let text = textValue as? String else { return }
+        let textLength = (text as NSString).length
+        var endRange = CFRange(location: textLength, length: 0)
+        if let rangeValue = AXValueCreate(.cfRange, &endRange) {
+            AXUIElementSetAttributeValue(
+                element, kAXSelectedTextRangeAttribute as CFString, rangeValue
+            )
         }
     }
 
@@ -741,8 +871,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Apply fixes using Harper + NSSpellChecker (rule-based fallback).
+    /// When `lineRange` and `fullText` are provided (Notes app), fixes are applied to the line text
+    /// and the full document is reconstructed before writing back via AX.
     @discardableResult
-    private func applyRuleBasedFixes(text: String, pid: pid_t, element: AXUIElement, cursorLocation: Int) -> String? {
+    private func applyRuleBasedFixes(
+        text: String, pid: pid_t, element: AXUIElement, cursorLocation: Int,
+        lineRange: NSRange? = nil, fullText: String? = nil
+    ) -> String? {
         let harperIssues = HarperLinter.lint(text)
         let nsIssues = performLocalSpellCheck(text)
 
@@ -771,17 +906,37 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if fixCount > 0 {
-            // Try per-word replacement first (preserves cursor in apps like Slack)
-            let perWordSuccess = applyPerWordFixes(
-                fixable: fixable, text: text, pid: pid, element: element
-            )
-            if !perWordSuccess {
-                // Fall back to full-text replacement
-                AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, nsText as CFTypeRef)
+            if let lineRange = lineRange, let fullText = fullText {
+                // Notes app: reconstruct full document with fixed line
+                let nsFullText = fullText as NSString
+                let originalLine = nsFullText.substring(with: lineRange)
+                let fixedLine = nsText as String
+                let reconstructed: String
+                if originalLine.hasSuffix("\n") {
+                    reconstructed = nsFullText.replacingCharacters(in: lineRange, with: fixedLine + "\n")
+                } else {
+                    reconstructed = nsFullText.replacingCharacters(in: lineRange, with: fixedLine)
+                }
+                AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
+                // Adjust cursor delta to be absolute (relative to line start in document)
+                let absoluteCursorDelta = cursorDelta
                 restoreCursorPosition(
                     pid: pid, cursorLocation: cursorLocation,
-                    newTextLength: nsText.length, cursorDelta: cursorDelta
+                    newTextLength: (reconstructed as NSString).length, cursorDelta: absoluteCursorDelta
                 )
+            } else {
+                // Try per-word replacement first (preserves cursor in apps like Slack)
+                let perWordSuccess = applyPerWordFixes(
+                    fixable: fixable, text: text, pid: pid, element: element
+                )
+                if !perWordSuccess {
+                    // Fall back to full-text replacement
+                    AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, nsText as CFTypeRef)
+                    restoreCursorPosition(
+                        pid: pid, cursorLocation: cursorLocation,
+                        newTextLength: nsText.length, cursorDelta: cursorDelta
+                    )
+                }
             }
             showHUD(state: .successWithCount(fixCount))
             return nsText as String
@@ -1027,6 +1182,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func processSelectedText(_ selectedText: String) {
+        pendingDiffOriginalText = selectedText
         let prompt: String
         let baseConfig = configManager.loadConfig()
 
@@ -1185,6 +1341,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                     // Verified: either text still selected and matches (TextEdit),
                                     // or app deselected after successful replacement (Notes, Mail).
                                     self.devLog(.pasteBack, "AX replacement verified successfully")
+                                    if let original = self.pendingDiffOriginalText {
+                                        self.showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: targetApp.processIdentifier)
+                                    }
                                     let time = self.timeFormatter.string(from: Date())
                                     self.setStatus("Last correction succeeded at \(time)")
                                     self.restoreClipboardSnapshot(after: 0)
@@ -1396,6 +1555,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     )
                     if readBack == correctedText || readBack == nil {
                         self.devLog(.pasteBack, "AX replacement verified successfully")
+                        if let original = self.pendingDiffOriginalText {
+                            self.showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: targetApp.processIdentifier)
+                        }
                         let time = self.timeFormatter.string(from: Date())
                         self.setStatus("Last correction succeeded at \(time)")
                         self.restoreClipboardSnapshot(after: 0)
@@ -1436,11 +1598,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.setStatus("Paste failed")
                 self.dismissHUD()
             } else {
+                if let original = self.pendingDiffOriginalText,
+                   let targetApp = self.targetAppAtTrigger {
+                    self.showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: targetApp.processIdentifier)
+                }
                 let time = self.timeFormatter.string(from: Date())
                 self.setStatus("Last correction succeeded at \(time)")
                 self.updateHUD(state: .successWithCount(correctedText.count))
                 self.playSuccessSound()
                 self.notifySuccessIfEnabled()
+
+                // Position cursor at end of pasted text (helps Electron apps like Slack, Discord, VS Code)
+                if let targetApp = self.targetAppAtTrigger {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
+                        self.positionCursorAtEnd(pid: targetApp.processIdentifier)
+                    }
+                }
 
                 // Restore the user's focus if they switched away from the target app.
                 if let userApp = userCurrentApp,
@@ -1475,6 +1648,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func finishProcessing() {
         isProcessing = false
+        pendingDiffOriginalText = nil
         targetAppAtTrigger = nil
         stopProcessingIndicator()
     }
@@ -2180,14 +2354,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshHistoryWindowIfVisible()
     }
 
+    private func showDiffPopupForCorrection(original: String, corrected: String, appPID: pid_t) {
+        let appElement = AXUIElementCreateApplication(appPID)
+        var focusedValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            appElement, kAXFocusedUIElementAttribute as CFString, &focusedValue
+        ) == .success, let focused = focusedValue else { return }
+        showQuickFixDiffPopup(original: original, fixed: corrected, near: focused as! AXUIElement)
+    }
+
     private func showQuickFixDiffPopup(original: String, fixed: String, near element: AXUIElement) {
         let segments = DiffSupport.charDiff(old: original, new: fixed)
         guard segments.contains(where: { $0.kind != .equal }) else { return }
 
         quickFixDiffPopup?.dismiss()
 
+        let duration = TimeInterval(configManager.loadConfig().diffPreviewDuration)
         let popup = QuickFixDiffPopupController()
-        popup.show(segments: segments, near: element, widgetFrame: liveFeedbackController?.widgetFrame)
+        popup.show(segments: segments, near: element, widgetFrame: liveFeedbackController?.widgetFrame, duration: duration)
         quickFixDiffPopup = popup
     }
 
@@ -3169,6 +3353,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         target: nil,
         action: nil
     )
+    private let diffPreviewDurationField = NSTextField(string: "")
     private let hintLabel = NSTextField(labelWithString: "")
     private let hotkeyBadgeView = NSView()
     private let hotkeyBadgeLabel = NSTextField(labelWithString: "")
@@ -3312,6 +3497,192 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         tabViews[.advanced] = buildAdvancedTab()
     }
 
+    private func buildCorrectionModesSection() -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        // Section header
+        let header = NSTextField(labelWithString: "CORRECTION MODES")
+        header.font = .systemFont(ofSize: 11, weight: .medium)
+        header.textColor = .secondaryLabelColor
+        header.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(header)
+
+        let card = NSBox()
+        card.boxType = .custom
+        card.cornerRadius = SettingsLayoutSupport.groupCornerRadius
+        card.fillColor = .controlBackgroundColor
+        card.borderColor = .separatorColor
+        card.borderWidth = 0.5
+        card.contentViewMargins = .zero
+        card.titlePosition = .noTitle
+        card.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(card)
+
+        // Build comparison table
+        let tableStack = NSStackView()
+        tableStack.orientation = .vertical
+        tableStack.spacing = 0
+        tableStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let colWidths: (feature: CGFloat, local: CGFloat, llm: CGFloat) = (80, 145, 170)
+
+        // Detect OS capabilities for dynamic labels
+        let hasAppleIntelligence: Bool
+        if #available(macOS 26, *) {
+            hasAppleIntelligence = FoundationModelSupport.isAvailable
+        } else {
+            hasAppleIntelligence = false
+        }
+
+        // Header row
+        let headerRow = makeComparisonRow(
+            feature: "Feature", local: "\u{2318}E Local", llm: "\u{2318}\u{21E7}E LLM",
+            widths: colWidths, isHeader: true
+        )
+        tableStack.addArrangedSubview(headerRow)
+
+        // Data rows
+        let rows: [(String, String, String)] = [
+            ("Speed", "Instant", "2–5 seconds"),
+            ("Network", "None (offline)", "Requires AI CLI"),
+            ("Spelling", "Yes", "Yes"),
+            ("Grammar",
+             hasAppleIntelligence ? "Yes (Apple Intelligence)" : "Basic (Harper)",
+             "Yes (contextual)"),
+            ("Punctuation",
+             hasAppleIntelligence ? "Yes (Apple Intelligence)" : "No",
+             "Yes"),
+            ("Rewrites", "Light corrections", "Full restructuring"),
+        ]
+
+        for (index, row) in rows.enumerated() {
+            let rowView = makeComparisonRow(
+                feature: row.0, local: row.1, llm: row.2,
+                widths: colWidths, isHeader: false
+            )
+            if index % 2 == 0 {
+                let bg = NSView()
+                bg.wantsLayer = true
+                bg.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.08).cgColor
+                bg.translatesAutoresizingMaskIntoConstraints = false
+                rowView.addSubview(bg, positioned: .below, relativeTo: nil)
+                NSLayoutConstraint.activate([
+                    bg.topAnchor.constraint(equalTo: rowView.topAnchor),
+                    bg.leadingAnchor.constraint(equalTo: rowView.leadingAnchor),
+                    bg.trailingAnchor.constraint(equalTo: rowView.trailingAnchor),
+                    bg.bottomAnchor.constraint(equalTo: rowView.bottomAnchor),
+                ])
+            }
+            tableStack.addArrangedSubview(rowView)
+        }
+
+        // Engine status
+        let engineStack = NSStackView()
+        engineStack.orientation = .horizontal
+        engineStack.spacing = 6
+        engineStack.alignment = .firstBaseline
+        engineStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let dotView = NSTextField(labelWithString: "\u{25CF}")
+        dotView.font = .systemFont(ofSize: 10)
+
+        let engineLabel = NSTextField(labelWithString: "")
+        engineLabel.font = .systemFont(ofSize: 11)
+        engineLabel.textColor = .secondaryLabelColor
+        engineLabel.lineBreakMode = .byWordWrapping
+        engineLabel.maximumNumberOfLines = 2
+        engineLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        if #available(macOS 26, *) {
+            if FoundationModelSupport.isAvailable {
+                dotView.textColor = .systemGreen
+                engineLabel.stringValue = "Local engine: Apple Intelligence (Foundation Models)"
+            } else {
+                dotView.textColor = .systemOrange
+                engineLabel.stringValue = "Local engine: Harper + NSSpellChecker — enable Apple Intelligence in System Settings for better results"
+            }
+        } else {
+            dotView.textColor = .systemGray
+            engineLabel.stringValue = "Local engine: Harper + NSSpellChecker (Apple Intelligence requires macOS 26+)"
+        }
+
+        engineStack.addArrangedSubview(dotView)
+        engineStack.addArrangedSubview(engineLabel)
+
+        // Assemble card content
+        let cardStack = NSStackView()
+        cardStack.orientation = .vertical
+        cardStack.spacing = 12
+        cardStack.translatesAutoresizingMaskIntoConstraints = false
+        cardStack.addArrangedSubview(tableStack)
+        cardStack.addArrangedSubview(engineStack)
+
+        if let cardContent = card.contentView {
+            cardContent.addSubview(cardStack)
+            NSLayoutConstraint.activate([
+                cardStack.topAnchor.constraint(equalTo: cardContent.topAnchor, constant: 14),
+                cardStack.leadingAnchor.constraint(equalTo: cardContent.leadingAnchor, constant: 16),
+                cardStack.trailingAnchor.constraint(equalTo: cardContent.trailingAnchor, constant: -16),
+                cardStack.bottomAnchor.constraint(equalTo: cardContent.bottomAnchor, constant: -14),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: container.topAnchor),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+            header.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
+
+            card.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
+            card.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            card.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            card.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
+        return container
+    }
+
+    private func makeComparisonRow(
+        feature: String, local: String, llm: String,
+        widths: (feature: CGFloat, local: CGFloat, llm: CGFloat),
+        isHeader: Bool
+    ) -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 0
+        row.distribution = .fill
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let font: NSFont = isHeader
+            ? .systemFont(ofSize: 11, weight: .semibold)
+            : .systemFont(ofSize: 11)
+        let color: NSColor = isHeader ? .secondaryLabelColor : .labelColor
+
+        func makeCell(_ text: String, width: CGFloat) -> NSTextField {
+            let label = NSTextField(labelWithString: text)
+            label.font = font
+            label.textColor = color
+            label.lineBreakMode = .byTruncatingTail
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.widthAnchor.constraint(equalToConstant: width).isActive = true
+            return label
+        }
+
+        let featureCell = makeCell(feature, width: widths.feature)
+        let localCell = makeCell(local, width: widths.local)
+        let llmCell = makeCell(llm, width: widths.llm)
+
+        row.addArrangedSubview(featureCell)
+        row.addArrangedSubview(localCell)
+        row.addArrangedSubview(llmCell)
+
+        // Vertical padding
+        let padding: CGFloat = isHeader ? 6 : 4
+        row.edgeInsets = NSEdgeInsets(top: padding, left: 0, bottom: padding, right: 0)
+
+        return row
+    }
+
     private func buildGeneralTab() -> NSView {
         providerPopup.removeAllItems()
         providerOptions.forEach { providerPopup.addItem(withTitle: $0.displayName) }
@@ -3345,6 +3716,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let toneDesc = makeDescription("Adjusts formality and style of corrections")
 
         let stack = makeTabStack(sections: [
+            buildCorrectionModesSection(),
             makeSection(title: "Provider & Model", views: [
                 makeRow(label: makeFieldLabel("Provider"), field: providerPopup),
                 providerDesc,
@@ -3469,6 +3841,10 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         notifyOnSuccessCheckbox.setContentHuggingPriority(.required, for: .vertical)
         liveFeedbackCheckbox.setContentHuggingPriority(.required, for: .vertical)
         launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
+        diffPreviewDurationField.placeholderString = "3"
+        diffPreviewDurationField.alignment = .left
+
+        let durationDesc = makeDescription("Seconds to show the diff popup before auto-dismissing (1–30)")
 
         let stack = makeTabStack(sections: [
             makeSection(title: "Correction", views: [
@@ -3480,6 +3856,8 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                     checkbox: clipboardOnlyModeCheckbox,
                     description: "Corrected text is copied but not auto-pasted"
                 ),
+                makeRow(label: makeFieldLabel("Popup duration (s)"), field: diffPreviewDurationField),
+                durationDesc,
             ]),
             makeSection(title: "Live Feedback", views: [
                 makeCheckboxWithDescription(
@@ -3761,6 +4139,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         }
         historyLimitField.stringValue = "\(config.historyLimit)"
         timeoutField.stringValue = "\(config.timeoutSeconds)"
+        diffPreviewDurationField.stringValue = "\(config.diffPreviewDuration)"
         loadHotkeyValues(from: config)
 
         let rawModel = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3897,6 +4276,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let model = selectedModel()
         let historyLimitText = historyLimitField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let timeoutText = timeoutField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let durationText = diffPreviewDurationField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let hotkeyKeyCode = selectedHotkeyKeyCode() else {
             NSSound.beep()
             let alert = NSAlert()
@@ -3943,6 +4323,15 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             alert.runModal()
             return
         }
+        guard let diffPreviewDuration = Int(durationText), diffPreviewDuration >= 1, diffPreviewDuration <= 30 else {
+            NSSound.beep()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Popup duration is invalid"
+            alert.informativeText = "Enter a whole number between 1 and 30 for popup duration."
+            alert.runModal()
+            return
+        }
 
         var config = configManager.loadConfig()
         config.provider = provider.rawValue
@@ -3966,6 +4355,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             : "auto"
         config.historyLimit = historyLimit
         config.timeoutSeconds = timeoutSeconds
+        config.diffPreviewDuration = diffPreviewDuration
 
         do {
             try configManager.saveConfig(config)
@@ -5960,20 +6350,21 @@ final class LiveFeedbackController {
         applyAllFixes()
     }
 
-    func applyAllFixes() {
-        guard let pid = currentFocusedPID else { return }
+    @discardableResult
+    func applyAllFixes() -> (original: String, fixed: String)? {
+        guard let pid = currentFocusedPID else { return nil }
 
         let appElement = AXUIElementCreateApplication(pid)
         var focusedValue: AnyObject?
         let focusResult = AXUIElementCopyAttributeValue(
             appElement, kAXFocusedUIElementAttribute as CFString, &focusedValue
         )
-        guard focusResult == .success, let focused = focusedValue else { return }
+        guard focusResult == .success, let focused = focusedValue else { return nil }
         let element = focused as! AXUIElement
 
         var textValue: AnyObject?
         AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &textValue)
-        guard let currentText = textValue as? String else { return }
+        guard let currentText = textValue as? String else { return nil }
 
         // Save cursor position
         var cursorLocation = (currentText as NSString).length
@@ -6040,7 +6431,13 @@ final class LiveFeedbackController {
             lastCheckedText = nil
             currentCheckedText = nil
             refreshPopoverContent()
+
+            let fixedText = nsText as String
+            if fixedText != currentText {
+                return (original: currentText, fixed: fixedText)
+            }
         }
+        return nil
     }
 
     // MARK: - Ignored Words
@@ -6240,7 +6637,7 @@ final class LiveFeedbackController {
 
 // MARK: - QuickFixDiffPopupController
 
-final class QuickFixDiffPopupController {
+final class QuickFixDiffPopupController: NSObject {
     static let autoDismissDelay: TimeInterval = 3.0
     static let popupWidth: CGFloat = 300
     static let popupMaxHeight: CGFloat = 120
@@ -6248,7 +6645,7 @@ final class QuickFixDiffPopupController {
     private var panel: NSPanel?
     private var dismissWorkItem: DispatchWorkItem?
 
-    func show(segments: [DiffSegment], near element: AXUIElement, widgetFrame: NSRect?) {
+    func show(segments: [DiffSegment], near element: AXUIElement, widgetFrame: NSRect?, duration: TimeInterval = QuickFixDiffPopupController.autoDismissDelay) {
         dismissWorkItem?.cancel()
         panel?.orderOut(nil)
         panel = nil
@@ -6271,7 +6668,7 @@ final class QuickFixDiffPopupController {
             self?.dismiss()
         }
         dismissWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.autoDismissDelay, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: workItem)
     }
 
     func dismiss() {

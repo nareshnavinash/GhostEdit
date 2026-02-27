@@ -100,6 +100,7 @@ struct AppConfig: Codable, Equatable {
     var tonePreset: String
     var showDiffPreview: Bool
     var liveFeedbackEnabled: Bool
+    var diffPreviewDuration: Int
 
     static let `default` = AppConfig(
         claudePath: "",
@@ -119,7 +120,8 @@ struct AppConfig: Codable, Equatable {
         clipboardOnlyMode: false,
         tonePreset: "default",
         showDiffPreview: false,
-        liveFeedbackEnabled: false
+        liveFeedbackEnabled: false,
+        diffPreviewDuration: 3
     )
 
     static let supportedPresets: [String] = [
@@ -196,6 +198,7 @@ struct AppConfig: Codable, Equatable {
         case tonePreset
         case showDiffPreview
         case liveFeedbackEnabled
+        case diffPreviewDuration
     }
 
     init(
@@ -216,7 +219,8 @@ struct AppConfig: Codable, Equatable {
         clipboardOnlyMode: Bool = false,
         tonePreset: String = "default",
         showDiffPreview: Bool = false,
-        liveFeedbackEnabled: Bool = false
+        liveFeedbackEnabled: Bool = false,
+        diffPreviewDuration: Int = 3
     ) {
         self.claudePath = claudePath
         self.codexPath = codexPath
@@ -236,6 +240,7 @@ struct AppConfig: Codable, Equatable {
         self.tonePreset = tonePreset
         self.showDiffPreview = showDiffPreview
         self.liveFeedbackEnabled = liveFeedbackEnabled
+        self.diffPreviewDuration = diffPreviewDuration
     }
 
     init(from decoder: Decoder) throws {
@@ -259,6 +264,7 @@ struct AppConfig: Codable, Equatable {
         tonePreset = try container.decodeIfPresent(String.self, forKey: .tonePreset) ?? AppConfig.default.tonePreset
         showDiffPreview = try container.decodeIfPresent(Bool.self, forKey: .showDiffPreview) ?? AppConfig.default.showDiffPreview
         liveFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .liveFeedbackEnabled) ?? AppConfig.default.liveFeedbackEnabled
+        diffPreviewDuration = try container.decodeIfPresent(Int.self, forKey: .diffPreviewDuration) ?? AppConfig.default.diffPreviewDuration
     }
 
     var resolvedClaudePath: String? {

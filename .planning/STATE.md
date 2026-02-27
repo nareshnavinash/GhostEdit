@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-26)
 
 **Core value:** Instant, zero-latency grammar correction that works everywhere on macOS — local fixes handle 90% of cases without waiting for an LLM.
-**Current focus:** Phase 1 — Quick Fix UX
+**Current focus:** Phase 2 — Text Selection Fixes
 
 ## Current Position
 
-Phase: 1 of 3 (Quick Fix UX)
-Plan: 1 of ? in current phase
-Status: In progress — checkpoint:human-verify (Task 3)
-Last activity: 2026-02-26 — Completed 01-01 Tasks 1-2, awaiting human verification
+Phase: 2 of 3 (Text Selection Fixes)
+Plan: 0 of ? in current phase
+Status: Phase 1 complete, Phase 2 not yet planned
+Last activity: 2026-02-27 — Phase 1 complete with additional fixes, context exhausted before Phase 2 planning
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0 (01-01 in progress — awaiting human-verify)
-- Average duration: —
-- Total execution time: —
+- Total plans completed: 1 (01-01)
+- Average duration: ~4 min
+- Total execution time: ~4 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-quick-fix-ux | 0 complete (1 in progress) | ~4 min | — |
+| 01-quick-fix-ux | 1 complete | ~4 min | ~4 min |
+| 02-text-selection-fixes | 0 | — | — |
 
 **Recent Trend:**
-- Last 5 plans: —
+- Last 5 plans: 01-01
 - Trend: —
 
 *Updated after each plan completion*
@@ -49,6 +50,10 @@ Recent decisions affecting current work:
 - 01-01: Use provider="Local", model="Harper" sentinel strings for local fix history entries — no schema changes
 - 01-01: applyRuleBasedFixes returns String? so caller receives fixed text without re-querying AX
 - 01-01: Popup positions above live feedback widget when visible, falls back to AX element bounds
+- applyAllFixes returns (original, fixed)? tuple for live feedback path wiring
+- pendingDiffOriginalText carries original text through async LLM flow for diff popup
+- Foundation Model refusal detected by prefix matching + length check, falls back to Harper
+- diffPreviewDuration stored as Int (seconds) in AppConfig with range 1-30
 
 ### Pending Todos
 
@@ -56,10 +61,10 @@ None yet.
 
 ### Blockers/Concerns
 
-None yet.
+- Apple Intelligence on-device model refuses grammar correction prompts — mitigated with refusal detection + fallback to Harper+NSSpellChecker
 
 ## Session Continuity
 
-Last session: 2026-02-26
-Stopped at: 01-01-PLAN.md Tasks 1-2 complete — paused at checkpoint:human-verify (Task 3)
-Resume file: .planning/phases/01-quick-fix-ux/01-01-PLAN.md
+Last session: 2026-02-27
+Stopped at: Phase 1 complete, Phase 2 planning needed
+Resume file: .planning/phases/01-quick-fix-ux/.continue-here.md

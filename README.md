@@ -1,10 +1,12 @@
 # GhostEdit
 
-**Free, open-source AI grammar checker for macOS. Fix grammar, spelling, and punctuation in any app with a single hotkey powered by Claude, OpenAI Codex, or Gemini.**
+**Free, open-source offline grammar checker for macOS. Fix grammar, spelling, and punctuation in any app with a single hotkey — powered by Apple Intelligence, Claude, OpenAI Codex, or Gemini. The best free macOS grammar correction tool with on-device AI and no subscriptions.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/Platform-macOS%2013%2B-black.svg)](https://github.com/nareshnavinash/GhostEdit/releases)
 [![Latest Release](https://img.shields.io/github/v/release/nareshnavinash/GhostEdit)](https://github.com/nareshnavinash/GhostEdit/releases/latest)
+
+> GhostEdit is a lightweight macOS menu bar app that corrects grammar, spelling, and punctuation in any text field system-wide. Press a hotkey and your text is fixed instantly — using Apple Intelligence on-device or your choice of Claude, Codex, or Gemini. No accounts, no subscriptions, no data leaves your Mac.
 
 ![GhostEdit launch preview](remotion/out/TwitterBanner.png)
 
@@ -47,6 +49,14 @@ You can now double-click the app to open it normally! (You only need to do this 
 - **Works everywhere** correct text in any macOS app: Slack, Notion, VS Code, Mail, Pages, or any text field. One hotkey, any app.
 - **Bring your own AI** switch between Claude, OpenAI Codex, and Gemini from Settings. Pick the model that works best for you.
 - **On-device grammar** Apple Foundation Models and Harper provide instant local corrections with no API calls needed.
+
+## How It Works
+
+1. **Press cmd+E** for an instant local fix — Apple Intelligence (macOS 26+) or Harper corrects spelling and grammar offline in under 100ms
+2. **Press cmd+shift+E** for a deep LLM fix — Claude, Codex, or Gemini rewrites and polishes your text with full contextual understanding
+3. **See what changed** — an optional diff preview highlights every correction before it's applied, and you can undo any fix instantly
+
+No setup needed for local fixes. For LLM fixes, install any supported AI CLI and GhostEdit auto-detects it.
 
 ## Features
 
@@ -111,9 +121,54 @@ When enabled in **Settings > Behavior**, a floating widget appears near the acti
 
 The widget shows a colored status dot (green = clean, red = issues found). Click the widget to toggle the detail popover listing each issue with suggestions. Each issue row has action buttons: accept the fix, ignore once, or always ignore the word. Drag the widget anywhere — it stays put until you switch apps. Enable from **Settings > Behavior > Live Feedback** or set `"liveFeedbackEnabled": true` in config.
 
+### Dual Hotkey: Local Fix vs LLM Fix
+
+GhostEdit gives you two ways to fix text. The base hotkey (cmd+E) runs entirely on your Mac — no internet, no API keys, no delay. The shift variant (cmd+shift+E) sends text to a cloud AI for deeper rewrites. Most people use cmd+E for everyday typos and switch to cmd+shift+E only when they need serious polishing.
+
+Here's how they compare:
+
+| | **cmd+E** (Local Fix) | **cmd+shift+E** (LLM Fix) |
+|---|---|---|
+| **Speed** | Instant (< 100ms) | 2-5 seconds |
+| **Network** | None (fully offline) | Requires AI CLI |
+| **Engine** | Apple Intelligence (macOS 26+) or Harper + NSSpellChecker (macOS 13-25) | Claude, Codex, or Gemini |
+| **Spelling** | Yes | Yes |
+| **Grammar** | Yes (Apple Intelligence) / Basic (Harper) | Yes (contextual) |
+| **Punctuation** | Yes (Apple Intelligence) / No (Harper) | Yes |
+| **Rewrites** | Light corrections only | Full sentence restructuring |
+| **Best for** | Quick typo fixes, Slack messages, emails | Polishing important text, deep rewrites |
+
+For most day-to-day corrections (fixing typos in Slack, emails, quick notes), cmd+E handles it instantly. Use cmd+shift+E when you need deeper rewrites or the local fix didn't catch something.
+
+### Apple Intelligence (macOS 26+)
+
+On supported hardware, cmd+E uses Apple's on-device Foundation Models for grammar, spelling, and punctuation correction — no API keys, no network, instant results.
+
+Why this matters:
+- **No API keys** — works out of the box, nothing to configure
+- **No internet required** — corrections run entirely on-device
+- **No data leaves your Mac** — your text stays private, always
+- **Instant results** — sub-100ms corrections, no waiting for a server
+
+**Requirements:**
+- macOS 26 (Tahoe) or later
+- Apple Silicon (M1, M2, M3, or M4)
+- 16 GB RAM or more
+- Apple Intelligence enabled in **System Settings > Apple Intelligence & Siri**
+
+**How to enable:**
+1. Open **System Settings** > **Apple Intelligence & Siri**
+2. Turn on **Apple Intelligence**
+3. Wait for the on-device model to download (may take a few minutes on first enable)
+4. GhostEdit automatically detects Apple Intelligence — no configuration needed
+
+**Fallback behavior:** If Apple Intelligence is unavailable (older Mac, insufficient RAM, not enabled), cmd+E automatically falls back to Harper (grammar rules) + NSSpellChecker (spelling). Harper catches common grammar patterns but does not handle punctuation or contextual rewrites.
+
+**Verify availability:** Enable Developer Mode in GhostEdit (menu bar > Developer Mode) and press cmd+E. The console will show whether the Foundation Model path or the Harper fallback was used.
+
 ### Prerequisites
 
-You need at least one AI CLI installed:
+You need at least one AI CLI installed for **cmd+shift+E** (LLM corrections):
 
 | Provider | Install | Auth |
 |----------|---------|------|
@@ -174,7 +229,8 @@ Default `config.json`:
   "notifyOnSuccess": false,
   "clipboardOnlyMode": false,
   "showDiffPreview": false,
-  "liveFeedbackEnabled": false
+  "liveFeedbackEnabled": false,
+  "diffPreviewDuration": 3
 }
 ```
 
@@ -192,6 +248,7 @@ Notes:
 - `clipboardOnlyMode` places corrected text on the clipboard without pasting it back.
 - `showDiffPreview` shows a word-level diff preview window before applying the correction.
 - `liveFeedbackEnabled` enables real-time spelling, grammar, and style checking in a floating widget.
+- `diffPreviewDuration` seconds to show the diff popup before auto-dismissing (1-30, default 3).
 
 ### Per-App Profiles
 
