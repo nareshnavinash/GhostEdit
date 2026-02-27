@@ -780,34 +780,39 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             let pythonPath = config.localModelPythonPath.isEmpty
                 ? PythonEnvironmentSupport.detectPythonPath(homeDirectoryPath: FileManager.default.homeDirectoryForCurrentUser.path)
                 : config.localModelPythonPath
+
+            // Step 1: Apply Harper + Dictionary fixes first (instant spelling/punctuation)
+            let spellFixed = applyRuleBasedTextFixes(textToFix)
+
             showHUD(state: .working)
             let repoID = config.localModelRepoID
             Task.detached { [weak self] in
                 do {
-                    let prefixed = LocalModelSupport.taskPrefix(for: repoID) + textToFix
+                    let prefixed = LocalModelSupport.taskPrefix(for: repoID) + spellFixed
                     let corrected = try runner.correctText(prefixed, modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120)
                     let trimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
 
                     await MainActor.run {
                         guard let self else { return }
-                        guard !trimmed.isEmpty, trimmed != textToFix else {
-                            // Model returned unchanged — fall back to rule-based
-                            if let fixedText = self.applyRuleBasedFixes(
-                                text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
-                                lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
-                            ) {
-                                self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
-                                self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element, toolsUsed: "Harper + Dictionary")
-                            } else {
-                                self.showHUD(state: .success)
-                            }
-                            targetApp.activate(options: [])
-                            return
-                        }
 
-                        // Polish model output with Harper + Dictionary for remaining spelling fixes
-                        let polished = self.applyRuleBasedTextFixes(trimmed)
-                        let toolLabel = polished != trimmed ? "Local Model + Harper" : "Local Model"
+                        // Step 2: Determine final text based on what changed
+                        let finalText: String
+                        let toolLabel: String
+                        if trimmed.isEmpty || trimmed == spellFixed {
+                            // Model returned unchanged — use spell-fixed text if it differs
+                            if spellFixed == textToFix {
+                                // Neither Harper nor Model changed anything
+                                self.showHUD(state: .success)
+                                targetApp.activate(options: [])
+                                return
+                            }
+                            finalText = spellFixed
+                            toolLabel = "Harper + Dictionary"
+                        } else {
+                            finalText = trimmed
+                            toolLabel = spellFixed != textToFix
+                                ? "Harper + Local Model" : "Local Model"
+                        }
 
                         // Reconstruct full text when fixing a single line in Notes
                         if let extraction = lineExtraction {
@@ -815,9 +820,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             let originalLine = nsFullText.substring(with: extraction.lineRange)
                             let reconstructed: String
                             if originalLine.hasSuffix("\n") {
-                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: polished + "\n")
+                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: finalText + "\n")
                             } else {
-                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: polished)
+                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: finalText)
                             }
                             AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
                             self.restoreCursorPosition(
@@ -825,27 +830,46 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                 newTextLength: (reconstructed as NSString).length, cursorDelta: 0
                             )
                         } else {
-                            AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, polished as CFTypeRef)
+                            AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, finalText as CFTypeRef)
                             self.restoreCursorPosition(
                                 pid: pid, cursorLocation: cursorLocation,
-                                newTextLength: (polished as NSString).length, cursorDelta: 0
+                                newTextLength: (finalText as NSString).length, cursorDelta: 0
                             )
                         }
-                        self.recordLocalFixHistoryEntry(original: textToFix, fixed: polished)
-                        self.showQuickFixDiffPopup(original: textToFix, fixed: polished, near: element, toolsUsed: toolLabel)
+                        self.recordLocalFixHistoryEntry(original: textToFix, fixed: finalText)
+                        self.showQuickFixDiffPopup(original: textToFix, fixed: finalText, near: element, toolsUsed: toolLabel)
                         self.showHUD(state: .success)
                         targetApp.activate(options: [])
                     }
                 } catch {
                     await MainActor.run {
                         guard let self else { return }
-                        self.devLog(.cliExecution, "Local model error: \(error.localizedDescription) — falling back to rule-based")
-                        if let fixedText = self.applyRuleBasedFixes(
-                            text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
-                            lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
-                        ) {
-                            self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
-                            self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element, toolsUsed: "Harper + Dictionary")
+                        self.devLog(.cliExecution, "Local model error: \(error.localizedDescription) — falling back to Harper + Dictionary")
+                        // On model error, use spell-fixed text if it differs from original
+                        if spellFixed != textToFix {
+                            if let extraction = lineExtraction {
+                                let nsFullText = currentText as NSString
+                                let originalLine = nsFullText.substring(with: extraction.lineRange)
+                                let reconstructed: String
+                                if originalLine.hasSuffix("\n") {
+                                    reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: spellFixed + "\n")
+                                } else {
+                                    reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: spellFixed)
+                                }
+                                AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
+                                self.restoreCursorPosition(
+                                    pid: pid, cursorLocation: cursorLocation,
+                                    newTextLength: (reconstructed as NSString).length, cursorDelta: 0
+                                )
+                            } else {
+                                AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, spellFixed as CFTypeRef)
+                                self.restoreCursorPosition(
+                                    pid: pid, cursorLocation: cursorLocation,
+                                    newTextLength: (spellFixed as NSString).length, cursorDelta: 0
+                                )
+                            }
+                            self.recordLocalFixHistoryEntry(original: textToFix, fixed: spellFixed)
+                            self.showQuickFixDiffPopup(original: textToFix, fixed: spellFixed, near: element, toolsUsed: "Harper + Dictionary")
                             self.showHUD(state: .fallback)
                         }
                         targetApp.activate(options: [])
