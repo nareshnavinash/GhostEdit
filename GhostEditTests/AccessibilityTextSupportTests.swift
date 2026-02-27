@@ -7,6 +7,10 @@ private final class StubAXProvider: AXElementProviding {
     var setResult: AXError = .success
     var setResultByAttribute: [String: AXError] = [:]
     var selectedText: String?
+    var fullText: String?
+    var fullTextResult: AXError = .success
+    var selectedRange: AXValue?
+    var selectedRangeResult: AXError = .success
     private(set) var lastSetText: String?
     private(set) var lastSetAttribute: String?
     private(set) var setAttributeCalls: [(attribute: String, value: Any?)] = []
@@ -31,6 +35,26 @@ private final class StubAXProvider: AXElementProviding {
             }
             if let text = selectedText {
                 return (.success, text as CFTypeRef)
+            }
+            return (.success, nil)
+        }
+
+        if attribute == (kAXValueAttribute as String) {
+            if fullTextResult != .success {
+                return (fullTextResult, nil)
+            }
+            if let text = fullText {
+                return (.success, text as CFTypeRef)
+            }
+            return (.success, nil)
+        }
+
+        if attribute == (kAXSelectedTextRangeAttribute as String) {
+            if selectedRangeResult != .success {
+                return (selectedRangeResult, nil)
+            }
+            if let range = selectedRange {
+                return (.success, range)
             }
             return (.success, nil)
         }
@@ -209,6 +233,127 @@ final class AccessibilityTextSupportTests: XCTestCase {
 
         XCTAssertFalse(result)
         XCTAssertEqual(provider.setAttributeCalls.count, 2)
+    }
+
+    // MARK: - readFullText
+
+    func testReadFullTextReturnsTextWhenAvailable() {
+        let provider = StubAXProvider()
+        provider.fullText = "Hello world\nSecond line"
+
+        let result = AccessibilityTextSupport.readFullText(appPID: 1, provider: provider)
+        XCTAssertEqual(result, "Hello world\nSecond line")
+    }
+
+    func testReadFullTextReturnsNilOnFocusFailure() {
+        let provider = StubAXProvider()
+        provider.focusResult = .cannotComplete
+        provider.fullText = "should not reach this"
+
+        let result = AccessibilityTextSupport.readFullText(appPID: 1, provider: provider)
+        XCTAssertNil(result)
+    }
+
+    func testReadFullTextReturnsNilOnEmptyText() {
+        let provider = StubAXProvider()
+        provider.fullText = ""
+
+        let result = AccessibilityTextSupport.readFullText(appPID: 1, provider: provider)
+        XCTAssertNil(result)
+    }
+
+    func testReadFullTextReturnsNilOnAXError() {
+        let provider = StubAXProvider()
+        provider.fullTextResult = .attributeUnsupported
+
+        let result = AccessibilityTextSupport.readFullText(appPID: 1, provider: provider)
+        XCTAssertNil(result)
+    }
+
+    func testReadFullTextReturnsNilWhenNoText() {
+        let provider = StubAXProvider()
+        provider.fullText = nil
+
+        let result = AccessibilityTextSupport.readFullText(appPID: 1, provider: provider)
+        XCTAssertNil(result)
+    }
+
+    // MARK: - readCursorPosition
+
+    func testReadCursorPositionReturnsPosition() {
+        let provider = StubAXProvider()
+        var cfRange = CFRange(location: 5, length: 0)
+        provider.selectedRange = AXValueCreate(.cfRange, &cfRange)
+
+        let result = AccessibilityTextSupport.readCursorPosition(appPID: 1, provider: provider)
+        XCTAssertEqual(result, 5)
+    }
+
+    func testReadCursorPositionReturnsNilOnFocusFailure() {
+        let provider = StubAXProvider()
+        provider.focusResult = .cannotComplete
+        var cfRange = CFRange(location: 5, length: 0)
+        provider.selectedRange = AXValueCreate(.cfRange, &cfRange)
+
+        let result = AccessibilityTextSupport.readCursorPosition(appPID: 1, provider: provider)
+        XCTAssertNil(result)
+    }
+
+    func testReadCursorPositionReturnsNilOnRangeReadFailure() {
+        let provider = StubAXProvider()
+        provider.selectedRangeResult = .attributeUnsupported
+
+        let result = AccessibilityTextSupport.readCursorPosition(appPID: 1, provider: provider)
+        XCTAssertNil(result)
+    }
+
+    func testReadCursorPositionReturnsNilWhenNoRange() {
+        let provider = StubAXProvider()
+        provider.selectedRange = nil
+
+        let result = AccessibilityTextSupport.readCursorPosition(appPID: 1, provider: provider)
+        XCTAssertNil(result)
+    }
+
+    func testReadCursorPositionReturnsNilWhenAXValueTypeIsMismatched() {
+        let provider = StubAXProvider()
+        // Create an AXValue of type .cgPoint instead of .cfRange
+        var point = CGPoint(x: 10, y: 20)
+        provider.selectedRange = AXValueCreate(.cgPoint, &point)
+
+        let result = AccessibilityTextSupport.readCursorPosition(appPID: 1, provider: provider)
+        XCTAssertNil(result)
+    }
+
+    // MARK: - setCursorPosition
+
+    func testSetCursorPositionReturnsTrueOnSuccess() {
+        let provider = StubAXProvider()
+
+        let result = AccessibilityTextSupport.setCursorPosition(appPID: 1, position: 10, provider: provider)
+
+        XCTAssertTrue(result)
+        XCTAssertEqual(provider.setAttributeCalls.count, 1)
+        XCTAssertEqual(provider.setAttributeCalls[0].attribute, kAXSelectedTextRangeAttribute as String)
+    }
+
+    func testSetCursorPositionReturnsFalseOnFocusFailure() {
+        let provider = StubAXProvider()
+        provider.focusResult = .cannotComplete
+
+        let result = AccessibilityTextSupport.setCursorPosition(appPID: 1, position: 10, provider: provider)
+
+        XCTAssertFalse(result)
+        XCTAssertTrue(provider.setAttributeCalls.isEmpty)
+    }
+
+    func testSetCursorPositionReturnsFalseOnSetFailure() {
+        let provider = StubAXProvider()
+        provider.setResultByAttribute[kAXSelectedTextRangeAttribute as String] = .attributeUnsupported
+
+        let result = AccessibilityTextSupport.setCursorPosition(appPID: 1, position: 10, provider: provider)
+
+        XCTAssertFalse(result)
     }
 
     // MARK: - SystemAXElementProvider

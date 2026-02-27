@@ -34,6 +34,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var liveFeedbackMenuItem: NSMenuItem?
 
     private var pendingDiffOriginalText: String?
+    private struct LineContext {
+        let fullText: String
+        let lineRange: NSRange
+        let lineText: String
+        let pid: pid_t
+    }
+    private var pendingLineContext: LineContext?
     private var isProcessing = false
     private var isShowingAccessibilityAlert = false
     private var didShowAccessibilityGuidance = false
@@ -759,14 +766,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // In Notes, only fix the line at the cursor (not the entire document)
-        let isNotesApp = targetApp.bundleIdentifier == "com.apple.Notes"
-        let lineExtraction: (lineText: String, lineRange: NSRange)?
-        if isNotesApp {
-            lineExtraction = extractLineAtCursor(text: currentText, cursorLocation: cursorLocation)
-        } else {
-            lineExtraction = nil
-        }
+        // Fix only the line at the cursor (not the entire document)
+        let lineExtraction = extractLineAtCursor(text: currentText, cursorLocation: cursorLocation)
         let textToFix = lineExtraction?.lineText ?? currentText
 
         // Try local Hugging Face model if configured, otherwise use Harper+NSSpellChecker
@@ -814,20 +815,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                 ? "Harper + Local Model" : "Local Model"
                         }
 
-                        // Reconstruct full text when fixing a single line in Notes
+                        // Write back the corrected line (or full text if no line extraction)
                         if let extraction = lineExtraction {
-                            let nsFullText = currentText as NSString
-                            let originalLine = nsFullText.substring(with: extraction.lineRange)
-                            let reconstructed: String
-                            if originalLine.hasSuffix("\n") {
-                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: finalText + "\n")
-                            } else {
-                                reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: finalText)
-                            }
-                            AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
-                            self.restoreCursorPosition(
-                                pid: pid, cursorLocation: cursorLocation,
-                                newTextLength: (reconstructed as NSString).length, cursorDelta: 0
+                            _ = self.writeBackCorrectedLine(
+                                correctedLine: finalText, lineRange: extraction.lineRange,
+                                fullText: currentText, pid: pid
                             )
                         } else {
                             AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, finalText as CFTypeRef)
@@ -848,18 +840,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         // On model error, use spell-fixed text if it differs from original
                         if spellFixed != textToFix {
                             if let extraction = lineExtraction {
-                                let nsFullText = currentText as NSString
-                                let originalLine = nsFullText.substring(with: extraction.lineRange)
-                                let reconstructed: String
-                                if originalLine.hasSuffix("\n") {
-                                    reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: spellFixed + "\n")
-                                } else {
-                                    reconstructed = nsFullText.replacingCharacters(in: extraction.lineRange, with: spellFixed)
-                                }
-                                AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
-                                self.restoreCursorPosition(
-                                    pid: pid, cursorLocation: cursorLocation,
-                                    newTextLength: (reconstructed as NSString).length, cursorDelta: 0
+                                _ = self.writeBackCorrectedLine(
+                                    correctedLine: spellFixed, lineRange: extraction.lineRange,
+                                    fullText: currentText, pid: pid
                                 )
                             } else {
                                 AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, spellFixed as CFTypeRef)
@@ -879,7 +862,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             if let fixedText = applyRuleBasedFixes(
                 text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
-                lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
+                lineRange: lineExtraction?.lineRange, fullText: lineExtraction != nil ? currentText : nil
             ) {
                 recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
                 showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element, toolsUsed: "Harper + Dictionary")
@@ -902,6 +885,50 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard !lineText.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         return (lineText, lineRange)
+    }
+
+    /// Write back a corrected line into the full text field, placing cursor at end of fixed line.
+    /// Returns true if the write succeeded via AX.
+    private func writeBackCorrectedLine(
+        correctedLine: String, lineRange: NSRange, fullText: String, pid: pid_t
+    ) -> Bool {
+        let nsFullText = fullText as NSString
+        let originalLine = nsFullText.substring(with: lineRange)
+        let reconstructed: String
+        if originalLine.hasSuffix("\n") {
+            reconstructed = nsFullText.replacingCharacters(in: lineRange, with: correctedLine + "\n")
+        } else {
+            reconstructed = nsFullText.replacingCharacters(in: lineRange, with: correctedLine)
+        }
+
+        // Try writing via kAXValueAttribute on a fresh focused element
+        let appElement = AXUIElementCreateApplication(pid)
+        var focusedValue: AnyObject?
+        let wrote: Bool
+        if AXUIElementCopyAttributeValue(
+            appElement, kAXFocusedUIElementAttribute as CFString, &focusedValue
+        ) == .success, let focused = focusedValue {
+            let el = focused as! AXUIElement
+            wrote = AXUIElementSetAttributeValue(
+                el, kAXValueAttribute as CFString, reconstructed as CFTypeRef
+            ) == .success
+        } else {
+            wrote = false
+        }
+
+        if !wrote {
+            // Fallback: replaceTextAtRange
+            let cfRange = CFRange(location: lineRange.location, length: lineRange.length)
+            let fallback = AccessibilityTextSupport.replaceTextAtRange(
+                appPID: pid, range: cfRange, with: correctedLine
+            )
+            guard fallback else { return false }
+        }
+
+        // Place cursor at end of fixed line
+        let cursorPos = lineRange.location + (correctedLine as NSString).length
+        _ = AccessibilityTextSupport.setCursorPosition(appPID: pid, position: cursorPos)
+        return true
     }
 
     /// Position cursor at the end of text in the focused element (for Electron apps after paste).
@@ -1001,22 +1028,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if fixCount > 0 {
             if let lineRange = lineRange, let fullText = fullText {
-                // Notes app: reconstruct full document with fixed line
-                let nsFullText = fullText as NSString
-                let originalLine = nsFullText.substring(with: lineRange)
+                // Reconstruct full document with fixed line and place cursor at end of fixed line
                 let fixedLine = nsText as String
-                let reconstructed: String
-                if originalLine.hasSuffix("\n") {
-                    reconstructed = nsFullText.replacingCharacters(in: lineRange, with: fixedLine + "\n")
-                } else {
-                    reconstructed = nsFullText.replacingCharacters(in: lineRange, with: fixedLine)
-                }
-                AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, reconstructed as CFTypeRef)
-                // Adjust cursor delta to be absolute (relative to line start in document)
-                let absoluteCursorDelta = cursorDelta
-                restoreCursorPosition(
-                    pid: pid, cursorLocation: cursorLocation,
-                    newTextLength: (reconstructed as NSString).length, cursorDelta: absoluteCursorDelta
+                _ = writeBackCorrectedLine(
+                    correctedLine: fixedLine, lineRange: lineRange,
+                    fullText: fullText, pid: pid
                 )
             } else {
                 // Try per-word replacement first (preserves cursor in apps like Slack)
@@ -1173,9 +1189,26 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             appPID: targetApp.processIdentifier
         ), !selectedText.contains(TokenPreservationSupport.objectReplacementCharacter) {
             devLog(.textCapture, "Read via Accessibility (\(selectedText.count) chars): \(DeveloperModeSupport.truncate(selectedText))")
+            pendingLineContext = nil
             processSelectedText(selectedText)
             return
         }
+
+        // Nothing selected — try extracting the current line at the cursor
+        let pid = targetApp.processIdentifier
+        if let fullText = AccessibilityTextSupport.readFullText(appPID: pid),
+           let cursorPos = AccessibilityTextSupport.readCursorPosition(appPID: pid),
+           let lineInfo = extractLineAtCursor(text: fullText, cursorLocation: cursorPos) {
+            devLog(.textCapture, "No selection — extracted line at cursor (\(lineInfo.lineText.count) chars)")
+            pendingLineContext = LineContext(
+                fullText: fullText, lineRange: lineInfo.lineRange,
+                lineText: lineInfo.lineText, pid: pid
+            )
+            processSelectedText(lineInfo.lineText)
+            return
+        }
+        pendingLineContext = nil
+
         devLog(.textCapture, "Accessibility read failed or contained U+FFFC, falling back to clipboard")
 
         // Fall back to clipboard-based copy.
@@ -1415,6 +1448,28 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
 
                     self.devLog(.pasteBack, "Corrected text (\(correctedText.count) chars): \(DeveloperModeSupport.truncate(correctedText))")
+
+                    // Line-at-cursor write-back for cloud hotkey
+                    if let ctx = self.pendingLineContext {
+                        self.devLog(.pasteBack, "Writing back corrected line via AX")
+                        if self.writeBackCorrectedLine(
+                            correctedLine: correctedText, lineRange: ctx.lineRange,
+                            fullText: ctx.fullText, pid: ctx.pid
+                        ) {
+                            if let original = self.pendingDiffOriginalText {
+                                self.showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: ctx.pid)
+                            }
+                            let time = self.timeFormatter.string(from: Date())
+                            self.setStatus("Last correction succeeded at \(time)")
+                            self.restoreClipboardSnapshot(after: 0)
+                            self.updateHUD(state: .successWithCount(correctedText.count))
+                            self.playSuccessSound()
+                            self.notifySuccessIfEnabled()
+                            self.finishProcessing()
+                            return
+                        }
+                    }
+
                     // Try accessibility-based text replacement first (fastest path).
                     // Works on background apps — no focus changes needed.
                     if let targetApp = self.targetAppAtTrigger {
@@ -1635,6 +1690,28 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         showHUD(state: .working)
         startProcessingIndicator()
 
+        // Line-at-cursor write-back for cloud hotkey
+        if let ctx = pendingLineContext {
+            devLog(.pasteBack, "Writing back corrected line via AX")
+            if writeBackCorrectedLine(
+                correctedLine: correctedText, lineRange: ctx.lineRange,
+                fullText: ctx.fullText, pid: ctx.pid
+            ) {
+                if let original = pendingDiffOriginalText {
+                    showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: ctx.pid)
+                }
+                let time = timeFormatter.string(from: Date())
+                setStatus("Last correction succeeded at \(time)")
+                restoreClipboardSnapshot(after: 0)
+                updateHUD(state: .successWithCount(correctedText.count))
+                playSuccessSound()
+                notifySuccessIfEnabled()
+                finishProcessing()
+                return
+            }
+            devLog(.pasteBack, "Line write-back failed, falling through to standard replacement")
+        }
+
         if let targetApp = targetAppAtTrigger {
             devLog(.pasteBack, "Attempting AX text replacement")
             let axReplaced = AccessibilityTextSupport.replaceSelectedText(
@@ -1743,6 +1820,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func finishProcessing() {
         isProcessing = false
         pendingDiffOriginalText = nil
+        pendingLineContext = nil
         targetAppAtTrigger = nil
         stopProcessingIndicator()
     }
