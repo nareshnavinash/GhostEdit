@@ -17,7 +17,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var diffPreviewController: DiffPreviewController?
     private var streamingPreviewController: StreamingPreviewController?
     private var liveFeedbackController: LiveFeedbackController?
-    private var quickFixDiffPopup: QuickFixDiffPopupController?
     private lazy var localModelRunner: LocalModelRunner? = LocalModelRunner()
 
     private var statusMenu: NSMenu?
@@ -712,19 +711,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             if let result = controller.applyAllFixes() {
                 recordLocalFixHistoryEntry(original: result.original, fixed: result.fixed)
                 // Get the focused AX element for popup positioning
-                if let targetApp = NSWorkspace.shared.frontmostApplication {
-                    let appEl = AXUIElementCreateApplication(targetApp.processIdentifier)
-                    var fv: AnyObject?
-                    if AXUIElementCopyAttributeValue(
-                        appEl, kAXFocusedUIElementAttribute as CFString, &fv
-                    ) == .success, let focused = fv {
-                        showQuickFixDiffPopup(
-                            original: result.original, fixed: result.fixed,
-                            near: focused as! AXUIElement,
-                            toolsUsed: "Harper + Dictionary"
-                        )
-                    }
-                }
+                showHUDWithDiff(original: result.original, fixed: result.fixed, toolsUsed: "Harper + Dictionary")
             }
             return
         }
@@ -766,8 +753,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Fix only the line at the cursor (not the entire document)
-        let lineExtraction = extractLineAtCursor(text: currentText, cursorLocation: cursorLocation)
+        // Fix only the line at the cursor (not the entire document).
+        // Skip for text containing U+FFFC (Slack inline emojis) — bulk text write
+        // destroys object replacement characters in Electron apps.
+        let lineExtraction: (lineText: String, lineRange: NSRange)?
+        if currentText.contains(TokenPreservationSupport.objectReplacementCharacter) {
+            lineExtraction = nil
+        } else {
+            lineExtraction = extractLineAtCursor(text: currentText, cursorLocation: cursorLocation)
+        }
         let textToFix = lineExtraction?.lineText ?? currentText
 
         // Try local Hugging Face model if configured, otherwise use Harper+NSSpellChecker
@@ -829,8 +823,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             )
                         }
                         self.recordLocalFixHistoryEntry(original: textToFix, fixed: finalText)
-                        self.showQuickFixDiffPopup(original: textToFix, fixed: finalText, near: element, toolsUsed: toolLabel)
-                        self.showHUD(state: .success)
+                        self.showHUDWithDiff(original: textToFix, fixed: finalText, toolsUsed: toolLabel)
                         targetApp.activate(options: [])
                     }
                 } catch {
@@ -852,8 +845,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                 )
                             }
                             self.recordLocalFixHistoryEntry(original: textToFix, fixed: spellFixed)
-                            self.showQuickFixDiffPopup(original: textToFix, fixed: spellFixed, near: element, toolsUsed: "Harper + Dictionary")
-                            self.showHUD(state: .fallback)
+                            self.showHUDWithDiff(original: textToFix, fixed: spellFixed, toolsUsed: "Harper + Dictionary")
                         }
                         targetApp.activate(options: [])
                     }
@@ -865,7 +857,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 lineRange: lineExtraction?.lineRange, fullText: lineExtraction != nil ? currentText : nil
             ) {
                 recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
-                showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element, toolsUsed: "Harper + Dictionary")
+                showHUDWithDiff(original: textToFix, fixed: fixedText, toolsUsed: "Harper + Dictionary")
             }
             targetApp.activate(options: [])
         }
@@ -1197,6 +1189,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Nothing selected — try extracting the current line at the cursor
         let pid = targetApp.processIdentifier
         if let fullText = AccessibilityTextSupport.readFullText(appPID: pid),
+           !fullText.contains(TokenPreservationSupport.objectReplacementCharacter),
            let cursorPos = AccessibilityTextSupport.readCursorPosition(appPID: pid),
            let lineInfo = extractLineAtCursor(text: fullText, cursorLocation: cursorPos) {
             devLog(.textCapture, "No selection — extracted line at cursor (\(lineInfo.lineText.count) chars)")
@@ -1457,12 +1450,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             fullText: ctx.fullText, pid: ctx.pid
                         ) {
                             if let original = self.pendingDiffOriginalText {
-                                self.showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: ctx.pid)
+                                self.updateHUDWithDiff(original: original, corrected: correctedText)
+                            } else {
+                                self.updateHUD(state: .successWithCount(correctedText.count))
                             }
                             let time = self.timeFormatter.string(from: Date())
                             self.setStatus("Last correction succeeded at \(time)")
                             self.restoreClipboardSnapshot(after: 0)
-                            self.updateHUD(state: .successWithCount(correctedText.count))
                             self.playSuccessSound()
                             self.notifySuccessIfEnabled()
                             self.finishProcessing()
@@ -1491,12 +1485,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                     // or app deselected after successful replacement (Notes, Mail).
                                     self.devLog(.pasteBack, "AX replacement verified successfully")
                                     if let original = self.pendingDiffOriginalText {
-                                        self.showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: targetApp.processIdentifier)
+                                        self.updateHUDWithDiff(original: original, corrected: correctedText)
+                                    } else {
+                                        self.updateHUD(state: .successWithCount(correctedText.count))
                                     }
                                     let time = self.timeFormatter.string(from: Date())
                                     self.setStatus("Last correction succeeded at \(time)")
                                     self.restoreClipboardSnapshot(after: 0)
-                                    self.updateHUD(state: .successWithCount(correctedText.count))
                                     self.playSuccessSound()
                                     self.notifySuccessIfEnabled()
                                     self.finishProcessing()
@@ -1667,8 +1662,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startProcessingIndicator() {
-        quickFixDiffPopup?.dismiss()
-        quickFixDiffPopup = nil
         runNowMenuItem?.isEnabled = false
         undoMenuItem?.isEnabled = false
         writingCoachMenuItem?.isEnabled = false
@@ -1698,12 +1691,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 fullText: ctx.fullText, pid: ctx.pid
             ) {
                 if let original = pendingDiffOriginalText {
-                    showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: ctx.pid)
+                    updateHUDWithDiff(original: original, corrected: correctedText)
+                } else {
+                    updateHUD(state: .successWithCount(correctedText.count))
                 }
                 let time = timeFormatter.string(from: Date())
                 setStatus("Last correction succeeded at \(time)")
                 restoreClipboardSnapshot(after: 0)
-                updateHUD(state: .successWithCount(correctedText.count))
                 playSuccessSound()
                 notifySuccessIfEnabled()
                 finishProcessing()
@@ -1727,12 +1721,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     if readBack == correctedText || readBack == nil {
                         self.devLog(.pasteBack, "AX replacement verified successfully")
                         if let original = self.pendingDiffOriginalText {
-                            self.showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: targetApp.processIdentifier)
+                            self.updateHUDWithDiff(original: original, corrected: correctedText)
+                        } else {
+                            self.updateHUD(state: .successWithCount(correctedText.count))
                         }
                         let time = self.timeFormatter.string(from: Date())
                         self.setStatus("Last correction succeeded at \(time)")
                         self.restoreClipboardSnapshot(after: 0)
-                        self.updateHUD(state: .successWithCount(correctedText.count))
                         self.playSuccessSound()
                         self.notifySuccessIfEnabled()
                         self.finishProcessing()
@@ -1769,13 +1764,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.setStatus("Paste failed")
                 self.dismissHUD()
             } else {
-                if let original = self.pendingDiffOriginalText,
-                   let targetApp = self.targetAppAtTrigger {
-                    self.showDiffPopupForCorrection(original: original, corrected: correctedText, appPID: targetApp.processIdentifier)
+                if let original = self.pendingDiffOriginalText {
+                    self.updateHUDWithDiff(original: original, corrected: correctedText)
+                } else {
+                    self.updateHUD(state: .successWithCount(correctedText.count))
                 }
                 let time = self.timeFormatter.string(from: Date())
                 self.setStatus("Last correction succeeded at \(time)")
-                self.updateHUD(state: .successWithCount(correctedText.count))
                 self.playSuccessSound()
                 self.notifySuccessIfEnabled()
 
@@ -1811,6 +1806,27 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateHUD(state: HUDOverlayState) {
         hudController?.update(state: state)
+    }
+
+    private func showHUDWithDiff(original: String, fixed: String, toolsUsed: String = "") {
+        let segments = DiffSupport.charDiff(old: original, new: fixed)
+        guard segments.contains(where: { $0.kind != .equal }) else {
+            showHUD(state: .success)
+            return
+        }
+        let duration = TimeInterval(configManager.loadConfig().diffPreviewDuration)
+        if hudController == nil { hudController = HUDOverlayController() }
+        hudController?.show(state: .successWithDiff(segments, toolsUsed: toolsUsed), dismissAfter: duration)
+    }
+
+    private func updateHUDWithDiff(original: String, corrected: String) {
+        let segments = DiffSupport.charDiff(old: original, new: corrected)
+        guard segments.contains(where: { $0.kind != .equal }) else {
+            updateHUD(state: .successWithCount(corrected.count))
+            return
+        }
+        let duration = TimeInterval(configManager.loadConfig().diffPreviewDuration)
+        hudController?.update(state: .successWithDiff(segments, toolsUsed: ""), dismissAfter: duration)
     }
 
     private func dismissHUD() {
@@ -2525,27 +2541,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let limit = configManager.loadConfig().historyLimit
         try? historyStore.append(entry, limit: limit)
         refreshHistoryWindowIfVisible()
-    }
-
-    private func showDiffPopupForCorrection(original: String, corrected: String, appPID: pid_t) {
-        let appElement = AXUIElementCreateApplication(appPID)
-        var focusedValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            appElement, kAXFocusedUIElementAttribute as CFString, &focusedValue
-        ) == .success, let focused = focusedValue else { return }
-        showQuickFixDiffPopup(original: original, fixed: corrected, near: focused as! AXUIElement)
-    }
-
-    private func showQuickFixDiffPopup(original: String, fixed: String, near element: AXUIElement, toolsUsed: String = "") {
-        let segments = DiffSupport.charDiff(old: original, new: fixed)
-        guard segments.contains(where: { $0.kind != .equal }) else { return }
-
-        quickFixDiffPopup?.dismiss()
-
-        let duration = TimeInterval(configManager.loadConfig().diffPreviewDuration)
-        let popup = QuickFixDiffPopupController()
-        popup.show(segments: segments, near: element, widgetFrame: liveFeedbackController?.widgetFrame, duration: duration, toolsUsed: toolsUsed)
-        quickFixDiffPopup = popup
     }
 
     private func showFatalAlert(title: String, message: String) {
@@ -6057,16 +6052,26 @@ final class HUDOverlayController {
     private var spinner: NSProgressIndicator?
     private var ghostImageView: NSImageView?
     private var messageLabel: NSTextField?
+    private var diffLabel: NSTextField?
     private var dismissWorkItem: DispatchWorkItem?
     private var ghostWithSpectacles: NSImage?
     private var ghostWithoutSpectacles: NSImage?
+    private var isDiffMode = false
+    private var dismissOverride: TimeInterval?
 
-    func show(state: HUDOverlayState) {
+    func show(state: HUDOverlayState, dismissAfter: TimeInterval? = nil) {
         dismissWorkItem?.cancel()
         dismissWorkItem = nil
+        dismissOverride = dismissAfter
 
-        if panel == nil {
-            buildPanel()
+        let needsDiff = isDiffState(state)
+        if panel == nil || needsDiff != isDiffMode {
+            tearDownPanel()
+            if needsDiff {
+                buildDiffPanel(for: state)
+            } else {
+                buildPanel()
+            }
         }
 
         applyContent(for: state)
@@ -6092,12 +6097,19 @@ final class HUDOverlayController {
         scheduleAutoDismissIfNeeded(for: state)
     }
 
-    func update(state: HUDOverlayState) {
+    func update(state: HUDOverlayState, dismissAfter: TimeInterval? = nil) {
         dismissWorkItem?.cancel()
         dismissWorkItem = nil
+        dismissOverride = dismissAfter
 
-        if panel == nil {
-            buildPanel()
+        let needsDiff = isDiffState(state)
+        if panel == nil || needsDiff != isDiffMode {
+            tearDownPanel()
+            if needsDiff {
+                buildDiffPanel(for: state)
+            } else {
+                buildPanel()
+            }
         }
 
         applyContent(for: state)
@@ -6129,7 +6141,25 @@ final class HUDOverlayController {
         }
     }
 
+    private func isDiffState(_ state: HUDOverlayState) -> Bool {
+        if case .successWithDiff = state { return true }
+        return false
+    }
+
+    private func tearDownPanel() {
+        panel?.orderOut(nil)
+        panel = nil
+        effectView = nil
+        tintOverlay = nil
+        spinner = nil
+        ghostImageView = nil
+        messageLabel = nil
+        diffLabel = nil
+        isDiffMode = false
+    }
+
     private func buildPanel() {
+        isDiffMode = false
         let width = HUDOverlaySupport.windowWidth
         let height = HUDOverlaySupport.windowHeight
         let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
@@ -6226,7 +6256,186 @@ final class HUDOverlayController {
         self.messageLabel = message
     }
 
+    private func buildDiffPanel(for state: HUDOverlayState) {
+        isDiffMode = true
+
+        guard case .successWithDiff(let segments, let toolsUsed) = state else { return }
+
+        let panelWidth = HUDOverlaySupport.diffWindowWidth
+        let inset = HUDOverlaySupport.diffContentInset
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+
+        let newPanel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: HUDOverlaySupport.diffWindowMaxHeight),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        newPanel.level = .floating
+        newPanel.backgroundColor = .clear
+        newPanel.isOpaque = false
+        newPanel.hasShadow = true
+        newPanel.hidesOnDeactivate = false
+        newPanel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
+        newPanel.isMovableByWindowBackground = false
+
+        let ev = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: panelWidth, height: HUDOverlaySupport.diffWindowMaxHeight))
+        ev.material = .popover
+        ev.state = .active
+        ev.blendingMode = .behindWindow
+        ev.wantsLayer = true
+        ev.layer?.cornerRadius = HUDOverlaySupport.cornerRadius
+        ev.layer?.masksToBounds = true
+        ev.alphaValue = 0.92
+
+        // Content stack
+        let contentStack = NSStackView()
+        contentStack.orientation = .vertical
+        contentStack.spacing = 8
+        contentStack.alignment = .leading
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Top row: small ghost + "Done!"
+        let iconSize = HUDOverlaySupport.diffIconSize
+        let imageView = NSImageView(frame: .zero)
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.image = renderGhostImage(size: iconSize, spectacles: false)
+
+        let message = NSTextField(labelWithString: "Done!")
+        message.font = NSFont.systemFont(ofSize: HUDOverlaySupport.messageFontSize, weight: .medium)
+        message.textColor = .white
+        message.translatesAutoresizingMaskIntoConstraints = false
+
+        let topRow = NSStackView(views: [imageView, message])
+        topRow.orientation = .horizontal
+        topRow.alignment = .centerY
+        topRow.spacing = 8
+        topRow.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            imageView.widthAnchor.constraint(equalToConstant: iconSize),
+            imageView.heightAnchor.constraint(equalToConstant: iconSize),
+        ])
+
+        contentStack.addArrangedSubview(topRow)
+
+        // Tools-used header (if provided)
+        if !toolsUsed.isEmpty {
+            let toolsLabel = NSTextField(labelWithString: toolsUsed)
+            toolsLabel.font = NSFont.systemFont(ofSize: 9, weight: .regular)
+            if let italicDescriptor = toolsLabel.font?.fontDescriptor.withSymbolicTraits(.italic) {
+                toolsLabel.font = NSFont(descriptor: italicDescriptor, size: 9)
+            }
+            toolsLabel.textColor = .secondaryLabelColor
+            toolsLabel.translatesAutoresizingMaskIntoConstraints = false
+
+            let pillView = NSView()
+            pillView.wantsLayer = true
+            pillView.layer?.backgroundColor = NSColor.secondaryLabelColor.withAlphaComponent(0.1).cgColor
+            pillView.layer?.cornerRadius = 4
+            pillView.translatesAutoresizingMaskIntoConstraints = false
+            pillView.addSubview(toolsLabel)
+            NSLayoutConstraint.activate([
+                toolsLabel.leadingAnchor.constraint(equalTo: pillView.leadingAnchor, constant: 6),
+                toolsLabel.trailingAnchor.constraint(equalTo: pillView.trailingAnchor, constant: -6),
+                toolsLabel.topAnchor.constraint(equalTo: pillView.topAnchor, constant: 2),
+                toolsLabel.bottomAnchor.constraint(equalTo: pillView.bottomAnchor, constant: -2),
+            ])
+            contentStack.addArrangedSubview(pillView)
+        }
+
+        // Diff text
+        let diffField = NSTextField(wrappingLabelWithString: "")
+        diffField.isEditable = false
+        diffField.isSelectable = false
+        diffField.isBezeled = false
+        diffField.drawsBackground = false
+        diffField.backgroundColor = .clear
+        diffField.font = NSFont.systemFont(ofSize: HUDOverlaySupport.diffFontSize)
+        diffField.translatesAutoresizingMaskIntoConstraints = false
+
+        let attrString = NSMutableAttributedString()
+        for segment in segments {
+            switch segment.kind {
+            case .equal:
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: HUDOverlaySupport.diffFontSize),
+                    .foregroundColor: NSColor.labelColor
+                ]
+                attrString.append(NSAttributedString(string: segment.text, attributes: attrs))
+            case .insertion:
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: HUDOverlaySupport.diffFontSize),
+                    .foregroundColor: NSColor.systemGreen,
+                    .backgroundColor: NSColor.systemGreen.withAlphaComponent(0.15),
+                    .underlineStyle: NSUnderlineStyle.single.rawValue
+                ]
+                attrString.append(NSAttributedString(string: segment.text, attributes: attrs))
+            case .deletion:
+                break  // Skip deletions — only show insertions in green
+            }
+        }
+        diffField.attributedStringValue = attrString
+        contentStack.addArrangedSubview(diffField)
+
+        ev.addSubview(contentStack)
+        NSLayoutConstraint.activate([
+            contentStack.leadingAnchor.constraint(equalTo: ev.leadingAnchor, constant: inset),
+            contentStack.trailingAnchor.constraint(equalTo: ev.trailingAnchor, constant: -inset),
+            contentStack.topAnchor.constraint(equalTo: ev.topAnchor, constant: inset),
+            contentStack.bottomAnchor.constraint(lessThanOrEqualTo: ev.bottomAnchor, constant: -inset),
+        ])
+
+        // Tint overlay
+        let tint = NSView(frame: .zero)
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.06).cgColor
+        tint.layer?.cornerRadius = HUDOverlaySupport.cornerRadius
+        tint.layer?.masksToBounds = true
+        tint.translatesAutoresizingMaskIntoConstraints = false
+        ev.addSubview(tint, positioned: .below, relativeTo: contentStack)
+        NSLayoutConstraint.activate([
+            tint.leadingAnchor.constraint(equalTo: ev.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: ev.trailingAnchor),
+            tint.topAnchor.constraint(equalTo: ev.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: ev.bottomAnchor),
+        ])
+
+        // Size to fit content
+        ev.layoutSubtreeIfNeeded()
+        let intrinsicHeight = contentStack.fittingSize.height + inset * 2
+        let panelHeight = min(intrinsicHeight, HUDOverlaySupport.diffWindowMaxHeight)
+
+        newPanel.setContentSize(NSSize(width: panelWidth, height: panelHeight))
+        ev.frame = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
+        newPanel.contentView = ev
+
+        // Center on screen
+        let windowSize = CGSize(width: panelWidth, height: panelHeight)
+        let origin = HUDOverlaySupport.windowOrigin(screenSize: screenSize, windowSize: windowSize)
+        newPanel.setFrameOrigin(origin)
+
+        // Click to dismiss
+        let clickGesture = NSClickGestureRecognizer(target: self, action: #selector(handleDiffClick))
+        ev.addGestureRecognizer(clickGesture)
+
+        self.panel = newPanel
+        self.effectView = ev
+        self.tintOverlay = tint
+        self.ghostImageView = imageView
+        self.messageLabel = message
+        self.diffLabel = diffField
+    }
+
+    @objc private func handleDiffClick() {
+        dismiss()
+    }
+
     private func applyContent(for state: HUDOverlayState) {
+        // Diff mode content is set up during buildDiffPanel
+        if case .successWithDiff = state { return }
+
         let content = HUDOverlaySupport.content(for: state)
         messageLabel?.stringValue = content.message
 
@@ -6252,6 +6461,8 @@ final class HUDOverlayController {
             tintColor = NSColor.systemBlue.withAlphaComponent(0.06)
         case .success, .successWithCount:
             tintColor = NSColor.systemGreen.withAlphaComponent(0.06)
+        case .successWithDiff:
+            tintColor = NSColor.systemGreen.withAlphaComponent(0.06)
         case .fallback:
             tintColor = NSColor.systemOrange.withAlphaComponent(0.06)
         case .error:
@@ -6261,7 +6472,12 @@ final class HUDOverlayController {
     }
 
     private func scheduleAutoDismissIfNeeded(for state: HUDOverlayState) {
-        guard let delay = HUDOverlaySupport.autoDismissDelay(for: state) else {
+        let delay: TimeInterval
+        if let override = dismissOverride {
+            delay = override
+        } else if let computed = HUDOverlaySupport.autoDismissDelay(for: state) {
+            delay = computed
+        } else {
             return
         }
 
@@ -7826,230 +8042,3 @@ final class LiveFeedbackController {
     }
 }
 
-// MARK: - QuickFixDiffPopupController
-
-final class QuickFixDiffPopupController: NSObject {
-    static let autoDismissDelay: TimeInterval = 5.0
-    static let popupWidth: CGFloat = 300
-    static let popupMaxHeight: CGFloat = 150
-
-    private var panel: NSPanel?
-    private var dismissWorkItem: DispatchWorkItem?
-
-    func show(segments: [DiffSegment], near element: AXUIElement, widgetFrame: NSRect?, duration: TimeInterval = QuickFixDiffPopupController.autoDismissDelay, toolsUsed: String = "") {
-        dismissWorkItem?.cancel()
-        panel?.orderOut(nil)
-        panel = nil
-
-        let newPanel = buildPanel(segments: segments, toolsUsed: toolsUsed)
-        positionPanel(newPanel, near: element, widgetFrame: widgetFrame)
-
-        newPanel.alphaValue = 0
-        newPanel.orderFrontRegardless()
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.15
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            newPanel.animator().alphaValue = 1
-        }
-
-        panel = newPanel
-
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.dismiss()
-        }
-        dismissWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: workItem)
-    }
-
-    func dismiss() {
-        dismissWorkItem?.cancel()
-        dismissWorkItem = nil
-
-        guard let panel else { return }
-        let fadeDuration: TimeInterval = 0.2
-
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = fadeDuration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            panel.orderOut(nil)
-            self?.panel = nil
-        })
-    }
-
-    private func buildPanel(segments: [DiffSegment], toolsUsed: String = "") -> NSPanel {
-        let panelWidth = Self.popupWidth
-
-        let newPanel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: Self.popupMaxHeight),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: true
-        )
-        newPanel.isFloatingPanel = true
-        newPanel.level = .floating
-        newPanel.hasShadow = true
-        newPanel.backgroundColor = .clear
-        newPanel.isOpaque = false
-        newPanel.hidesOnDeactivate = false
-        newPanel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
-
-        let effectView = NSVisualEffectView(
-            frame: NSRect(x: 0, y: 0, width: panelWidth, height: Self.popupMaxHeight)
-        )
-        effectView.material = .hudWindow
-        effectView.state = .active
-        effectView.blendingMode = .behindWindow
-        effectView.wantsLayer = true
-        effectView.layer?.cornerRadius = 8
-        effectView.layer?.masksToBounds = true
-
-        // Vertical stack to hold optional tools header + diff text
-        let contentStack = NSStackView()
-        contentStack.orientation = .vertical
-        contentStack.spacing = 4
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-
-        // Tools-used header (if provided)
-        if !toolsUsed.isEmpty {
-            let toolsLabel = NSTextField(labelWithString: toolsUsed)
-            toolsLabel.font = NSFont.systemFont(ofSize: 9, weight: .regular)
-            if let italicDescriptor = toolsLabel.font?.fontDescriptor.withSymbolicTraits(.italic) {
-                toolsLabel.font = NSFont(descriptor: italicDescriptor, size: 9)
-            }
-            toolsLabel.textColor = .secondaryLabelColor
-            toolsLabel.translatesAutoresizingMaskIntoConstraints = false
-
-            let pillView = NSView()
-            pillView.wantsLayer = true
-            pillView.layer?.backgroundColor = NSColor.secondaryLabelColor.withAlphaComponent(0.1).cgColor
-            pillView.layer?.cornerRadius = 4
-            pillView.translatesAutoresizingMaskIntoConstraints = false
-            pillView.addSubview(toolsLabel)
-            NSLayoutConstraint.activate([
-                toolsLabel.leadingAnchor.constraint(equalTo: pillView.leadingAnchor, constant: 6),
-                toolsLabel.trailingAnchor.constraint(equalTo: pillView.trailingAnchor, constant: -6),
-                toolsLabel.topAnchor.constraint(equalTo: pillView.topAnchor, constant: 2),
-                toolsLabel.bottomAnchor.constraint(equalTo: pillView.bottomAnchor, constant: -2),
-            ])
-            contentStack.addArrangedSubview(pillView)
-        }
-
-        let textField = NSTextField(wrappingLabelWithString: "")
-        textField.isEditable = false
-        textField.isSelectable = false
-        textField.isBezeled = false
-        textField.drawsBackground = false
-        textField.backgroundColor = .clear
-        textField.font = NSFont.systemFont(ofSize: 12)
-        textField.translatesAutoresizingMaskIntoConstraints = false
-
-        let attrString = NSMutableAttributedString()
-        for segment in segments {
-            let attrs: [NSAttributedString.Key: Any]
-            switch segment.kind {
-            case .equal:
-                attrs = [
-                    .font: NSFont.systemFont(ofSize: 12),
-                    .foregroundColor: NSColor.labelColor
-                ]
-            case .insertion:
-                attrs = [
-                    .font: NSFont.systemFont(ofSize: 12),
-                    .foregroundColor: NSColor.systemGreen,
-                    .backgroundColor: NSColor.systemGreen.withAlphaComponent(0.15),
-                    .underlineStyle: NSUnderlineStyle.single.rawValue
-                ]
-            case .deletion:
-                attrs = [
-                    .font: NSFont.systemFont(ofSize: 12),
-                    .foregroundColor: NSColor.systemRed,
-                    .backgroundColor: NSColor.systemRed.withAlphaComponent(0.15),
-                    .strikethroughStyle: NSUnderlineStyle.single.rawValue
-                ]
-            }
-            attrString.append(NSAttributedString(string: segment.text, attributes: attrs))
-        }
-        textField.attributedStringValue = attrString
-        contentStack.addArrangedSubview(textField)
-
-        effectView.addSubview(contentStack)
-        NSLayoutConstraint.activate([
-            contentStack.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
-            contentStack.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
-            contentStack.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 8),
-            contentStack.bottomAnchor.constraint(lessThanOrEqualTo: effectView.bottomAnchor, constant: -8)
-        ])
-
-        effectView.layoutSubtreeIfNeeded()
-        let intrinsicHeight = contentStack.fittingSize.height + 16
-        let panelHeight = min(intrinsicHeight, Self.popupMaxHeight)
-
-        newPanel.setContentSize(NSSize(width: panelWidth, height: panelHeight))
-        effectView.frame = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
-        newPanel.contentView = effectView
-
-        let clickGesture = NSClickGestureRecognizer(target: self, action: #selector(handleClick))
-        effectView.addGestureRecognizer(clickGesture)
-
-        return newPanel
-    }
-
-    @objc private func handleClick() {
-        dismiss()
-    }
-
-    private func positionPanel(_ panel: NSPanel, near element: AXUIElement, widgetFrame: NSRect?) {
-        let panelSize = panel.frame.size
-        guard let screen = NSScreen.main else { return }
-
-        var targetOrigin: NSPoint
-
-        if let wf = widgetFrame {
-            // Position directly above the live feedback widget
-            targetOrigin = NSPoint(x: wf.origin.x, y: wf.origin.y + wf.height + 4)
-        } else {
-            // Query AX element position/size to place near the text field
-            var posValue: AnyObject?
-            var szValue: AnyObject?
-            let posResult = AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posValue)
-            let szResult = AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &szValue)
-
-            if posResult == .success, szResult == .success,
-               let pv = posValue, let sv = szValue {
-                var position = CGPoint.zero
-                var size = CGSize.zero
-                AXValueGetValue(pv as! AXValue, .cgPoint, &position)
-                AXValueGetValue(sv as! AXValue, .cgSize, &size)
-
-                // Convert from top-left screen coords to Cocoa bottom-left coords
-                let screenHeight = screen.frame.height
-                let fieldBottomY = screenHeight - (position.y + size.height)
-                // Position below the text field
-                targetOrigin = NSPoint(x: position.x, y: fieldBottomY - panelSize.height - 8)
-            } else {
-                // Fallback: bottom-right corner of screen
-                let sf = screen.visibleFrame
-                targetOrigin = NSPoint(x: sf.maxX - panelSize.width - 20, y: sf.minY + 20)
-            }
-        }
-
-        let sf = screen.visibleFrame
-
-        // Flip to above the field if below screen
-        if targetOrigin.y < sf.minY {
-            if let wf = widgetFrame {
-                targetOrigin.y = wf.origin.y - panelSize.height - 4
-            } else {
-                targetOrigin.y = targetOrigin.y + panelSize.height + 8
-            }
-        }
-
-        // Clamp X to screen bounds
-        targetOrigin.x = max(sf.minX, min(targetOrigin.x, sf.maxX - panelSize.width))
-
-        panel.setFrameOrigin(targetOrigin)
-    }
-}

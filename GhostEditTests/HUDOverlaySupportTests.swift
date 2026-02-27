@@ -126,6 +126,7 @@ final class HUDOverlaySupportTests: XCTestCase {
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .working))
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .success))
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .successWithCount(10)))
+        XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .successWithDiff([DiffSegment(kind: .equal, text: "hi")], toolsUsed: "")))
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .error("x")))
         XCTAssertNotNil(HUDOverlaySupport.autoDismissDelay(for: .fallback))
     }
@@ -161,6 +162,72 @@ final class HUDOverlaySupportTests: XCTestCase {
         XCTAssertEqual(origin.y, 0)
     }
 
+    // MARK: - successWithDiff state
+
+    func testContentForSuccessWithDiffState() {
+        let segments = [DiffSegment(kind: .equal, text: "hi "), DiffSegment(kind: .insertion, text: "world")]
+        let content = HUDOverlaySupport.content(for: .successWithDiff(segments, toolsUsed: "Claude"))
+        XCTAssertEqual(content.emoji, "\u{1F47B}")
+        XCTAssertEqual(content.message, "Done!")
+    }
+
+    func testSuccessWithDiffSpectaclesIsFalse() {
+        let segments = [DiffSegment(kind: .insertion, text: "x")]
+        XCTAssertFalse(HUDOverlaySupport.showsSpectacles(for: .successWithDiff(segments, toolsUsed: "")))
+    }
+
+    func testSuccessWithDiffAutoDismissDelay() {
+        let segments = [DiffSegment(kind: .insertion, text: "x")]
+        XCTAssertEqual(
+            HUDOverlaySupport.autoDismissDelay(for: .successWithDiff(segments, toolsUsed: "")),
+            HUDOverlaySupport.diffAutoDismissDelay
+        )
+    }
+
+    func testSuccessWithDiffEquatable() {
+        let seg1 = [DiffSegment(kind: .equal, text: "a"), DiffSegment(kind: .insertion, text: "b")]
+        let seg2 = [DiffSegment(kind: .equal, text: "a"), DiffSegment(kind: .insertion, text: "b")]
+        let seg3 = [DiffSegment(kind: .deletion, text: "c")]
+
+        XCTAssertEqual(
+            HUDOverlayState.successWithDiff(seg1, toolsUsed: "t"),
+            HUDOverlayState.successWithDiff(seg2, toolsUsed: "t")
+        )
+        XCTAssertNotEqual(
+            HUDOverlayState.successWithDiff(seg1, toolsUsed: "t"),
+            HUDOverlayState.successWithDiff(seg3, toolsUsed: "t")
+        )
+        XCTAssertNotEqual(
+            HUDOverlayState.successWithDiff(seg1, toolsUsed: "a"),
+            HUDOverlayState.successWithDiff(seg1, toolsUsed: "b")
+        )
+        XCTAssertNotEqual(
+            HUDOverlayState.successWithDiff(seg1, toolsUsed: ""),
+            HUDOverlayState.success
+        )
+    }
+
+    // MARK: - windowOrigin(screenSize:windowSize:)
+
+    func testWindowOriginWithCustomSize() {
+        let screenSize = CGSize(width: 1920, height: 1080)
+        let windowSize = CGSize(width: 360, height: 280)
+        let origin = HUDOverlaySupport.windowOrigin(screenSize: screenSize, windowSize: windowSize)
+
+        let expectedX = (1920 - 360.0) / 2
+        let expectedY = (1080 - 280.0) / 2
+
+        XCTAssertEqual(origin.x, expectedX)
+        XCTAssertEqual(origin.y, expectedY)
+    }
+
+    func testWindowOriginWithCustomSizeExactFit() {
+        let size = CGSize(width: 400, height: 300)
+        let origin = HUDOverlaySupport.windowOrigin(screenSize: size, windowSize: size)
+        XCTAssertEqual(origin.x, 0)
+        XCTAssertEqual(origin.y, 0)
+    }
+
     // MARK: - Constants sanity checks
 
     func testLayoutConstantsArePositive() {
@@ -171,6 +238,15 @@ final class HUDOverlaySupportTests: XCTestCase {
         XCTAssertGreaterThan(HUDOverlaySupport.messageFontSize, 0)
         XCTAssertGreaterThan(HUDOverlaySupport.verticalSpacing, 0)
         XCTAssertGreaterThan(HUDOverlaySupport.contentInset, 0)
+    }
+
+    func testDiffLayoutConstantsArePositive() {
+        XCTAssertGreaterThan(HUDOverlaySupport.diffWindowWidth, 0)
+        XCTAssertGreaterThan(HUDOverlaySupport.diffWindowMaxHeight, 0)
+        XCTAssertGreaterThan(HUDOverlaySupport.diffFontSize, 0)
+        XCTAssertGreaterThan(HUDOverlaySupport.diffContentInset, 0)
+        XCTAssertGreaterThan(HUDOverlaySupport.diffIconSize, 0)
+        XCTAssertGreaterThan(HUDOverlaySupport.diffAutoDismissDelay, 0)
     }
 
     func testTimingConstantsArePositive() {
@@ -270,7 +346,10 @@ final class HUDOverlaySupportTests: XCTestCase {
     // MARK: - Content consistency
 
     func testAllStatesProduceNonEmptyContent() {
-        for state: HUDOverlayState in [.working, .success, .successWithCount(99), .error("test"), .fallback] {
+        let diffState = HUDOverlayState.successWithDiff(
+            [DiffSegment(kind: .insertion, text: "hello")], toolsUsed: "test"
+        )
+        for state: HUDOverlayState in [.working, .success, .successWithCount(99), diffState, .error("test"), .fallback] {
             let content = HUDOverlaySupport.content(for: state)
             XCTAssertFalse(content.emoji.isEmpty, "emoji should not be empty for \(state)")
             XCTAssertFalse(content.message.isEmpty, "message should not be empty for \(state)")

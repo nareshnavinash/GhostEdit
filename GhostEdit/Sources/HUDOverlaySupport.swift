@@ -5,6 +5,7 @@ enum HUDOverlayState: Equatable {
     case working
     case success
     case successWithCount(Int)
+    case successWithDiff([DiffSegment], toolsUsed: String)
     case error(String)
     case fallback
 }
@@ -30,6 +31,14 @@ enum HUDOverlaySupport {
     static let workingAutoDismissDelay: TimeInterval = 1.0
     static let successAutoDismissDelay: TimeInterval = 1.0
     static let errorAutoDismissDelay: TimeInterval = 2.5
+
+    // Diff overlay layout
+    static let diffWindowWidth: CGFloat = 360
+    static let diffWindowMaxHeight: CGFloat = 280
+    static let diffFontSize: CGFloat = 12
+    static let diffContentInset: CGFloat = 12
+    static let diffIconSize: CGFloat = 40
+    static let diffAutoDismissDelay: TimeInterval = 5.0
 
     static let defaultErrorMessage = "Something went wrong"
 
@@ -77,6 +86,8 @@ enum HUDOverlaySupport {
             return HUDOverlayContent(emoji: "\u{1F47B}", message: "Done!")
         case .successWithCount(let chars):
             return HUDOverlayContent(emoji: "\u{1F47B}", message: "Done! (\(chars) chars fixed)")
+        case .successWithDiff:
+            return HUDOverlayContent(emoji: "\u{1F47B}", message: "Done!")
         case .error(let detail):
             let trimmed = detail.trimmingCharacters(in: .whitespacesAndNewlines)
             let message = trimmed.isEmpty ? defaultErrorMessage : trimmed
@@ -90,7 +101,7 @@ enum HUDOverlaySupport {
         switch state {
         case .working:
             return true
-        case .success, .successWithCount, .error, .fallback:
+        case .success, .successWithCount, .successWithDiff, .error, .fallback:
             return false
         }
     }
@@ -101,6 +112,8 @@ enum HUDOverlaySupport {
             return workingAutoDismissDelay
         case .success, .successWithCount, .fallback:
             return successAutoDismissDelay
+        case .successWithDiff:
+            return diffAutoDismissDelay
         case .error:
             return errorAutoDismissDelay
         }
@@ -109,6 +122,12 @@ enum HUDOverlaySupport {
     static func windowOrigin(screenSize: CGSize) -> CGPoint {
         let x = (screenSize.width - windowWidth) / 2
         let y = (screenSize.height - windowHeight) / 2
+        return CGPoint(x: x, y: y)
+    }
+
+    static func windowOrigin(screenSize: CGSize, windowSize: CGSize) -> CGPoint {
+        let x = (screenSize.width - windowSize.width) / 2
+        let y = (screenSize.height - windowSize.height) / 2
         return CGPoint(x: x, y: y)
     }
 }
