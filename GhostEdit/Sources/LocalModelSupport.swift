@@ -14,6 +14,7 @@ struct LocalModelEntry: Codable, Equatable {
     var approxDiskGB: Double
     var status: LocalModelStatus
     var localPath: String
+    var taskPrefix: String
 
     init(
         repoID: String,
@@ -21,7 +22,8 @@ struct LocalModelEntry: Codable, Equatable {
         parameterCount: String,
         approxDiskGB: Double,
         status: LocalModelStatus = .notDownloaded,
-        localPath: String = ""
+        localPath: String = "",
+        taskPrefix: String = "Fix grammatical errors in this sentence: "
     ) {
         self.repoID = repoID
         self.displayName = displayName
@@ -29,22 +31,29 @@ struct LocalModelEntry: Codable, Equatable {
         self.approxDiskGB = approxDiskGB
         self.status = status
         self.localPath = localPath
+        self.taskPrefix = taskPrefix
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        repoID = try container.decode(String.self, forKey: .repoID)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        parameterCount = try container.decode(String.self, forKey: .parameterCount)
+        approxDiskGB = try container.decode(Double.self, forKey: .approxDiskGB)
+        status = try container.decodeIfPresent(LocalModelStatus.self, forKey: .status) ?? .notDownloaded
+        localPath = try container.decodeIfPresent(String.self, forKey: .localPath) ?? ""
+        taskPrefix = try container.decodeIfPresent(String.self, forKey: .taskPrefix) ?? "Fix grammatical errors in this sentence: "
     }
 }
 
 enum LocalModelSupport {
     static let recommendedModels: [LocalModelEntry] = [
         LocalModelEntry(
-            repoID: "grammarly/coedit-small",
-            displayName: "CoEdIT Small",
-            parameterCount: "77M",
-            approxDiskGB: 0.3
-        ),
-        LocalModelEntry(
-            repoID: "grammarly/coedit-base",
-            displayName: "CoEdIT Base",
+            repoID: "vennify/t5-base-grammar-correction",
+            displayName: "T5 Base Grammar",
             parameterCount: "220M",
-            approxDiskGB: 0.9
+            approxDiskGB: 0.9,
+            taskPrefix: "grammar: "
         ),
         LocalModelEntry(
             repoID: "grammarly/coedit-large",
@@ -70,8 +79,11 @@ enum LocalModelSupport {
             .appendingPathComponent(safeName, isDirectory: true)
     }
 
-    static func taskPrefix() -> String {
-        "Fix grammatical errors in this sentence: "
+    static func taskPrefix(for repoID: String) -> String {
+        if let entry = recommendedModels.first(where: { $0.repoID == repoID }) {
+            return entry.taskPrefix
+        }
+        return "Fix grammatical errors in this sentence: "
     }
 
     static func isValidRepoID(_ repoID: String) -> Bool {

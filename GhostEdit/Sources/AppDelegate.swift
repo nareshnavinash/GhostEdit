@@ -754,7 +754,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             showHUD(state: .working)
             Task { @MainActor in
                 do {
-                    let prefixed = LocalModelSupport.taskPrefix() + textToFix
+                    let prefixed = LocalModelSupport.taskPrefix(for: config.localModelRepoID) + textToFix
                     let corrected = try runner.correctText(prefixed, modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120)
                     let trimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
 

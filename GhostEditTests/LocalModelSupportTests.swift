@@ -65,6 +65,42 @@ final class LocalModelSupportTests: XCTestCase {
         XCTAssertEqual(decoded, entry)
     }
 
+    func testLocalModelEntryDecodesWithoutTaskPrefix() throws {
+        // Simulate old JSON without taskPrefix field
+        let json = """
+        {"repoID":"org/model","displayName":"M","parameterCount":"1M","approxDiskGB":0.5,"status":"ready","localPath":"/path"}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(LocalModelEntry.self, from: data)
+        XCTAssertEqual(decoded.repoID, "org/model")
+        XCTAssertEqual(decoded.taskPrefix, "Fix grammatical errors in this sentence: ")
+        XCTAssertEqual(decoded.status, .ready)
+        XCTAssertEqual(decoded.localPath, "/path")
+    }
+
+    func testLocalModelEntryDecodesWithTaskPrefix() throws {
+        let json = """
+        {"repoID":"org/model","displayName":"M","parameterCount":"1M","approxDiskGB":0.5,"taskPrefix":"grammar: "}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(LocalModelEntry.self, from: data)
+        XCTAssertEqual(decoded.taskPrefix, "grammar: ")
+        XCTAssertEqual(decoded.status, .notDownloaded)
+        XCTAssertEqual(decoded.localPath, "")
+    }
+
+    func testLocalModelEntryDecodesMinimalJSON() throws {
+        let json = """
+        {"repoID":"a/b","displayName":"X","parameterCount":"10M","approxDiskGB":1.0}
+        """
+        let data = json.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(LocalModelEntry.self, from: data)
+        XCTAssertEqual(decoded.repoID, "a/b")
+        XCTAssertEqual(decoded.status, .notDownloaded)
+        XCTAssertEqual(decoded.localPath, "")
+        XCTAssertEqual(decoded.taskPrefix, "Fix grammatical errors in this sentence: ")
+    }
+
     func testLocalModelEntryEquality() {
         let a = LocalModelEntry(
             repoID: "org/model", displayName: "M", parameterCount: "1M", approxDiskGB: 0.1
@@ -82,14 +118,13 @@ final class LocalModelSupportTests: XCTestCase {
 
     // MARK: - recommendedModels
 
-    func testRecommendedModelsHasFourEntries() {
-        XCTAssertEqual(LocalModelSupport.recommendedModels.count, 4)
+    func testRecommendedModelsHasThreeEntries() {
+        XCTAssertEqual(LocalModelSupport.recommendedModels.count, 3)
     }
 
-    func testRecommendedModelsContainsCoEditVariants() {
+    func testRecommendedModelsContainsExpectedModels() {
         let repoIDs = LocalModelSupport.recommendedModels.map(\.repoID)
-        XCTAssertTrue(repoIDs.contains("grammarly/coedit-small"))
-        XCTAssertTrue(repoIDs.contains("grammarly/coedit-base"))
+        XCTAssertTrue(repoIDs.contains("vennify/t5-base-grammar-correction"))
         XCTAssertTrue(repoIDs.contains("grammarly/coedit-large"))
         XCTAssertTrue(repoIDs.contains("grammarly/coedit-xl"))
     }
@@ -131,8 +166,18 @@ final class LocalModelSupportTests: XCTestCase {
 
     // MARK: - taskPrefix
 
-    func testTaskPrefix() {
-        let prefix = LocalModelSupport.taskPrefix()
+    func testTaskPrefixForCoEdit() {
+        let prefix = LocalModelSupport.taskPrefix(for: "grammarly/coedit-large")
+        XCTAssertEqual(prefix, "Fix grammatical errors in this sentence: ")
+    }
+
+    func testTaskPrefixForT5Grammar() {
+        let prefix = LocalModelSupport.taskPrefix(for: "vennify/t5-base-grammar-correction")
+        XCTAssertEqual(prefix, "grammar: ")
+    }
+
+    func testTaskPrefixForUnknownModelUsesDefault() {
+        let prefix = LocalModelSupport.taskPrefix(for: "unknown/model")
         XCTAssertEqual(prefix, "Fix grammatical errors in this sentence: ")
     }
 
@@ -213,7 +258,7 @@ final class LocalModelSupportTests: XCTestCase {
 
     func testMergedModelListWithNoSavedModels() {
         let result = LocalModelSupport.mergedModelList(saved: [], downloaded: [])
-        XCTAssertEqual(result.count, 4)
+        XCTAssertEqual(result.count, 3)
         for entry in result {
             XCTAssertEqual(entry.status, .notDownloaded)
         }
@@ -227,8 +272,8 @@ final class LocalModelSupportTests: XCTestCase {
         let large = result.first(where: { $0.repoID == "grammarly/coedit-large" })
         XCTAssertEqual(large?.status, .ready)
 
-        let small = result.first(where: { $0.repoID == "grammarly/coedit-small" })
-        XCTAssertEqual(small?.status, .notDownloaded)
+        let t5base = result.first(where: { $0.repoID == "vennify/t5-base-grammar-correction" })
+        XCTAssertEqual(t5base?.status, .notDownloaded)
     }
 
     func testMergedModelListIncludesCustomModels() {
@@ -242,7 +287,7 @@ final class LocalModelSupportTests: XCTestCase {
             saved: [custom],
             downloaded: ["custom/model"]
         )
-        XCTAssertEqual(result.count, 5)
+        XCTAssertEqual(result.count, 4)
         let customResult = result.first(where: { $0.repoID == "custom/model" })
         XCTAssertEqual(customResult?.status, .ready)
         XCTAssertEqual(customResult?.displayName, "Custom")
@@ -267,17 +312,17 @@ final class LocalModelSupportTests: XCTestCase {
 
     func testMergedModelListDoesNotDuplicateRecommended() {
         let savedDuplicate = LocalModelEntry(
-            repoID: "grammarly/coedit-small",
-            displayName: "CoEdIT Small Custom",
-            parameterCount: "77M",
-            approxDiskGB: 0.3
+            repoID: "vennify/t5-base-grammar-correction",
+            displayName: "T5 Base Custom",
+            parameterCount: "220M",
+            approxDiskGB: 0.9
         )
         let result = LocalModelSupport.mergedModelList(
             saved: [savedDuplicate],
             downloaded: []
         )
-        let smallEntries = result.filter { $0.repoID == "grammarly/coedit-small" }
-        XCTAssertEqual(smallEntries.count, 1)
+        let t5Entries = result.filter { $0.repoID == "vennify/t5-base-grammar-correction" }
+        XCTAssertEqual(t5Entries.count, 1)
     }
 
     func testMergedModelListCustomNotDownloaded() {
