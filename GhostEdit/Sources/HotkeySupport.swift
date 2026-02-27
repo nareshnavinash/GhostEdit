@@ -105,4 +105,15 @@ enum HotkeySupport {
         parts.append(keyTitle(for: keyCode))
         return parts.joined(separator: "+")
     }
+
+    static func symbolString(keyCode: UInt32, modifiers: UInt32) -> String {
+        var parts: [String] = []
+        let split = splitModifiers(modifiers)
+        if split.control { parts.append("\u{2303}") }
+        if split.option { parts.append("\u{2325}") }
+        if split.shift { parts.append("\u{21E7}") }
+        if split.command { parts.append("\u{2318}") }
+        parts.append(keyTitle(for: keyCode))
+        return parts.joined()
+    }
 }

@@ -78,6 +78,29 @@ final class HotkeySupportTests: XCTestCase {
         XCTAssertEqual(display, "Control+D")
     }
 
+    func testSymbolStringCmdE() {
+        let modifiers = HotkeySupport.makeModifiers(command: true, option: false, control: false, shift: false)
+        let result = HotkeySupport.symbolString(keyCode: UInt32(kVK_ANSI_E), modifiers: modifiers)
+        XCTAssertEqual(result, "\u{2318}E")
+    }
+
+    func testSymbolStringCmdShiftE() {
+        let modifiers = HotkeySupport.makeModifiers(command: true, option: false, control: false, shift: true)
+        let result = HotkeySupport.symbolString(keyCode: UInt32(kVK_ANSI_E), modifiers: modifiers)
+        XCTAssertEqual(result, "\u{21E7}\u{2318}E")
+    }
+
+    func testSymbolStringAllModifiers() {
+        let modifiers = HotkeySupport.makeModifiers(command: true, option: true, control: true, shift: true)
+        let result = HotkeySupport.symbolString(keyCode: UInt32(kVK_ANSI_E), modifiers: modifiers)
+        XCTAssertEqual(result, "\u{2303}\u{2325}\u{21E7}\u{2318}E")
+    }
+
+    func testSymbolStringNoModifiers() {
+        let result = HotkeySupport.symbolString(keyCode: UInt32(kVK_ANSI_E), modifiers: 0)
+        XCTAssertEqual(result, "E")
+    }
+
     func testKeyOptionsContainsAlphaNumericSet() {
         XCTAssertTrue(HotkeySupport.keyOptions.contains(where: { $0.title == "A" }))
         XCTAssertTrue(HotkeySupport.keyOptions.contains(where: { $0.title == "Z" }))

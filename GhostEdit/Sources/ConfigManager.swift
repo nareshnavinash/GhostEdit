@@ -124,7 +124,7 @@ struct AppConfig: Codable, Equatable {
         tonePreset: "default",
         showDiffPreview: false,
         liveFeedbackEnabled: false,
-        diffPreviewDuration: 3,
+        diffPreviewDuration: 5,
         localModelRepoID: "",
         localModelCustomModels: "[]",
         localModelPythonPath: ""
@@ -229,7 +229,7 @@ struct AppConfig: Codable, Equatable {
         tonePreset: String = "default",
         showDiffPreview: Bool = false,
         liveFeedbackEnabled: Bool = false,
-        diffPreviewDuration: Int = 3,
+        diffPreviewDuration: Int = 5,
         localModelRepoID: String = "",
         localModelCustomModels: String = "[]",
         localModelPythonPath: String = ""

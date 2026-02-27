@@ -770,7 +770,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                 lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
                             ) {
                                 self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
-                                self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
+                                self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element, toolsUsed: "Harper + Dictionary")
                             } else {
                                 self.showHUD(state: .success)
                             }
@@ -801,7 +801,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             )
                         }
                         self.recordLocalFixHistoryEntry(original: textToFix, fixed: trimmed)
-                        self.showQuickFixDiffPopup(original: textToFix, fixed: trimmed, near: element)
+                        self.showQuickFixDiffPopup(original: textToFix, fixed: trimmed, near: element, toolsUsed: "Local Model")
                         self.showHUD(state: .success)
                         targetApp.activate(options: [])
                     }
@@ -814,7 +814,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
                         ) {
                             self.recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
-                            self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
+                            self.showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element, toolsUsed: "Harper + Dictionary")
                             self.showHUD(state: .fallback)
                         }
                         targetApp.activate(options: [])
@@ -827,7 +827,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 lineRange: lineExtraction?.lineRange, fullText: isNotesApp ? currentText : nil
             ) {
                 recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
-                showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element)
+                showQuickFixDiffPopup(original: textToFix, fixed: fixedText, near: element, toolsUsed: "Harper + Dictionary")
             }
             targetApp.activate(options: [])
         }
@@ -2383,7 +2383,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         showQuickFixDiffPopup(original: original, fixed: corrected, near: focused as! AXUIElement)
     }
 
-    private func showQuickFixDiffPopup(original: String, fixed: String, near element: AXUIElement) {
+    private func showQuickFixDiffPopup(original: String, fixed: String, near element: AXUIElement, toolsUsed: String = "") {
         let segments = DiffSupport.charDiff(old: original, new: fixed)
         guard segments.contains(where: { $0.kind != .equal }) else { return }
 
@@ -2391,7 +2391,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let duration = TimeInterval(configManager.loadConfig().diffPreviewDuration)
         let popup = QuickFixDiffPopupController()
-        popup.show(segments: segments, near: element, widgetFrame: liveFeedbackController?.widgetFrame, duration: duration)
+        popup.show(segments: segments, near: element, widgetFrame: liveFeedbackController?.widgetFrame, duration: duration, toolsUsed: toolsUsed)
         quickFixDiffPopup = popup
     }
 
@@ -4230,27 +4230,33 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let colWidths: (feature: CGFloat, local: CGFloat, llm: CGFloat) = (80, 145, 170)
 
         // Detect local model configuration
-        let hasLocalModel = !configManager.loadConfig().localModelRepoID.isEmpty
+        let config = configManager.loadConfig()
+        let hasLocalModel = !config.localModelRepoID.isEmpty
+
+        // Dynamic hotkey labels from config
+        let baseHotkey = HotkeySupport.symbolString(keyCode: config.hotkeyKeyCode, modifiers: config.hotkeyModifiers)
+        let shiftMod = config.hotkeyModifiers | HotkeySupport.makeModifiers(command: false, option: false, control: false, shift: true)
+        let shiftHotkey = HotkeySupport.symbolString(keyCode: config.hotkeyKeyCode, modifiers: shiftMod)
 
         // Header row
         let headerRow = makeComparisonRow(
-            feature: "Feature", local: "\u{2318}E Local", llm: "\u{2318}\u{21E7}E LLM",
+            feature: "Feature", local: "\(baseHotkey) Local", llm: "\(shiftHotkey) LLM",
             widths: colWidths, isHeader: true
         )
         tableStack.addArrangedSubview(headerRow)
 
         // Data rows
         let rows: [(String, String, String)] = [
-            ("Speed", hasLocalModel ? "2–10 seconds" : "Instant", "2–5 seconds"),
+            ("Speed", hasLocalModel ? "2\u{2013}10 seconds" : "Instant", "2\u{2013}5 seconds"),
             ("Network", "None (offline)", "Requires AI CLI"),
             ("Spelling", "Yes", "Yes"),
             ("Grammar",
-             hasLocalModel ? "Yes (Local Model)" : "Basic (Harper)",
+             hasLocalModel ? "Yes (Model + Harper)" : "Yes (Harper)",
              "Yes (contextual)"),
             ("Punctuation",
-             hasLocalModel ? "Yes (Local Model)" : "No",
+             hasLocalModel ? "Yes (Model)" : "Basic (Dictionary)",
              "Yes"),
-            ("Rewrites", hasLocalModel ? "Light corrections" : "Light corrections", "Full restructuring"),
+            ("Rewrites", hasLocalModel ? "Light corrections" : "No", "Full restructuring"),
         ]
 
         for (index, row) in rows.enumerated() {
@@ -4534,7 +4540,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         notifyOnSuccessCheckbox.setContentHuggingPriority(.required, for: .vertical)
         liveFeedbackCheckbox.setContentHuggingPriority(.required, for: .vertical)
         launchAtLoginCheckbox.setContentHuggingPriority(.required, for: .vertical)
-        diffPreviewDurationField.placeholderString = "3"
+        diffPreviewDurationField.placeholderString = "5"
         diffPreviewDurationField.alignment = .left
 
         let durationDesc = makeDescription("Seconds to show the diff popup before auto-dismissing (1–30)")
@@ -4549,7 +4555,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
                     checkbox: clipboardOnlyModeCheckbox,
                     description: "Corrected text is copied but not auto-pasted"
                 ),
-                makeRow(label: makeFieldLabel("Popup duration (s)"), field: diffPreviewDurationField),
+                makeRow(label: makeFieldLabel("Duration (sec)"), field: diffPreviewDurationField),
                 durationDesc,
             ]),
             makeSection(title: "Live Feedback", views: [
@@ -7337,19 +7343,19 @@ final class LiveFeedbackController {
 // MARK: - QuickFixDiffPopupController
 
 final class QuickFixDiffPopupController: NSObject {
-    static let autoDismissDelay: TimeInterval = 3.0
+    static let autoDismissDelay: TimeInterval = 5.0
     static let popupWidth: CGFloat = 300
-    static let popupMaxHeight: CGFloat = 120
+    static let popupMaxHeight: CGFloat = 150
 
     private var panel: NSPanel?
     private var dismissWorkItem: DispatchWorkItem?
 
-    func show(segments: [DiffSegment], near element: AXUIElement, widgetFrame: NSRect?, duration: TimeInterval = QuickFixDiffPopupController.autoDismissDelay) {
+    func show(segments: [DiffSegment], near element: AXUIElement, widgetFrame: NSRect?, duration: TimeInterval = QuickFixDiffPopupController.autoDismissDelay, toolsUsed: String = "") {
         dismissWorkItem?.cancel()
         panel?.orderOut(nil)
         panel = nil
 
-        let newPanel = buildPanel(segments: segments)
+        let newPanel = buildPanel(segments: segments, toolsUsed: toolsUsed)
         positionPanel(newPanel, near: element, widgetFrame: widgetFrame)
 
         newPanel.alphaValue = 0
@@ -7387,7 +7393,7 @@ final class QuickFixDiffPopupController: NSObject {
         })
     }
 
-    private func buildPanel(segments: [DiffSegment]) -> NSPanel {
+    private func buildPanel(segments: [DiffSegment], toolsUsed: String = "") -> NSPanel {
         let panelWidth = Self.popupWidth
 
         let newPanel = NSPanel(
@@ -7413,6 +7419,37 @@ final class QuickFixDiffPopupController: NSObject {
         effectView.wantsLayer = true
         effectView.layer?.cornerRadius = 8
         effectView.layer?.masksToBounds = true
+
+        // Vertical stack to hold optional tools header + diff text
+        let contentStack = NSStackView()
+        contentStack.orientation = .vertical
+        contentStack.spacing = 4
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+
+        // Tools-used header (if provided)
+        if !toolsUsed.isEmpty {
+            let toolsLabel = NSTextField(labelWithString: toolsUsed)
+            toolsLabel.font = NSFont.systemFont(ofSize: 9, weight: .regular)
+            if let italicDescriptor = toolsLabel.font?.fontDescriptor.withSymbolicTraits(.italic) {
+                toolsLabel.font = NSFont(descriptor: italicDescriptor, size: 9)
+            }
+            toolsLabel.textColor = .secondaryLabelColor
+            toolsLabel.translatesAutoresizingMaskIntoConstraints = false
+
+            let pillView = NSView()
+            pillView.wantsLayer = true
+            pillView.layer?.backgroundColor = NSColor.secondaryLabelColor.withAlphaComponent(0.1).cgColor
+            pillView.layer?.cornerRadius = 4
+            pillView.translatesAutoresizingMaskIntoConstraints = false
+            pillView.addSubview(toolsLabel)
+            NSLayoutConstraint.activate([
+                toolsLabel.leadingAnchor.constraint(equalTo: pillView.leadingAnchor, constant: 6),
+                toolsLabel.trailingAnchor.constraint(equalTo: pillView.trailingAnchor, constant: -6),
+                toolsLabel.topAnchor.constraint(equalTo: pillView.topAnchor, constant: 2),
+                toolsLabel.bottomAnchor.constraint(equalTo: pillView.bottomAnchor, constant: -2),
+            ])
+            contentStack.addArrangedSubview(pillView)
+        }
 
         let textField = NSTextField(wrappingLabelWithString: "")
         textField.isEditable = false
@@ -7450,17 +7487,18 @@ final class QuickFixDiffPopupController: NSObject {
             attrString.append(NSAttributedString(string: segment.text, attributes: attrs))
         }
         textField.attributedStringValue = attrString
+        contentStack.addArrangedSubview(textField)
 
-        effectView.addSubview(textField)
+        effectView.addSubview(contentStack)
         NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
-            textField.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
-            textField.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 8),
-            textField.bottomAnchor.constraint(lessThanOrEqualTo: effectView.bottomAnchor, constant: -8)
+            contentStack.leadingAnchor.constraint(equalTo: effectView.leadingAnchor, constant: 8),
+            contentStack.trailingAnchor.constraint(equalTo: effectView.trailingAnchor, constant: -8),
+            contentStack.topAnchor.constraint(equalTo: effectView.topAnchor, constant: 8),
+            contentStack.bottomAnchor.constraint(lessThanOrEqualTo: effectView.bottomAnchor, constant: -8)
         ])
 
         effectView.layoutSubtreeIfNeeded()
-        let intrinsicHeight = textField.intrinsicContentSize.height + 16
+        let intrinsicHeight = contentStack.fittingSize.height + 16
         let panelHeight = min(intrinsicHeight, Self.popupMaxHeight)
 
         newPanel.setContentSize(NSSize(width: panelWidth, height: panelHeight))
