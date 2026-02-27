@@ -783,16 +783,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             let repoID = config.localModelRepoID
             Task.detached { [weak self] in
                 do {
-                    let protection = TokenPreservationSupport.protectTokens(in: spellFixed)
-                    let textForModel = protection.hasProtectedTokens ? protection.protectedText : spellFixed
-                    let prefixed = LocalModelSupport.taskPrefix(for: repoID) + textForModel
-                    let rawCorrected = try runner.correctText(prefixed, modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120)
-                    let corrected: String
-                    if protection.hasProtectedTokens {
-                        corrected = TokenPreservationSupport.bestEffortRestore(in: rawCorrected, tokens: protection.tokens)
-                    } else {
-                        corrected = rawCorrected
-                    }
+                    let prefixed = LocalModelSupport.taskPrefix(for: repoID) + spellFixed
+                    let corrected = try runner.correctText(prefixed, modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120)
                     let trimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
 
                     await MainActor.run {
@@ -977,12 +969,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let harperIssues = HarperLinter.lint(text)
         let nsIssues = performLocalSpellCheck(text)
         let allIssues = mergeIssues(harper: harperIssues, nsChecker: nsIssues, text: text)
-        // Filter out issues overlapping protected tokens (@mentions, :emoji:, URLs, etc.)
-        let tokenRanges = TokenPreservationSupport.tokenRanges(in: text)
-        let safeIssues = tokenRanges.isEmpty ? allIssues : allIssues.filter { issue in
-            !tokenRanges.contains { $0.intersection(issue.range) != nil }
-        }
-        let fixable = safeIssues.filter { !$0.suggestions.isEmpty }
+        let fixable = allIssues.filter { !$0.suggestions.isEmpty }
             .sorted { $0.range.location > $1.range.location }
         guard !fixable.isEmpty else { return text }
         var nsText = text as NSString
@@ -1008,12 +995,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let nsIssues = performLocalSpellCheck(text)
 
         let allIssues = mergeIssues(harper: harperIssues, nsChecker: nsIssues, text: text)
-        // Filter out issues overlapping protected tokens (@mentions, :emoji:, URLs, etc.)
-        let tokenRanges = TokenPreservationSupport.tokenRanges(in: text)
-        let safeIssues = tokenRanges.isEmpty ? allIssues : allIssues.filter { issue in
-            !tokenRanges.contains { $0.intersection(issue.range) != nil }
-        }
-        let fixable = safeIssues.filter { !$0.suggestions.isEmpty }
+        let fixable = allIssues.filter { !$0.suggestions.isEmpty }
             .sorted { $0.range.location > $1.range.location }
 
         guard !fixable.isEmpty else {
@@ -1597,7 +1579,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             do {
-                let correctedText = try self.shellRunner.correctTextStreamingPreservingTokens(
+                let correctedText = try self.shellRunner.correctTextStreaming(
                     systemPrompt: prompt,
                     selectedText: selectedText,
                     onChunk: { accumulated in

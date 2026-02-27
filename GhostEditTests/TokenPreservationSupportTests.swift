@@ -410,29 +410,6 @@ final class TokenPreservationSupportTests: XCTestCase {
         XCTAssertEqual(result, [":wave:"])
     }
 
-    // MARK: - tokenRanges
-
-    func testTokenRangesReturnsEmptyForPlainText() {
-        let result = TokenPreservationSupport.tokenRanges(in: "This is plain text.")
-        XCTAssertTrue(result.isEmpty)
-    }
-
-    func testTokenRangesFindsEmojiAndMention() {
-        let text = "Ask @naresh about :hat: please."
-        let ranges = TokenPreservationSupport.tokenRanges(in: text)
-        let nsText = text as NSString
-        let tokens = ranges.map { nsText.substring(with: $0) }
-        XCTAssertEqual(tokens, ["@naresh", ":hat:"])
-    }
-
-    func testTokenRangesFindsURL() {
-        let text = "Visit https://example.com/path today."
-        let ranges = TokenPreservationSupport.tokenRanges(in: text)
-        let nsText = text as NSString
-        XCTAssertEqual(ranges.count, 1)
-        XCTAssertEqual(nsText.substring(with: ranges[0]), "https://example.com/path")
-    }
-
     func testSplitThenReassembleWithCorrectedParts() {
         let original = "i am :sad: and :mad: about the delay"
         let split = TokenPreservationSupport.splitAroundTokens(in: original)
