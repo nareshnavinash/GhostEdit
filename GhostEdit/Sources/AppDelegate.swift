@@ -7220,13 +7220,6 @@ final class LiveFeedbackController {
         // Filter out likely proper nouns (names) and acronyms from spelling issues
         merged = SpellCheckSupport.filterProperNouns(merged, in: text)
         merged = SpellCheckSupport.filterAcronyms(merged)
-        // Filter out issues overlapping protected tokens (@mentions, :emoji:, URLs, etc.)
-        let tokenRanges = TokenPreservationSupport.tokenRanges(in: text)
-        if !tokenRanges.isEmpty {
-            merged = merged.filter { issue in
-                !tokenRanges.contains { $0.intersection(issue.range) != nil }
-            }
-        }
         // Sort by position for consistent display
         merged.sort { $0.range.location < $1.range.location }
 
