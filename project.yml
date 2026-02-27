@@ -40,8 +40,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.ghostedit.app
         INFOPLIST_FILE: GhostEdit/Info.plist
         CODE_SIGN_STYLE: Automatic
-        CURRENT_PROJECT_VERSION: 26
-        MARKETING_VERSION: 6.0.0
+        CURRENT_PROJECT_VERSION: 35
+        MARKETING_VERSION: 7.5.0
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/build/harper
         LIBRARY_SEARCH_PATHS: $(SRCROOT)/build/harper
