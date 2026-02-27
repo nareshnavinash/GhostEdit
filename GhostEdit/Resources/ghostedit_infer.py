@@ -25,6 +25,22 @@ import time
 import os
 
 
+def _get_hf_token():
+    """Read the HuggingFace token from env var or token file."""
+    token = os.environ.get("HF_TOKEN", "")
+    if token:
+        return token
+    # Check both the standard huggingface-cli location and the legacy path
+    for path in ["~/.cache/huggingface/token", "~/.huggingface/token"]:
+        expanded = os.path.expanduser(path)
+        if os.path.isfile(expanded):
+            with open(expanded) as f:
+                token = f.read().strip()
+            if token:
+                return token
+    return None
+
+
 def _detect_model_type(model_path):
     """Read the saved model type marker, defaulting to seq2seq."""
     marker = os.path.join(model_path, "ghostedit_model_type.json")
@@ -130,20 +146,22 @@ def cmd_download(request):
     try:
         from transformers import AutoTokenizer
 
+        token = _get_hf_token()
+
         def progress_callback(msg, pct):
             print(json.dumps({"progress": pct, "message": msg}), file=sys.stderr, flush=True)
 
         progress_callback("Downloading tokenizer...", 10)
-        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        tokenizer = AutoTokenizer.from_pretrained(repo_id, token=token)
 
         progress_callback("Downloading model...", 30)
         model_type = "seq2seq"
         try:
             from transformers import AutoModelForSeq2SeqLM
-            model = AutoModelForSeq2SeqLM.from_pretrained(repo_id)
+            model = AutoModelForSeq2SeqLM.from_pretrained(repo_id, token=token)
         except (ValueError, OSError):
             from transformers import AutoModelForCausalLM
-            model = AutoModelForCausalLM.from_pretrained(repo_id)
+            model = AutoModelForCausalLM.from_pretrained(repo_id, token=token)
             model_type = "causal"
 
         progress_callback("Saving tokenizer...", 70)
@@ -184,7 +202,6 @@ def cmd_check_packages(_request):
 
 def cmd_check_hf_login(_request):
     """Check HuggingFace login status."""
-    token_path = os.path.expanduser("~/.huggingface/token")
     env_token = os.environ.get("HF_TOKEN", "")
 
     token = None
@@ -192,11 +209,16 @@ def cmd_check_hf_login(_request):
     if env_token:
         token = env_token
         source = "env"
-    elif os.path.isfile(token_path):
-        with open(token_path) as f:
-            token = f.read().strip()
-        if token:
-            source = "file"
+    else:
+        for path in ["~/.cache/huggingface/token", "~/.huggingface/token"]:
+            expanded = os.path.expanduser(path)
+            if os.path.isfile(expanded):
+                with open(expanded) as f:
+                    t = f.read().strip()
+                if t:
+                    token = t
+                    source = "file"
+                    break
 
     if not token:
         return {"status": "ok", "logged_in": False, "username": "", "token_source": "none"}
@@ -210,7 +232,11 @@ def cmd_check_hf_login(_request):
 
 
 def cmd_save_hf_token(request):
-    """Save a HuggingFace token to ~/.huggingface/token after validation."""
+    """Save a HuggingFace token after validation.
+
+    Writes to both ~/.cache/huggingface/token (standard transformers/huggingface_hub
+    location) and ~/.huggingface/token (legacy) so that from_pretrained() can find it.
+    """
     token = request.get("token", "").strip()
     if not token:
         return {"status": "error", "message": "Token is required"}
@@ -224,19 +250,22 @@ def cmd_save_hf_token(request):
     except Exception as e:
         return {"status": "error", "message": f"Invalid token: {e}"}
 
-    token_dir = os.path.expanduser("~/.huggingface")
-    os.makedirs(token_dir, exist_ok=True)
-    with open(os.path.join(token_dir, "token"), "w") as f:
-        f.write(token)
+    # Write to both standard and legacy token locations
+    for token_dir in ["~/.cache/huggingface", "~/.huggingface"]:
+        expanded = os.path.expanduser(token_dir)
+        os.makedirs(expanded, exist_ok=True)
+        with open(os.path.join(expanded, "token"), "w") as f:
+            f.write(token)
 
     return {"status": "ok", "username": username}
 
 
 def cmd_logout_hf(_request):
-    """Remove HuggingFace token file."""
-    token_path = os.path.expanduser("~/.huggingface/token")
-    if os.path.isfile(token_path):
-        os.remove(token_path)
+    """Remove HuggingFace token files from both standard and legacy locations."""
+    for path in ["~/.cache/huggingface/token", "~/.huggingface/token"]:
+        expanded = os.path.expanduser(path)
+        if os.path.isfile(expanded):
+            os.remove(expanded)
     return {"status": "ok"}
 
 
