@@ -242,6 +242,11 @@ enum TokenPreservationSupport {
         return candidate
     }
 
+    /// Returns the NSRanges of all recognized tokens in the text.
+    static func tokenRanges(in text: String) -> [NSRange] {
+        tokenMatches(in: text)
+    }
+
     private static func tokenMatches(in text: String) -> [NSRange] {
         let fullRange = NSRange(location: 0, length: (text as NSString).length)
         var candidates: [(range: NSRange, priority: Int)] = []

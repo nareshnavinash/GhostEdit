@@ -308,6 +308,39 @@ final class ShellRunner {
         return TokenPreservationSupport.bestEffortRestore(in: lastCandidate, tokens: protection.tokens)
     }
 
+    /// Correct text with streaming output, protecting @mentions, :emoji:, URLs, etc.
+    /// On each chunk, restores any surviving placeholders so the streaming preview shows real tokens.
+    func correctTextStreamingPreservingTokens(
+        systemPrompt: String,
+        selectedText: String,
+        onChunk: @escaping (String) -> Void
+    ) throws -> String {
+        let protection = TokenPreservationSupport.protectTokens(in: selectedText)
+        guard protection.hasProtectedTokens else {
+            devLog(.tokenProtection, "No protected tokens found, using direct streaming correction")
+            return try correctTextStreaming(systemPrompt: systemPrompt, selectedText: selectedText, onChunk: onChunk)
+        }
+
+        devLog(.tokenProtection, "Protected \(protection.tokens.count) token(s) for streaming")
+        let augmentedPrompt = TokenPreservationSupport.appendInstruction(to: systemPrompt)
+
+        let rawResult = try correctTextStreaming(
+            systemPrompt: augmentedPrompt,
+            selectedText: protection.protectedText,
+            onChunk: { accumulated in
+                let restored = TokenPreservationSupport.bestEffortRestore(in: accumulated, tokens: protection.tokens)
+                onChunk(restored)
+            }
+        )
+
+        if TokenPreservationSupport.placeholdersAreIntact(in: rawResult, tokens: protection.tokens) {
+            devLog(.tokenRestoration, "All placeholders intact in streaming result, restoring tokens")
+            return TokenPreservationSupport.restoreTokens(in: rawResult, tokens: protection.tokens)
+        }
+        devLog(.tokenRestoration, "Placeholders modified in streaming result, using best-effort restoration")
+        return TokenPreservationSupport.bestEffortRestore(in: rawResult, tokens: protection.tokens)
+    }
+
     // MARK: - Persistent session helpers
 
     /// Attempt to use the persistent session for a non-streaming correction.
