@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00EA97CC01B6864BAAF53F12 /* PartialCorrectionSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD78EB3192991763287EAD9 /* PartialCorrectionSupportTests.swift */; };
+		01319D5123A9765DEB0E4456 /* HUDOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76FB8702B610390C0F22382 /* HUDOverlayController.swift */; };
 		013DA631B17FFBBD629C1DF1 /* MenuBarIconSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A19352959464C2B26B64C91 /* MenuBarIconSupport.swift */; };
 		01B755B39734C6EA30820521 /* AccessibilitySupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8DC3A711BE2DF7E2356E7A6 /* AccessibilitySupportTests.swift */; };
 		0598E9B12485EA12DEB0A81E /* SpellCheckSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE703C320386E6D54BB34E6D /* SpellCheckSupport.swift */; };
@@ -210,6 +211,7 @@
 		F1E4999151E25E3611DF482A /* WritingCoachLayoutSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritingCoachLayoutSupportTests.swift; sourceTree = "<group>"; };
 		F479A47545C9BCF85C4025BA /* ShellRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRunnerTests.swift; sourceTree = "<group>"; };
 		F48762FEE0ADD0B53660C76D /* CorrectionHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionHistoryStore.swift; sourceTree = "<group>"; };
+		F76FB8702B610390C0F22382 /* HUDOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDOverlayController.swift; sourceTree = "<group>"; };
 		F90DEE034E4727FC1DA5FC5C /* DeveloperConsoleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperConsoleController.swift; sourceTree = "<group>"; };
 		FAF34CFADA7B460E42534704 /* TooltipSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TooltipSupportTests.swift; sourceTree = "<group>"; };
 		FBF7F14278D1215EDEA709EC /* FallbackSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackSupportTests.swift; sourceTree = "<group>"; };
@@ -271,6 +273,7 @@
 				9FADF75757FBA728CAFA2A52 /* HistoryWindowController.swift */,
 				9C996DDEE9C8B3F039E6ABBE /* HotkeyManager.swift */,
 				B906B851893CA488140981F6 /* HotkeySupport.swift */,
+				F76FB8702B610390C0F22382 /* HUDOverlayController.swift */,
 				147F68940A034561B6462123 /* HUDOverlaySupport.swift */,
 				EA9C5D9A20D47E1D5A0B997E /* LaunchAtLoginManager.swift */,
 				A05ACB85766D7C938F9F5AAF /* LiveFeedbackSupport.swift */,
@@ -494,6 +497,7 @@
 				F550B8958D4DA887E208B28A /* DiffPreviewController.swift in Sources */,
 				4BDCC10437332C8E0D2C9A91 /* DiffSupport.swift in Sources */,
 				8C0B6E33DF3B6B893538D158 /* FallbackSupport.swift in Sources */,
+				01319D5123A9765DEB0E4456 /* HUDOverlayController.swift in Sources */,
 				8460E68C246438137568B8C2 /* HUDOverlaySupport.swift in Sources */,
 				F001E850B862F8EEA5A0E9CD /* HardwareCompatibilitySupport.swift in Sources */,
 				E988A014CDD0B5C721068C25 /* HarperBridge.swift in Sources */,
