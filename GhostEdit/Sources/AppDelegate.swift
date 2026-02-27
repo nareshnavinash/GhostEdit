@@ -4,6 +4,9 @@ import UserNotifications
 import UniformTypeIdentifiers
 
 public final class AppDelegate: NSObject, NSApplicationDelegate {
+
+    // MARK: - Properties
+
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let hotkeyManager = HotkeyManager()
     private let clipboardManager = ClipboardManager()
@@ -60,6 +63,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
+    // MARK: - App Lifecycle
+
     public func applicationDidFinishLaunching(_ notification: Notification) {
         if isRunningUnitTests {
             return
@@ -107,6 +112,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         stopProcessingIndicator()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
+
+    // MARK: - Menu Bar Setup
 
     private func configureStatusItem() {
         if let button = statusItem.button {
@@ -389,6 +396,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
+    // MARK: - Menu Actions
+
     private func startObservingActiveApplication() {
         let center = NSWorkspace.shared.notificationCenter
         center.addObserver(
@@ -450,6 +459,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(editMenuItem)
         NSApp.mainMenu = mainMenu
     }
+
+    // MARK: - Hotkey Registration
 
     private func registerHotkey() {
         let config = configManager.loadConfig()
@@ -698,6 +709,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quitAction() {
         NSApp.terminate(nil)
     }
+
+    // MARK: - Local Fix Pipeline (cmd+E)
 
     private func handleLocalFixHotkey() {
         guard ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: true) else {
@@ -1143,6 +1156,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         LocalFixSupport.mergeIssues(harper: harper, nsChecker: nsChecker, text: text)
     }
 
+    // MARK: - Cloud Fix Pipeline (cmd+shift+E)
+
     private func handleHotkeyTrigger() {
         guard ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: true) else {
             playErrorSound()
@@ -1564,6 +1579,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Streaming
+
     private func launchStreamingRequest(
         controller: StreamingPreviewController,
         prompt: String,
@@ -1673,6 +1690,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = statusMenu
         setMenuBarIcon(idleMenuBarIcon)
     }
+
+    // MARK: - Text Application & Write-back
 
     private func applyCorrectedText(_ correctedText: String) {
         devLog(.pasteBack, "Corrected text (\(correctedText.count) chars): \(DeveloperModeSupport.truncate(correctedText))")
@@ -1793,6 +1812,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - HUD Management
+
     private func showHUD(state: HUDOverlayState) {
         if hudController == nil {
             hudController = HUDOverlayController()
@@ -1829,6 +1850,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         hudController?.dismiss()
     }
 
+    // MARK: - Processing State
+
     private func finishProcessing() {
         isProcessing = false
         pendingDiffOriginalText = nil
@@ -1838,6 +1861,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @discardableResult
+    // MARK: - Accessibility & Alerts
+
     private func ensureAccessibilityPermission(
         promptSystemDialog: Bool,
         showGuidanceAlert: Bool
@@ -1909,6 +1934,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Sound & Notifications
+
     private func playErrorSound() {
         guard configManager.loadConfig().soundFeedbackEnabled else { return }
         NSSound.beep()
@@ -1949,6 +1976,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         UNUserNotificationCenter.current().add(request)
     }
+
+    // MARK: - Status Bar
 
     private func setStatus(_ text: String) {
         let config = configManager.loadConfig()
@@ -2002,6 +2031,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let shortVersion = info?["CFBundleShortVersionString"] as? String ?? "?"
         return "Version \(shortVersion)"
     }
+
+    // MARK: - Window Presentation
 
     private func showSettingsWindow() {
         if settingsWindowController == nil {
@@ -2070,6 +2101,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Settings Import/Export
+
     private func performExportSettings() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = SettingsExportSupport.defaultFileName(appVersion: appVersionText())
@@ -2127,6 +2160,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         statusItem.button?.toolTip = tooltip
     }
+
+    // MARK: - Update Check
 
     private func performUpdateCheck() {
         setStatus("Checking for updates...")
@@ -2202,6 +2237,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func loadAppProfiles() -> [AppProfile] {
         AppProfileSupport.loadProfiles(from: configManager.profilesURL)
     }
+
+    // MARK: - Writing Coach
 
     private func runWritingCoach() {
         guard !isProcessing else {
@@ -2455,6 +2492,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - History
+
     private func refreshHistoryWindowIfVisible() {
         let entries = historyStore.load().reversed()
         let snapshot = Array(entries)
@@ -2462,6 +2501,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.historyWindowController?.update(entries: snapshot)
         }
     }
+
+    // MARK: - Clipboard
 
     private func restoreClipboardSnapshot(after delay: TimeInterval) {
         guard let snapshot = clipboardSnapshot else {
@@ -2483,6 +2524,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             restore()
         }
     }
+
+    // MARK: - Developer Mode
 
     private func syncLaunchAtLoginPreferenceSilently() {
         let config = configManager.loadConfig()
