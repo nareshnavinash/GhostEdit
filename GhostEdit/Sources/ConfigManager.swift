@@ -521,11 +521,9 @@ final class ConfigManager {
         guard let decoded = try? JSONDecoder().decode([String: String].self, from: data) else {
             return "{}"
         }
-        guard let encoded = try? JSONEncoder().encode(decoded),
-              let json = String(data: encoded, encoding: .utf8) else {
-            return "{}"
-        }
-        return json
+        // [String: String] is always encodable to UTF-8 JSON.
+        let encoded = try! JSONEncoder().encode(decoded)
+        return String(decoding: encoded, as: UTF8.self)
     }
 
     private func migratePromptIfNeeded() throws {

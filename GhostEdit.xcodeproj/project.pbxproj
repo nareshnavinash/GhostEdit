@@ -696,7 +696,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/build/harper";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 7.6.0;
+				MARKETING_VERSION = 7.5.1;
 				OTHER_LDFLAGS = "-lharper_bridge";
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;
@@ -742,7 +742,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(SRCROOT)/build/harper";
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 7.6.0;
+				MARKETING_VERSION = 7.5.1;
 				OTHER_LDFLAGS = "-lharper_bridge";
 				PRODUCT_BUNDLE_IDENTIFIER = com.ghostedit.app;
 				SDKROOT = macosx;

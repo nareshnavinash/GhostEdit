@@ -191,6 +191,11 @@ final class LocalModelSupportTests: XCTestCase {
         XCTAssertEqual(template, "grammar: {text}")
     }
 
+    func testDefaultPromptTemplateForUnknownModelUsesFallbackTemplate() {
+        let template = LocalModelSupport.defaultPromptTemplate(for: "custom/unknown-model")
+        XCTAssertEqual(template, LocalModelSupport.fallbackPromptTemplate)
+    }
+
     func testValidatePromptTemplateRequiresPlaceholder() {
         XCTAssertTrue(LocalModelSupport.validatePromptTemplate("Fix this: {text}"))
         XCTAssertFalse(LocalModelSupport.validatePromptTemplate("Fix this text"))
@@ -214,6 +219,54 @@ final class LocalModelSupportTests: XCTestCase {
 
         let resolved = LocalModelSupport.resolvedPromptTemplate(for: "grammarly/coedit-large", config: config)
         XCTAssertEqual(resolved, "Custom {text}")
+    }
+
+    func testPromptTemplateOverridesReturnsEmptyWhenJSONIsInvalid() {
+        var config = AppConfig.default
+        config.localModelPromptTemplates = "{bad-json"
+
+        let overrides = LocalModelSupport.promptTemplateOverrides(from: config)
+        XCTAssertEqual(overrides, [:])
+    }
+
+    func testResolvedPromptTemplateIgnoresInvalidOverrideAndFallsBackToDefault() {
+        let config = AppConfig(
+            claudePath: "",
+            codexPath: "",
+            geminiPath: "",
+            provider: "claude",
+            model: "haiku",
+            timeoutSeconds: 30,
+            hotkeyKeyCode: 14,
+            hotkeyModifiers: 256,
+            launchAtLogin: false,
+            historyLimit: 50,
+            localModelPromptTemplates: "{\"grammarly/coedit-large\":\"Missing placeholder\"}"
+        )
+
+        let resolved = LocalModelSupport.resolvedPromptTemplate(for: "grammarly/coedit-large", config: config)
+        XCTAssertEqual(resolved, "Fix grammatical errors in this sentence: {text}")
+    }
+
+    func testResolvedPromptTemplateAppendsPlaceholderToCustomTaskPrefix() {
+        let config = AppConfig(
+            claudePath: "",
+            codexPath: "",
+            geminiPath: "",
+            provider: "claude",
+            model: "haiku",
+            timeoutSeconds: 30,
+            hotkeyKeyCode: 14,
+            hotkeyModifiers: 256,
+            launchAtLogin: false,
+            historyLimit: 50,
+            localModelCustomModels: """
+            [{"repoID":"custom/model","displayName":"Custom","parameterCount":"1B","approxDiskGB":1.0,"taskPrefix":"legacy prefix"}]
+            """
+        )
+
+        let resolved = LocalModelSupport.resolvedPromptTemplate(for: "custom/model", config: config)
+        XCTAssertEqual(resolved, "legacy prefix{text}")
     }
 
     func testResolvedPromptTemplateFallsBackToLegacyCustomTaskPrefix() {

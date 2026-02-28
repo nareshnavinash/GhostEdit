@@ -581,6 +581,50 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.resolvedLanguage, "auto")
     }
 
+    func testSaveConfigNormalizesInvalidLocalModelPromptTemplatesJSON() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        config.localModelPromptTemplates = "{not-json"
+
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+
+        let loaded = manager.loadConfig()
+        XCTAssertEqual(loaded.localModelPromptTemplates, "{}")
+    }
+
+    func testSaveConfigNormalizesBlankLocalModelPromptTemplatesJSON() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        config.localModelPromptTemplates = "   "
+
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+
+        let loaded = manager.loadConfig()
+        XCTAssertEqual(loaded.localModelPromptTemplates, "{}")
+    }
+
+    func testSaveConfigPreservesValidLocalModelPromptTemplatesJSON() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        config.localModelPromptTemplates = "{\"grammarly/coedit-large\":\"Custom {text}\"}"
+
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+
+        let loaded = manager.loadConfig()
+        let data = try XCTUnwrap(loaded.localModelPromptTemplates.data(using: .utf8))
+        let decoded = try JSONDecoder().decode([String: String].self, from: data)
+        XCTAssertEqual(decoded["grammarly/coedit-large"], "Custom {text}")
+    }
+
     func testSupportedLanguagesContainsAutoAndEnglish() {
         let codes = AppConfig.supportedLanguages.map { $0.code }
         XCTAssertTrue(codes.contains("auto"))

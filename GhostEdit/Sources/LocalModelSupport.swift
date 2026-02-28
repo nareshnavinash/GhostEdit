@@ -124,10 +124,7 @@ Revise the following text by correcting grammar, spelling, and punctuation. Pres
         if let customData = config.localModelCustomModels.data(using: .utf8),
            let customModels = try? JSONDecoder().decode([LocalModelEntry].self, from: customData),
            let customEntry = customModels.first(where: { $0.repoID == repoID }) {
-            let fromPrefix = "\(customEntry.taskPrefix){text}"
-            if validatePromptTemplate(fromPrefix) {
-                return fromPrefix
-            }
+            return "\(customEntry.taskPrefix){text}"
         }
 
         return defaultPromptTemplate(for: repoID)
