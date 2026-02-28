@@ -27,6 +27,20 @@ final class LiveFeedbackController {
     private var widgetManuallyDragged = false
     private var lastDraggedForPID: pid_t?
 
+    /// When true, the next scan that finds fixable issues will auto-apply them.
+    /// Set via `requestAutoApply()` by the cmd+E pipeline so LiveFeedback's
+    /// proven detection cleans up remaining grammar/punctuation issues.
+    private var autoApplyOnNextScan = false
+
+    /// Called by the cmd+E pipeline after writing corrected text.
+    /// Clears the scan cache so LiveFeedback re-checks even if the text
+    /// looks the same, and auto-applies any fixable issues it finds.
+    func requestAutoApply() {
+        autoApplyOnNextScan = true
+        lastCheckedText = nil
+        currentCheckedText = nil
+    }
+
     private var ignoredWords: Set<String> = []
     private let ignoredWordsURL: URL = {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -318,6 +332,16 @@ final class LiveFeedbackController {
         let filtered = SpellCheckSupport.filterIssues(issues, ignoredWords: ignoredWords)
         let displayIssues = SpellCheckSupport.truncateForDisplay(filtered)
         currentIssues = displayIssues
+
+        // Auto-apply remaining fixes after cmd+E pipeline completes
+        if autoApplyOnNextScan {
+            autoApplyOnNextScan = false
+            let hasFixable = displayIssues.contains { !$0.suggestions.isEmpty }
+            if hasFixable {
+                applyAllFixes()
+                return
+            }
+        }
 
         if displayIssues.isEmpty {
             updateState(.clean)

@@ -61,18 +61,6 @@ Revise the following text by correcting grammar, spelling, and punctuation. Pres
             approxDiskGB: 0.9,
             taskPrefix: "grammar: "
         ),
-        LocalModelEntry(
-            repoID: "grammarly/coedit-large",
-            displayName: "CoEdIT Large",
-            parameterCount: "770M",
-            approxDiskGB: 3.0
-        ),
-        LocalModelEntry(
-            repoID: "grammarly/coedit-xl",
-            displayName: "CoEdIT XL",
-            parameterCount: "3B",
-            approxDiskGB: 11.0
-        ),
     ]
 
     static func modelsDirectoryURL(baseDirectoryURL: URL) -> URL {
@@ -93,9 +81,6 @@ Revise the following text by correcting grammar, spelling, and punctuation. Pres
     }
 
     static func defaultPromptTemplate(for repoID: String) -> String {
-        if repoID == "vennify/t5-base-grammar-correction" {
-            return "grammar: {text}"
-        }
         if let entry = recommendedModels.first(where: { $0.repoID == repoID }) {
             return "\(entry.taskPrefix){text}"
         }

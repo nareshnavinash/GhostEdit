@@ -118,15 +118,13 @@ final class LocalModelSupportTests: XCTestCase {
 
     // MARK: - recommendedModels
 
-    func testRecommendedModelsHasThreeEntries() {
-        XCTAssertEqual(LocalModelSupport.recommendedModels.count, 3)
+    func testRecommendedModelsHasOneEntry() {
+        XCTAssertEqual(LocalModelSupport.recommendedModels.count, 1)
     }
 
     func testRecommendedModelsContainsExpectedModels() {
         let repoIDs = LocalModelSupport.recommendedModels.map(\.repoID)
         XCTAssertTrue(repoIDs.contains("vennify/t5-base-grammar-correction"))
-        XCTAssertTrue(repoIDs.contains("grammarly/coedit-large"))
-        XCTAssertTrue(repoIDs.contains("grammarly/coedit-xl"))
     }
 
     func testRecommendedModelsAllNotDownloaded() {
@@ -166,11 +164,6 @@ final class LocalModelSupportTests: XCTestCase {
 
     // MARK: - taskPrefix
 
-    func testTaskPrefixForCoEdit() {
-        let prefix = LocalModelSupport.taskPrefix(for: "grammarly/coedit-large")
-        XCTAssertEqual(prefix, "Fix grammatical errors in this sentence: ")
-    }
-
     func testTaskPrefixForT5Grammar() {
         let prefix = LocalModelSupport.taskPrefix(for: "vennify/t5-base-grammar-correction")
         XCTAssertEqual(prefix, "grammar: ")
@@ -179,11 +172,6 @@ final class LocalModelSupportTests: XCTestCase {
     func testTaskPrefixForUnknownModelUsesDefault() {
         let prefix = LocalModelSupport.taskPrefix(for: "unknown/model")
         XCTAssertEqual(prefix, "Fix grammatical errors in this sentence: ")
-    }
-
-    func testDefaultPromptTemplateForKnownModelUsesTaskPrefix() {
-        let template = LocalModelSupport.defaultPromptTemplate(for: "grammarly/coedit-large")
-        XCTAssertEqual(template, "Fix grammatical errors in this sentence: {text}")
     }
 
     func testDefaultPromptTemplateForT5GrammarUsesGrammarPrefix() {
@@ -241,11 +229,11 @@ final class LocalModelSupportTests: XCTestCase {
             hotkeyModifiers: 256,
             launchAtLogin: false,
             historyLimit: 50,
-            localModelPromptTemplates: "{\"grammarly/coedit-large\":\"Missing placeholder\"}"
+            localModelPromptTemplates: "{\"vennify/t5-base-grammar-correction\":\"Missing placeholder\"}"
         )
 
-        let resolved = LocalModelSupport.resolvedPromptTemplate(for: "grammarly/coedit-large", config: config)
-        XCTAssertEqual(resolved, "Fix grammatical errors in this sentence: {text}")
+        let resolved = LocalModelSupport.resolvedPromptTemplate(for: "vennify/t5-base-grammar-correction", config: config)
+        XCTAssertEqual(resolved, "grammar: {text}")
     }
 
     func testResolvedPromptTemplateAppendsPlaceholderToCustomTaskPrefix() {
@@ -367,7 +355,7 @@ final class LocalModelSupportTests: XCTestCase {
 
     func testMergedModelListWithNoSavedModels() {
         let result = LocalModelSupport.mergedModelList(saved: [], downloaded: [])
-        XCTAssertEqual(result.count, 3)
+        XCTAssertEqual(result.count, 1)
         for entry in result {
             XCTAssertEqual(entry.status, .notDownloaded)
         }
@@ -376,13 +364,10 @@ final class LocalModelSupportTests: XCTestCase {
     func testMergedModelListMarksDownloadedAsReady() {
         let result = LocalModelSupport.mergedModelList(
             saved: [],
-            downloaded: ["grammarly/coedit-large"]
+            downloaded: ["vennify/t5-base-grammar-correction"]
         )
-        let large = result.first(where: { $0.repoID == "grammarly/coedit-large" })
-        XCTAssertEqual(large?.status, .ready)
-
-        let t5base = result.first(where: { $0.repoID == "vennify/t5-base-grammar-correction" })
-        XCTAssertEqual(t5base?.status, .notDownloaded)
+        let t5 = result.first(where: { $0.repoID == "vennify/t5-base-grammar-correction" })
+        XCTAssertEqual(t5?.status, .ready)
     }
 
     func testMergedModelListIncludesCustomModels() {
@@ -396,27 +381,27 @@ final class LocalModelSupportTests: XCTestCase {
             saved: [custom],
             downloaded: ["custom/model"]
         )
-        XCTAssertEqual(result.count, 4)
+        XCTAssertEqual(result.count, 2)
         let customResult = result.first(where: { $0.repoID == "custom/model" })
         XCTAssertEqual(customResult?.status, .ready)
         XCTAssertEqual(customResult?.displayName, "Custom")
     }
 
     func testMergedModelListUpdatesLocalPathFromSaved() {
-        let savedLarge = LocalModelEntry(
-            repoID: "grammarly/coedit-large",
-            displayName: "CoEdIT Large",
-            parameterCount: "770M",
-            approxDiskGB: 3.0,
-            localPath: "/models/coedit-large"
+        let savedT5 = LocalModelEntry(
+            repoID: "vennify/t5-base-grammar-correction",
+            displayName: "T5 Base Grammar",
+            parameterCount: "220M",
+            approxDiskGB: 0.9,
+            localPath: "/models/t5-base"
         )
         let result = LocalModelSupport.mergedModelList(
-            saved: [savedLarge],
-            downloaded: ["grammarly/coedit-large"]
+            saved: [savedT5],
+            downloaded: ["vennify/t5-base-grammar-correction"]
         )
-        let large = result.first(where: { $0.repoID == "grammarly/coedit-large" })
-        XCTAssertEqual(large?.localPath, "/models/coedit-large")
-        XCTAssertEqual(large?.status, .ready)
+        let t5 = result.first(where: { $0.repoID == "vennify/t5-base-grammar-correction" })
+        XCTAssertEqual(t5?.localPath, "/models/t5-base")
+        XCTAssertEqual(t5?.status, .ready)
     }
 
     func testMergedModelListDoesNotDuplicateRecommended() {

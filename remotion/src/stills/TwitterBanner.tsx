@@ -1,79 +1,48 @@
 import React from "react";
 import { AbsoluteFill } from "remotion";
-import { colors, gradients } from "../theme/colors";
+import { lightColors, lightGradients } from "../theme/lightColors";
 import { fontStyles } from "../theme/fonts";
 import { GhostLogo } from "../components/GhostLogo";
-import { ProviderBadge } from "../components/ProviderBadge";
 
-// Static ambient particles to fill corners
-const PARTICLES: { x: number; y: number; size: number; opacity: number; color: string }[] = [
-  // Top-left quadrant
-  { x: 60, y: 40, size: 4, opacity: 0.35, color: colors.spectralBlue },
-  { x: 150, y: 100, size: 3, opacity: 0.25, color: colors.ghostGlow },
-  { x: 90, y: 180, size: 5, opacity: 0.3, color: colors.spectralBlue },
-  // Top-right quadrant
-  { x: 1380, y: 50, size: 4, opacity: 0.3, color: colors.ghostGlow },
-  { x: 1440, y: 140, size: 3, opacity: 0.25, color: colors.spectralBlue },
-  { x: 1300, y: 90, size: 5, opacity: 0.35, color: colors.ghostGlow },
-  // Bottom-left quadrant
-  { x: 80, y: 380, size: 4, opacity: 0.3, color: colors.spectralBlue },
-  { x: 170, y: 440, size: 3, opacity: 0.25, color: colors.ghostGlow },
-  { x: 50, y: 320, size: 5, opacity: 0.35, color: colors.spectralBlue },
-  // Bottom-right quadrant
-  { x: 1400, y: 370, size: 4, opacity: 0.25, color: colors.ghostGlow },
-  { x: 1320, y: 430, size: 3, opacity: 0.3, color: colors.spectralBlue },
-  { x: 1450, y: 290, size: 5, opacity: 0.35, color: colors.ghostGlow },
-  // Extra center-edge particles
-  { x: 200, y: 250, size: 3, opacity: 0.2, color: colors.spectralBlue },
-  { x: 1250, y: 250, size: 3, opacity: 0.2, color: colors.ghostGlow },
+const FEATURE_PILLS: { emoji: string; label: string }[] = [
+  { emoji: "\u{1F9E0}", label: "Local Models" },
+  { emoji: "\u{26A1}", label: "Instant Fix" },
+  { emoji: "\u{1F512}", label: "Privacy First" },
+];
+
+const PROVIDERS: { name: string; color: string }[] = [
+  { name: "Claude", color: lightColors.claude },
+  { name: "Codex", color: lightColors.codex },
+  { name: "Gemini", color: lightColors.gemini },
 ];
 
 export const TwitterBanner: React.FC = () => {
   return (
-    <AbsoluteFill style={{ background: gradients.darkRadial }}>
-      {/* Corner radial glows */}
+    <AbsoluteFill style={{ background: lightGradients.canvasRadialCool }}>
+      {/* Subtle radial accent top-right */}
       <div
         style={{
           position: "absolute",
-          top: -100,
-          right: -100,
+          top: -120,
+          right: -80,
           width: 500,
           height: 400,
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${colors.spectralBlue}10 0%, transparent 70%)`,
-          opacity: 0.06,
+          background: `radial-gradient(circle, ${lightColors.spectralBlue}12 0%, transparent 70%)`,
         }}
       />
+      {/* Subtle radial accent bottom-left */}
       <div
         style={{
           position: "absolute",
-          bottom: -100,
-          left: -100,
+          bottom: -120,
+          left: -80,
           width: 500,
           height: 400,
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${colors.ghostGlow}10 0%, transparent 70%)`,
-          opacity: 0.06,
+          background: `radial-gradient(circle, ${lightColors.ghostGlow}10 0%, transparent 70%)`,
         }}
       />
-
-      {/* Ambient particles */}
-      {PARTICLES.map((p, i) => (
-        <div
-          key={i}
-          style={{
-            position: "absolute",
-            left: p.x,
-            top: p.y,
-            width: p.size,
-            height: p.size,
-            borderRadius: "50%",
-            backgroundColor: p.color,
-            opacity: p.opacity,
-            boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
-          }}
-        />
-      ))}
 
       <div
         style={{
@@ -82,45 +51,108 @@ export const TwitterBanner: React.FC = () => {
           justifyContent: "center",
           width: "100%",
           height: "100%",
-          padding: "0 60px",
-          gap: 50,
+          padding: "0 80px 0 160px",
+          gap: 56,
         }}
       >
-        {/* Left - Logo */}
-        <GhostLogo size={340} glowOpacity={0.3} showParticles />
+        {/* Left — Logo with dark squircle */}
+        <GhostLogo size={300} glowOpacity={0.15} variant="full" />
 
-        {/* Right - Text + badges */}
+        {/* Right — Text + feature pills */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 16,
+            alignItems: "center",
+            gap: 14,
           }}
         >
+          {/* Title */}
           <div
             style={{
               ...fontStyles.title,
-              fontSize: 100,
-              color: colors.spiritWhite,
+              fontSize: 96,
+              color: lightColors.textPrimary,
               lineHeight: 1,
+              textAlign: "center",
             }}
           >
             GhostEdit
           </div>
+
+          {/* Subtitle */}
           <div
             style={{
               ...fontStyles.body,
-              fontSize: 40,
-              color: colors.etherGray,
-              lineHeight: 1.2,
+              fontSize: 36,
+              color: lightColors.textSecondary,
+              lineHeight: 1.3,
+              textAlign: "center",
             }}
           >
-            Fix your writing. Sharpen your habits.
+            Grammar correction for everyone
           </div>
-          <div style={{ display: "flex", gap: 14, marginTop: 10 }}>
-            <ProviderBadge provider="Claude" size="md" />
-            <ProviderBadge provider="Codex" size="md" />
-            <ProviderBadge provider="Gemini" size="md" />
+
+          {/* Feature pills row */}
+          <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
+            {/* Feature pills */}
+            {FEATURE_PILLS.map((pill, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 20px",
+                  borderRadius: 999,
+                  backgroundColor: lightColors.surface,
+                  border: `1px solid ${lightColors.border}`,
+                  ...fontStyles.regular,
+                  fontSize: 22,
+                  color: lightColors.textPrimary,
+                }}
+              >
+                <span>{pill.emoji}</span>
+                <span>{pill.label}</span>
+              </div>
+            ))}
+
+            {/* Cloud providers pill */}
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "8px 20px",
+                borderRadius: 999,
+                backgroundColor: lightColors.surface,
+                border: `1px solid ${lightColors.border}`,
+                ...fontStyles.regular,
+                fontSize: 22,
+                color: lightColors.textSecondary,
+              }}
+            >
+              <span>{"\u2601\uFE0F"}</span>
+              {PROVIDERS.map((p, i) => (
+                <React.Fragment key={p.name}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        backgroundColor: p.color,
+                      }}
+                    />
+                    <span style={{ color: lightColors.textPrimary }}>{p.name}</span>
+                  </span>
+                  {i < PROVIDERS.length - 1 && (
+                    <span style={{ color: lightColors.border }}>{"\u00B7"}</span>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
           </div>
         </div>
       </div>

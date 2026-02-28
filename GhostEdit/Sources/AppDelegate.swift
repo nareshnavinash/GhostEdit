@@ -830,7 +830,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             finalText = spellFixed
                             toolLabel = "Harper + Dictionary"
                         } else {
-                            finalText = trimmed
+                            let polished = self.applyRuleBasedTextFixes(trimmed)
+                            finalText = polished
                             toolLabel = spellFixed != textToFix
                                 ? "Harper + Local Model" : "Local Model"
                         }
@@ -848,6 +849,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                 newTextLength: (finalText as NSString).length, cursorDelta: 0
                             )
                         }
+                        // Tell LiveFeedback to auto-apply any remaining grammar/punctuation
+                        // fixes it detects on its next scan (e.g. comma after @mentions)
+                        self.liveFeedbackController?.requestAutoApply()
                         self.recordLocalFixHistoryEntry(original: textToFix, fixed: finalText)
                         self.showHUDWithDiff(original: textToFix, fixed: finalText, toolsUsed: toolLabel)
                         targetApp.activate(options: [])
@@ -981,27 +985,44 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Pure-text spell polish using Harper + NSSpellChecker (no AX writes).
     /// Returns the corrected text, or the original if no fixes were found.
+    /// Runs up to 3 iterative passes so that fixes revealed by earlier corrections
+    /// (e.g. missing commas that become detectable after spelling fixes) are caught.
     private func applyRuleBasedTextFixes(_ text: String) -> String {
-        let harperIssues = HarperLinter.lint(text)
-        let nsIssues = performLocalSpellCheck(text)
-        let allIssues = mergeIssues(harper: harperIssues, nsChecker: nsIssues, text: text)
-        // Filter out issues overlapping protected tokens (@mentions, :emoji:, URLs, etc.)
-        let tokenRanges = TokenPreservationSupport.tokenRanges(in: text)
-        let safeIssues = tokenRanges.isEmpty ? allIssues : allIssues.filter { issue in
-            !tokenRanges.contains { $0.intersection(issue.range) != nil }
+        var current = text
+        for _ in 0..<3 {
+            let harperIssues = HarperLinter.lint(current)
+            let nsIssues = performLocalSpellCheck(current)
+            let allIssues = mergeIssues(harper: harperIssues, nsChecker: nsIssues, text: current)
+            // Filter out issues that would mutate protected tokens (@mentions, :emoji:, URLs, etc.)
+            // but allow fixes that only add punctuation around them (e.g. @Chema → @Chema,)
+            let tokenRanges = TokenPreservationSupport.tokenRanges(in: current)
+            let nsCurrent = current as NSString
+            let safeIssues = tokenRanges.isEmpty ? allIssues : allIssues.filter { issue in
+                let overlapping = tokenRanges.filter { $0.intersection(issue.range) != nil }
+                guard !overlapping.isEmpty else { return true }
+                guard let suggestion = issue.suggestions.first else { return false }
+                return overlapping.allSatisfy { tokenRange in
+                    guard tokenRange.location + tokenRange.length <= nsCurrent.length else { return false }
+                    let tokenText = nsCurrent.substring(with: tokenRange)
+                    return suggestion.contains(tokenText)
+                }
+            }
+            let fixable = safeIssues.filter { !$0.suggestions.isEmpty }
+                .sorted { $0.range.location > $1.range.location }
+            guard !fixable.isEmpty else { break }
+            var nsText = current as NSString
+            for issue in fixable {
+                let range = issue.range
+                guard range.location + range.length <= nsText.length else { continue }
+                let wordAtRange = nsText.substring(with: range)
+                guard wordAtRange == issue.word, let replacement = issue.suggestions.first else { continue }
+                nsText = nsText.replacingCharacters(in: range, with: replacement) as NSString
+            }
+            let updated = nsText as String
+            if updated == current { break }
+            current = updated
         }
-        let fixable = safeIssues.filter { !$0.suggestions.isEmpty }
-            .sorted { $0.range.location > $1.range.location }
-        guard !fixable.isEmpty else { return text }
-        var nsText = text as NSString
-        for issue in fixable {
-            let range = issue.range
-            guard range.location + range.length <= nsText.length else { continue }
-            let wordAtRange = nsText.substring(with: range)
-            guard wordAtRange == issue.word, let replacement = issue.suggestions.first else { continue }
-            nsText = nsText.replacingCharacters(in: range, with: replacement) as NSString
-        }
-        return nsText as String
+        return current
     }
 
     /// Apply fixes using Harper + NSSpellChecker (rule-based fallback).
@@ -1016,10 +1037,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let nsIssues = performLocalSpellCheck(text)
 
         let allIssues = mergeIssues(harper: harperIssues, nsChecker: nsIssues, text: text)
-        // Filter out issues overlapping protected tokens (@mentions, :emoji:, URLs, etc.)
+        // Filter out issues that would mutate protected tokens (@mentions, :emoji:, URLs, etc.)
+        // but allow fixes that only add punctuation around them (e.g. @Chema → @Chema,)
         let tokenRanges = TokenPreservationSupport.tokenRanges(in: text)
+        let nsInput = text as NSString
         let safeIssues = tokenRanges.isEmpty ? allIssues : allIssues.filter { issue in
-            !tokenRanges.contains { $0.intersection(issue.range) != nil }
+            let overlapping = tokenRanges.filter { $0.intersection(issue.range) != nil }
+            guard !overlapping.isEmpty else { return true }
+            guard let suggestion = issue.suggestions.first else { return false }
+            return overlapping.allSatisfy { tokenRange in
+                guard tokenRange.location + tokenRange.length <= nsInput.length else { return false }
+                let tokenText = nsInput.substring(with: tokenRange)
+                return suggestion.contains(tokenText)
+            }
         }
         let fixable = safeIssues.filter { !$0.suggestions.isEmpty }
             .sorted { $0.range.location > $1.range.location }

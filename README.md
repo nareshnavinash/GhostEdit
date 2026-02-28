@@ -1,20 +1,31 @@
 # GhostEdit
 
-**Free, open-source offline grammar checker for macOS. Fix grammar, spelling, and punctuation in any app with a single hotkey — powered by local Hugging Face models, Claude, OpenAI Codex, or Gemini. The best free macOS grammar correction tool with on-device AI and no subscriptions.**
+**Free, open-source offline grammar checker for macOS. Fix grammar, spelling, and punctuation in any app with a single hotkey — powered by local Hugging Face models (T5, Gemma, Llama), Claude, OpenAI Codex, or Gemini. On-device AI grammar correction with streaming preview, live feedback, writing coach, and no subscriptions. The best free Grammarly alternative for Mac.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/Platform-macOS%2013%2B-black.svg)](https://github.com/nareshnavinash/GhostEdit/releases)
 [![Latest Release](https://img.shields.io/github/v/release/nareshnavinash/GhostEdit)](https://github.com/nareshnavinash/GhostEdit/releases/latest)
 
-> GhostEdit is a lightweight macOS menu bar app that corrects grammar, spelling, and punctuation in any text field system-wide. Press a hotkey and your text is fixed instantly — using local Hugging Face models on-device or your choice of Claude, Codex, or Gemini. No accounts, no subscriptions, no data leaves your Mac.
+> GhostEdit is a lightweight macOS menu bar app that corrects grammar, spelling, and punctuation in any text field system-wide. Press a hotkey and your text is fixed instantly — using local Hugging Face models on-device or your choice of Claude, Codex, or Gemini. Streaming preview shows corrections in real time. No accounts, no subscriptions, no data leaves your Mac.
 
 ![GhostEdit launch preview](remotion/out/TwitterBanner.png)
 
 ## Installation
 
+### Homebrew (Recommended)
+
+```bash
+brew tap nareshnavinash/ghostedit
+brew install --cask ghostedit
+```
+
+This installs GhostEdit to `/Applications`, clears the quarantine flag automatically, and supports `brew upgrade --cask ghostedit` for future updates.
+
+### Manual Download
+
 Download the latest `.dmg` from the [Releases page](https://github.com/nareshnavinash/GhostEdit/releases/latest), drag GhostEdit to Applications, and grant Accessibility permission.
 
-### 🛠 macOS Installation & Troubleshooting
+### macOS Installation & Troubleshooting
 
 Because GhostEdit is not currently signed with an Apple Developer certificate, macOS Gatekeeper may flag it and show an error saying: **"Apple could not verify 'GhostEdit' is free of malware"** or **"'GhostEdit' is damaged and can't be opened."**
 
@@ -39,53 +50,57 @@ You can now double-click the app to open it normally! (You only need to do this 
 
 ## Trailer
 
-![GhostEdit launch trailer](remotion/out/LaunchTrailer.gif)
+![GhostEdit launch trailer](remotion/out/LaunchTrailerInstant.gif)
 
 ## Why GhostEdit?
 
-- **No account required** uses AI CLIs you already have installed (Claude, Codex, Gemini). No sign-ups, no subscriptions.
-- **Privacy-first** text never leaves your machine through a third-party service. Corrections run through your own local CLI. No telemetry, no data collection.
-- **Free and open source** no premium tiers, no word limits, no feature gates. Full grammar correction, writing coaching, and history all included.
-- **Works everywhere** correct text in any macOS app: Slack, Notion, VS Code, Mail, Pages, or any text field. One hotkey, any app.
-- **Bring your own AI** switch between Claude, OpenAI Codex, and Gemini from Settings. Pick the model that works best for you.
-- **On-device grammar** local Hugging Face models (CoEdIT) and Harper provide local corrections with no API calls needed.
+- **No account required** — uses AI CLIs you already have installed (Claude, Codex, Gemini). No sign-ups, no subscriptions.
+- **Privacy-first** — text never leaves your machine through a third-party service. Corrections run through your own local CLI. No telemetry, no data collection.
+- **Free and open source** — no premium tiers, no word limits, no feature gates. Full grammar correction, streaming preview, writing coaching, and history — all included.
+- **Works everywhere** — correct text in any macOS app: Slack, Notion, VS Code, Mail, Pages, or any text field. One hotkey, any app.
+- **Bring your own AI** — switch between Claude, OpenAI Codex, and Gemini from Settings. Pick the model that works best for you.
+- **On-device grammar** — local Hugging Face models (T5, Gemma, Llama) and Harper provide fully offline corrections with no API calls needed.
+- **Streaming preview** — watch corrections appear in real time with character-level diff highlighting, then accept, regenerate, or cancel.
 
 ## How It Works
 
-1. **Press cmd+E** for a local fix — a local Hugging Face model (if configured) or Harper corrects spelling and grammar offline
-2. **Press cmd+shift+E** for a deep LLM fix — Claude, Codex, or Gemini rewrites and polishes your text with full contextual understanding
-3. **See what changed** — an optional diff preview highlights every correction before it's applied, and you can undo any fix instantly
+1. **Press cmd+E** for a local fix — a two-pass pipeline runs Harper grammar rules first, then your local Hugging Face model corrects spelling and grammar entirely offline
+2. **Press cmd+shift+E** for a deep LLM fix — Claude, Codex, or Gemini rewrites and polishes your text with full contextual understanding, shown live via streaming preview
+3. **No selection? No problem** — if no text is selected, GhostEdit automatically extracts the line at your cursor and corrects it
+4. **See what changed** — an integrated diff overlay highlights every correction in the HUD before it's applied, and you can undo any fix instantly
 
 No setup needed for local fixes. For LLM fixes, install any supported AI CLI and GhostEdit auto-detects it.
 
 ## Features
 
-### v6.0.0 Highlights
+### v7.5 Highlights
 
-- **Local Hugging Face models**: On-device grammar correction using CoEdIT or any seq2seq model — no API keys, no network, fully offline
-- **Harper bundled grammar/spell checker**: Fast, offline grammar and style checking via the Harper linting engine for comprehensive rule-based detection
-- **Redesigned floating widget**: App icon with a colored status dot indicator, positioned below the active text field (never overlapping your typing)
-- **Draggable widget**: Drag the widget anywhere on screen — it stays where you put it until you switch apps
-- **Click-to-fix with accept/ignore**: Each issue row shows action buttons — accept the fix, ignore once, or always ignore a word
-- **Acronym and proper noun awareness**: Automatically filters out acronyms (LLM, API, NASA) and proper nouns from spelling issues
-- **Dual hotkey system**: Base hotkey triggers fast local fixes (Harper + NSSpellChecker), Shift+hotkey triggers full LLM correction
-- **Per-word cursor stability**: Fixes in Slack and other apps now apply word-by-word to preserve cursor position
+- **Streaming preview with live diff**: Watch AI corrections stream in character by character with real-time diff highlighting — accept (Tab), regenerate (R), or cancel (Esc) from the preview window with change navigation
+- **Per-model custom prompt templates**: Each local Hugging Face model can have its own task prompt — customize via Settings > Local Models or `localModelPromptTemplates` in config
+- **Two-pass local correction pipeline**: cmd+E runs Harper grammar rules first, then applies your local Hugging Face model for deeper corrections — catching more issues than either engine alone
+- **Line-at-cursor extraction**: No need to select text first — GhostEdit automatically detects and corrects the entire line at your cursor position in any app
+- **Independent cloud hotkey**: Configure the cloud LLM hotkey (cmd+shift+E) separately from the local fix hotkey — both are fully customizable in Settings > Hotkey
+- **Integrated diff in HUD overlay**: The diff preview is merged directly into the ghost HUD — see corrections at a glance without a separate window
+- **Token preservation everywhere**: Mentions, URLs, emojis, and code blocks are now protected across all correction paths — local models, streaming preview, and live feedback spell-check
+- **Hardware compatibility checks**: Settings > Local Models shows RAM and disk space recommendations (Recommended / Compatible / Not Recommended) for each model based on your Mac's hardware
+- **Smart fallback with error classification**: Auto-retry distinguishes retriable errors (timeout, empty response) from non-retriable errors (CLI not found, auth required) for faster recovery
+- **Model architecture auto-detection**: Automatically detects whether a Hugging Face model is seq2seq (T5) or causal LM (Gemma, Llama) and uses the correct inference strategy
 
 ### Core Features
 
-- **Fire-and-forget correction**: Press the hotkey, switch to any app corrected text is pasted back automatically, even if the target app is in the background
-- **Native HUD overlay**: A glossy floating ghost indicator shows "Working on it..." (with spectacles) and "Done!" (idle ghost), then fades away after 1 second
+- **Fire-and-forget correction**: Press the hotkey, switch to any app — corrected text is pasted back automatically, even if the target app is in the background
+- **Native HUD overlay**: A glossy floating ghost indicator shows "Working on it..." (with spectacles) and "Done!" (idle ghost) with integrated diff, then fades away
 - **Smart paste-back**: Uses accessibility (AX) text replacement for native apps (no focus change needed), with delayed verification and automatic clipboard fallback for Electron apps (Slack, Discord, VS Code)
 - **Multi-provider support**: Choose between Claude, OpenAI Codex, and Gemini — switch providers and models from Settings
 - **Multi-language support**: Correct text in 30+ languages — auto-detect or pick a specific language in Settings
 - **Tone presets**: Switch between Default, Casual, Professional, Academic, and Slack tones from the menu bar
 - **Writing coach**: **Sharpen My Writing Style** analyzes your past corrections and shows what you do well plus areas to improve
-- **Token preservation**: Mentions, emojis, URLs, emails, file paths, and inline code are preserved during correction
+- **Token preservation**: Mentions, emojis, URLs, emails, file paths, and inline code are preserved during correction across all paths (cloud, local, streaming, live feedback)
 - **Correction history**: Browse, copy, and export past corrections as CSV
 - **Statistics dashboard**: View correction counts, success rates, provider/model breakdown, and estimated token usage
-- **Diff preview**: Optional word-level diff window with red/green highlights shows changes before applying — enable via Settings or `showDiffPreview` in config
+- **Diff preview**: Word-level diff integrated into the HUD overlay with red/green highlights showing changes before applying — enable via Settings or `showDiffPreview` in config
 - **Undo last correction**: Revert the most recent correction via menu bar
-- **Auto-retry with fallback model**: If the selected model fails, GhostEdit automatically retries with the next available model
+- **Auto-retry with fallback model**: If the selected model fails, GhostEdit automatically retries with the next available model — with smart error classification to skip non-retriable failures
 - **Per-app profiles**: Configure different tone, model, or provider per application via `~/.ghostedit/profiles.json`
 - **Export/import settings**: Back up or transfer your full configuration (settings + prompt) as a single JSON file
 - **Customizable prompt**: Tailor the AI instructions in `~/.ghostedit/prompt.txt`
@@ -104,9 +119,20 @@ No setup needed for local fixes. For LLM fixes, install any supported AI CLI and
   - ![Idle menubar icon](remotion/out/MenuBarIconIdle.png) idle
   - ![Processing menubar icon](remotion/out/MenuBarIconProcessing.png) processing
 
+### Streaming Preview
+
+When you trigger a cloud LLM correction (cmd+shift+E), GhostEdit opens a streaming preview window that shows the AI response as it arrives — character by character with real-time diff highlighting.
+
+**Controls:**
+- **Tab** — Accept the correction and paste it back
+- **R** — Regenerate (re-run the correction without closing the window)
+- **Esc** — Cancel and discard the correction
+
+The preview shows a character-level diff with added text in green and removed text in red. Use the prev/next change navigation buttons to jump between changes. A live character count updates as the response streams in.
+
 ### Live Feedback
 
-When enabled in **Settings > Behavior**, a floating widget appears near the active text field and checks your writing in real time using macOS built-in text checking — no AI API calls needed.
+When enabled in **Settings > Behavior**, a floating widget appears near the active text field and checks your writing in real time using macOS built-in text checking and Harper — no AI API calls needed.
 
 **What it detects:**
 
@@ -123,7 +149,7 @@ The widget shows a colored status dot (green = clean, red = issues found). Click
 
 ### Dual Hotkey: Local Fix vs LLM Fix
 
-GhostEdit gives you two ways to fix text. The base hotkey (cmd+E) runs entirely on your Mac — no internet, no API keys, no delay. The shift variant (cmd+shift+E) sends text to a cloud AI for deeper rewrites. Most people use cmd+E for everyday typos and switch to cmd+shift+E only when they need serious polishing.
+GhostEdit gives you two ways to fix text, each with its own fully configurable hotkey. The base hotkey (cmd+E) runs entirely on your Mac — no internet, no API keys, no delay. The cloud hotkey (cmd+shift+E) sends text to a cloud AI for deeper rewrites with streaming preview. Both hotkeys can be customized independently in **Settings > Hotkey**.
 
 Here's how they compare:
 
@@ -131,42 +157,45 @@ Here's how they compare:
 |---|---|---|
 | **Speed** | Instant (Harper) or 2-10s (local model) | 2-5 seconds |
 | **Network** | None (fully offline) | Requires AI CLI |
-| **Engine** | Local Hugging Face model or Harper + NSSpellChecker | Claude, Codex, or Gemini |
+| **Engine** | Two-pass: Harper rules → local Hugging Face model | Claude, Codex, or Gemini |
 | **Spelling** | Yes | Yes |
 | **Grammar** | Yes (local model) / Basic (Harper) | Yes (contextual) |
 | **Punctuation** | Yes (local model) / No (Harper) | Yes |
 | **Rewrites** | Light corrections only | Full sentence restructuring |
+| **Preview** | Instant apply | Streaming preview with diff |
+| **No selection** | Extracts line at cursor | Extracts line at cursor |
 | **Best for** | Quick typo fixes, Slack messages, emails | Polishing important text, deep rewrites |
 
 For most day-to-day corrections (fixing typos in Slack, emails, quick notes), cmd+E handles it instantly. Use cmd+shift+E when you need deeper rewrites or the local fix didn't catch something.
 
 ### Local Models (Hugging Face)
 
-GhostEdit supports on-demand local model inference using Hugging Face models (CoEdIT, T5, Gemma, Llama, and more). Both seq2seq and causal LM architectures are auto-detected. Models run entirely on your Mac via Python — no API keys, no network, no data leaves your machine.
+GhostEdit supports on-demand local model inference using Hugging Face models (T5, Gemma, Llama, and more). Both seq2seq and causal LM architectures are auto-detected. Models run entirely on your Mac via Python — no API keys, no network, no data leaves your machine.
 
 **Why this matters:**
 - **No API keys** — download a model once, use it forever
 - **No internet required** — corrections run entirely on-device after download
 - **No data leaves your Mac** — your text stays private, always
-- **Any Hugging Face model** — use CoEdIT, Gemma, Llama, or bring any model (seq2seq and causal LM auto-detected)
+- **Any Hugging Face model** — use Gemma, Llama, or bring any model (seq2seq and causal LM auto-detected)
+- **Custom prompts per model** — each model can have its own task prompt for optimal results
 
 **How to set up:**
 1. Open **Settings > Local Models**
 2. Ensure Python 3.9+ is detected (install via Homebrew if needed: `brew install python`)
 3. Click **Install Packages** to install `transformers` and `torch` via pip
-4. Click **Pull** next to a model (e.g., CoEdIT Large, ~3GB)
+4. Click **Pull** next to a model (e.g., T5 Base Grammar, ~0.9GB) — hardware compatibility is shown for each model
 5. Select the model as active — cmd+E now uses it for corrections
 
-**Recommended models:**
+**Recommended model:**
 
 | Model | Parameters | Disk | Best for |
 |-------|-----------|------|----------|
-| CoEdIT Small | 77M | 0.3 GB | Fast corrections, low RAM |
-| CoEdIT Base | 220M | 0.9 GB | Good balance of speed and quality |
-| CoEdIT Large | 770M | 3.0 GB | Best quality for most users |
-| CoEdIT XL | 3B | 11 GB | Maximum quality, needs 16+ GB RAM |
+| T5 Base Grammar | 220M | 0.9 GB | Good balance of speed and quality |
 
-**Custom models:** Add any Hugging Face model by entering its repo ID (e.g., `google/gemma-3-4b-it`) or URL in Settings > Local Models > Add Custom Model. GhostEdit auto-detects whether the model is seq2seq or causal LM and uses the appropriate inference strategy. Custom models can be removed via the Delete button.
+**Custom models:** Add any Hugging Face model by entering its repo ID (e.g., `google/gemma-3-4b-it`) or URL in Settings > Local Models > Add Custom Model. GhostEdit auto-detects whether the model is seq2seq or causal LM and uses the appropriate inference strategy. Each custom model can have its own task prompt template. Custom models can be removed via the Delete button.
+
+**Per-model prompt templates:**
+Each local model can have a custom task prompt. For example, T5 models work best with `"grammar: {text}"`. Configure via Settings > Local Models or set `localModelPromptTemplates` in config.json.
 
 **Hugging Face Authentication:**
 Some models (e.g., Gemma, Llama) are "gated" and require a HuggingFace account and access token. Three ways to authenticate:
@@ -182,7 +211,7 @@ Your token is stored at `~/.huggingface/token` (the standard HuggingFace locatio
 - Python 3.9+ (install via Homebrew: `brew install python`)
 - `transformers`, `torch`, and `huggingface_hub` Python packages
 - Sufficient disk space for the chosen model
-- 8+ GB RAM recommended (16+ GB for CoEdIT XL)
+- 8+ GB RAM recommended
 
 ### Prerequisites
 
@@ -195,6 +224,14 @@ Your token is stored at `~/.huggingface/token` (the standard HuggingFace locatio
 | Claude | `brew install claude` or [download](https://claude.com/claude-code) | `claude auth login` |
 | OpenAI Codex | `npm install -g @openai/codex` | `codex login` |
 | Gemini | `npm install -g @anthropic-ai/gemini` | `gemini` |
+
+**Supported models:**
+
+| Provider | Models |
+|----------|--------|
+| Claude | claude-haiku-4-5, claude-sonnet-4-5, claude-sonnet-4-6, claude-opus-4-6, haiku, sonnet, opus |
+| OpenAI Codex | gpt-5-codex, gpt-5.3-codex, gpt-5 |
+| Gemini | gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.5-pro, gemini-3-flash-preview, gemini-3-pro-preview, gemini-3.1-pro-preview |
 
 ## Build from Source
 
@@ -236,12 +273,14 @@ Default `config.json`:
   "codexPath": "",
   "geminiPath": "",
   "provider": "claude",
-  "model": "haiku",
+  "model": "sonnet",
   "hotkeyKeyCode": 14,
   "hotkeyModifiers": 256,
-  "timeoutSeconds": 30,
+  "cloudHotkeyKeyCode": 14,
+  "cloudHotkeyModifiers": 768,
+  "timeoutSeconds": 60,
   "launchAtLogin": false,
-  "historyLimit": 200,
+  "historyLimit": 50,
   "developerMode": false,
   "language": "auto",
   "tonePreset": "default",
@@ -250,9 +289,10 @@ Default `config.json`:
   "clipboardOnlyMode": false,
   "showDiffPreview": false,
   "liveFeedbackEnabled": false,
-  "diffPreviewDuration": 3,
+  "diffPreviewDuration": 5,
   "localModelRepoID": "",
   "localModelCustomModels": "[]",
+  "localModelPromptTemplates": "{}",
   "localModelPythonPath": ""
 }
 ```
@@ -263,17 +303,20 @@ Notes:
 - `claudePath`, `codexPath`, and `geminiPath` can be empty if auto-discovery works.
 - If auto-discovery fails, set an absolute path for that provider.
 - If a model is busy/fails, GhostEdit automatically retries with the next available model.
+- `hotkeyKeyCode` / `hotkeyModifiers` control the local fix hotkey (cmd+E by default).
+- `cloudHotkeyKeyCode` / `cloudHotkeyModifiers` control the cloud LLM hotkey (cmd+shift+E by default).
 - `historyLimit` controls how many recent corrections are kept in `history.json`.
 - `language` can be `"auto"` (detect input language) or a specific code like `"en"`, `"es"`, `"fr"`, etc.
 - `tonePreset` can be `"default"`, `"casual"`, `"professional"`, `"academic"`, or `"slack"`.
 - `soundFeedbackEnabled` plays audio cues on success/error.
 - `notifyOnSuccess` sends a macOS notification when a correction completes.
 - `clipboardOnlyMode` places corrected text on the clipboard without pasting it back.
-- `showDiffPreview` shows a word-level diff preview window before applying the correction.
+- `showDiffPreview` shows a word-level diff preview in the HUD overlay before applying the correction.
 - `liveFeedbackEnabled` enables real-time spelling, grammar, and style checking in a floating widget.
-- `diffPreviewDuration` seconds to show the diff popup before auto-dismissing (1-30, default 3).
+- `diffPreviewDuration` seconds to show the diff popup before auto-dismissing (1-30, default 5).
 - `localModelRepoID` active Hugging Face model repo ID (e.g., `"grammarly/coedit-large"`). Empty = no local model.
 - `localModelCustomModels` JSON-encoded array of custom model entries added by the user.
+- `localModelPromptTemplates` JSON-encoded dictionary mapping model repo IDs to custom task prompts (e.g., `{"vennify/t5-base-grammar-correction": "grammar: {text}"}`).
 - `localModelPythonPath` override for the Python 3 executable path. Empty = auto-detect.
 
 ### Per-App Profiles
@@ -298,7 +341,7 @@ Each profile can override `tonePreset`, `model`, and `provider` for a specific a
 
 ## Protected Tokens During Correction
 
-To keep platform-specific syntax intact (especially in Slack), GhostEdit replaces static tokens with placeholders before sending text to the model, then restores them after correction.
+To keep platform-specific syntax intact (especially in Slack), GhostEdit replaces static tokens with placeholders before sending text to the model, then restores them after correction. Token preservation works across all correction paths: cloud LLM, local model, streaming preview, and live feedback.
 
 Protected token types:
 - Mentions: `@name`, `@<id>`, and `<@id>`
@@ -312,7 +355,7 @@ Protected token types:
 
 Failure behavior:
 - If the model edits/removes placeholder tokens, GhostEdit retries once automatically.
-- If the retry still fails, GhostEdit performs a best-effort restoration any placeholders the model preserved are restored, and the correction still succeeds.
+- If the retry still fails, GhostEdit performs a best-effort restoration — any placeholders the model preserved are restored, and the correction still succeeds.
 
 Practical effect:
 - Grammar/spelling/punctuation are still corrected.
@@ -359,8 +402,8 @@ Run the full test+coverage gate:
 ```
 
 This gate enforces:
-- Unit tests must pass.
-- 100% line coverage on all core source files.
+- All 684+ unit and integration tests must pass.
+- 100% line coverage on 40+ guarded source files.
 
 The same gate is wired into:
 - `.githooks/pre-commit`
@@ -414,7 +457,8 @@ A workflow is included at `.github/workflows/release.yml`.
 ## Privacy
 
 - No accounts, no telemetry, no data collection.
-- Text is processed locally through your own AI CLI nothing is sent to GhostEdit servers (there are none).
+- Text is processed locally through your own AI CLI — nothing is sent to GhostEdit servers (there are none).
+- Local model inference runs entirely on-device — your text never leaves your Mac.
 - This repo does not store local user prompt/config files from `~/.ghostedit`.
 
 Before pushing, verify no local secrets were added:
@@ -422,6 +466,18 @@ Before pushing, verify no local secrets were added:
 ```bash
 rg -n "(api[_-]?key|token|secret|password|PRIVATE KEY)" .
 ```
+
+## Acknowledgments
+
+GhostEdit is built on the shoulders of excellent open-source projects. A huge thank you to the teams and individuals behind them:
+
+- **[Harper](https://github.com/automattic/harper)** — The fast, privacy-first grammar checker written in Rust by Automattic. Harper powers GhostEdit's rule-based grammar and punctuation detection in both the local fix pipeline and live feedback, running entirely on-device with zero network calls. Thank you to the Harper team for building such a capable and lightweight grammar engine.
+
+- **[T5 Base Grammar Correction](https://huggingface.co/vennify/t5-base-grammar-correction)** by [Vennify](https://huggingface.co/vennify) — The default local model that powers GhostEdit's on-device grammar correction. This fine-tuned T5 model provides a great balance of speed and quality for everyday text correction. Thank you to the Vennify team for making this model freely available on Hugging Face.
+
+- **[Hugging Face Transformers](https://github.com/huggingface/transformers)** — The library that makes it possible to run local model inference on Mac. GhostEdit uses Transformers to download, load, and run Hugging Face models entirely on-device via Python.
+
+- **Apple NSSpellChecker** — macOS built-in spell and grammar checking APIs that complement Harper for comprehensive text analysis including smart quotes, em-dashes, and autocorrect suggestions.
 
 ## License
 

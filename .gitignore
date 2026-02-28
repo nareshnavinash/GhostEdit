@@ -16,3 +16,6 @@ DerivedData/
 # Release artifacts
 *.dmg
 *.zip
+
+# Homebrew tap (separate repo cloned locally)
+homebrew-ghostedit/

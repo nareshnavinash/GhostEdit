@@ -4,7 +4,7 @@
 A macOS menu bar app (AppKit, no SwiftUI/XIBs) that fixes grammar/spelling in any text field system-wide. User presses a hotkey, selected text is sent to an LLM (Claude/Gemini/Codex), corrected text is pasted back. Supports streaming preview, diff view, writing coach, and history.
 
 **Repo:** https://github.com/nareshnavinash/GhostEdit.git
-**Version:** 7.5.0 (build 35) | **macOS 13.0+** | **Swift 5**
+**Version:** 7.7.0 (build 37) | **macOS 13.0+** | **Swift 5**
 
 ## Architecture
 
@@ -53,7 +53,7 @@ Each is a standalone `final class` communicating via closures/references passed 
 | `SettingsWindowController.swift` | 2,275 | `SettingsWindowController` | Tabbed settings: General / Hotkey / Behavior / Advanced. `NSToolbarDelegate` |
 | `HistoryWindowController.swift` | 605 | `HistoryWindowController` | Table with search, filter, badges. Contains `HistoryCopyTableView` (private) |
 | `HUDOverlayController.swift` | 585 | `HUDOverlayController` | Ghost overlay with animations. Contains `CGPath` extension (private) |
-| `LiveFeedbackController.swift` | 1,414 | `LiveFeedbackController` | Real-time spell/grammar feedback panel. Contains `IssueRowView` (private) |
+| `LiveFeedbackController.swift` | 1,414 | `LiveFeedbackController` | Real-time spell/grammar feedback panel. `requestAutoApply()` for cmd+E post-fix cleanup. Contains `IssueRowView` (private) |
 
 #### Infrastructure (non-UI services)
 
@@ -81,7 +81,7 @@ Each is a standalone `final class` communicating via closures/references passed 
 | `DiffSupport.swift` | 225 | `wordDiff()` for summaries/counts, `charDiff()` for display highlighting |
 | `AccessibilityTextSupport.swift` | 212 | AX text extraction helpers |
 | `SpellCheckSupport.swift` | 188 | `SpellCheckIssue` struct, NSSpellChecker integration |
-| `LocalModelSupport.swift` | 155 | Local model configuration and validation |
+| `LocalModelSupport.swift` | 155 | Local model configuration and validation. Single recommended model: `vennify/t5-base-grammar-correction` |
 | `ClaudeRuntimeSupport.swift` | 143 | Claude API formatting |
 | `HUDOverlaySupport.swift` | 133 | HUD layout calculations |
 | `HotkeySupport.swift` | 119 | Hotkey string parsing/formatting |
@@ -106,9 +106,20 @@ Each is a standalone `final class` communicating via closures/references passed 
 | `AccessibilitySupport.swift` | 11 | AX permission check |
 
 ### Key Correction Flow
+
+**Local Fix (cmd+E):**
+1. `handleLocalFixHotkey()` → copy selection → `applyRuleBasedTextFixes()` (iterative, up to 3 passes of Harper + NSSpellChecker)
+2. If local model configured: send spell-fixed text to model → `applyRuleBasedTextFixes()` on model output (post-model polish)
+3. Write corrected text back via AX → `liveFeedbackController.requestAutoApply()` (auto-applies any remaining grammar fixes LiveFeedback detects on next scan)
+
+**Cloud Fix (cmd+shift+E):**
 1. `handleHotkeyTrigger()` → `attemptCopySelection()` → `waitForCopiedText()` → `processSelectedText()`
 2. Non-streaming: `shellRunner.correctTextPreservingTokens()` → `recordHistoryEntry(succeeded: true)` → paste via AX or clipboard
 3. Streaming: `shellRunner.correctTextStreaming()` → `StreamingPreviewController.markComplete()` → user accepts/cancels
+
+**Token Protection:** Issues overlapping protected tokens (@mentions, URLs, etc.) are filtered, but fixes that preserve the token text and only add punctuation (e.g., `@Chema → @Chema,`) are allowed through.
+
+**LiveFeedback Auto-Apply:** After cmd+E writes text back, `requestAutoApply()` clears LiveFeedback's scan cache and sets a flag. On the next polling cycle, LiveFeedback re-checks the text, and if fixable issues remain, auto-applies them via `applyAllFixes()`.
 
 ### Key Types
 - `AppConfig` (in ConfigManager.swift) — all user settings
@@ -124,7 +135,7 @@ Each is a standalone `final class` communicating via closures/references passed 
 # Build release
 xcodebuild build -project GhostEdit.xcodeproj -scheme GhostEdit -configuration Release
 
-# Run tests (684+ tests)
+# Run tests (989+ tests)
 xcodebuild test -project GhostEdit.xcodeproj -scheme GhostEditTests -destination 'platform=macOS'
 
 # Full coverage check (what pre-commit/pre-push hooks run)
@@ -149,11 +160,17 @@ open /Applications/GhostEdit.app
 
 ## Release Flow
 ```bash
-# Bump version in project.yml (MARKETING_VERSION + CURRENT_PROJECT_VERSION)
-# Then: xcodegen generate --spec project.yml
-# Build, test, commit, push (hooks run tests), then:
-gh release create vX.Y.Z --title "..." --notes "..."
+# 1. Bump version in project.yml (MARKETING_VERSION + CURRENT_PROJECT_VERSION)
+# 2. Regenerate: xcodegen generate --spec project.yml
+# 3. Build, test, commit, push (hooks run tests)
+# 4. Publish release + update Homebrew tap (builds, tags, uploads DMG/ZIP, updates cask):
+./scripts/publish_release.sh
 ```
+
+### Homebrew Tap
+The `homebrew-ghostedit/` directory is a clone of `nareshnavinash/homebrew-ghostedit` (gitignored).
+`publish_release.sh` auto-updates `Casks/ghostedit.rb` with the new version and sha256, then pushes.
+Users install via: `brew tap nareshnavinash/ghostedit && brew install --cask ghostedit`
 
 ## Key Config
 - Config dir: `~/.ghostedit/` (migrated from `~/.grammarfixer/`)

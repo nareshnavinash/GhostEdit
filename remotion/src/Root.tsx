@@ -13,6 +13,7 @@ import { ProductHuntThumbnail } from "./stills/ProductHuntThumbnail";
 
 // Video
 import { LaunchTrailer } from "./video/LaunchTrailer";
+import { LaunchTrailerInstant } from "./video/LaunchTrailerInstant";
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -34,6 +35,16 @@ export const RemotionRoot: React.FC = () => {
         id="LaunchTrailer"
         component={LaunchTrailer}
         durationInFrames={905}
+        fps={30}
+        width={1920}
+        height={1080}
+      />
+
+      {/* === Instant Mode Light Trailer === */}
+      <Composition
+        id="LaunchTrailerInstant"
+        component={LaunchTrailerInstant}
+        durationInFrames={900}
         fps={30}
         width={1920}
         height={1080}
