@@ -61,7 +61,7 @@ final class StreamingPreviewController: NSWindowController {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
+    required init?(coder: NSCoder) { fatalError("StreamingPreviewController does not support NSCoder") }
 
     func updateStreaming(accumulatedText: String) {
         let charCount = accumulatedText.count
@@ -528,7 +528,7 @@ private final class LineNumberRulerView: NSRulerView {
     }
 
     @available(*, unavailable)
-    required init(coder: NSCoder) { fatalError() }
+    required init(coder: NSCoder) { fatalError("LineNumberRulerView does not support NSCoder") }
 
     @objc private func textDidChange(_ notification: Notification) {
         needsDisplay = true

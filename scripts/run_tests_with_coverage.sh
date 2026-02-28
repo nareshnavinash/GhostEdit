@@ -87,6 +87,13 @@ REQUIRED_FILES=(
   "$ROOT_DIR/GhostEdit/Sources/HardwareCompatibilitySupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/LocalFixSupport.swift"
   "$ROOT_DIR/GhostEdit/Sources/StatusDisplaySupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/CorrectionPipelineSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/SettingsValidationSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/WidgetPositioningSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/HistoryFilterSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/StreamingPreviewLogic.swift"
+  "$ROOT_DIR/GhostEdit/Sources/HUDContentSupport.swift"
+  "$ROOT_DIR/GhostEdit/Sources/LiveFeedbackStateMachine.swift"
 )
 
 xcrun llvm-cov report \

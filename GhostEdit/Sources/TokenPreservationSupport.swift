@@ -107,10 +107,8 @@ enum TokenPreservationSupport {
     /// Placeholders the AI removed are simply absent from the result.
     static func bestEffortRestore(in output: String, tokens: [ProtectedToken]) -> String {
         var restored = output
-        for token in tokens {
-            if restored.contains(token.placeholder) {
-                restored = restored.replacingOccurrences(of: token.placeholder, with: token.originalToken)
-            }
+        for token in tokens where restored.contains(token.placeholder) {
+            restored = restored.replacingOccurrences(of: token.placeholder, with: token.originalToken)
         }
         return restored
     }

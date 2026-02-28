@@ -77,8 +77,7 @@ enum ClaudeRuntimeSupport {
             || normalized.contains("\(provider.executableName) auth login")
             || normalized.contains("api error: 401")
             || normalized.contains("unauthorized")
-            || normalized.contains("invalid credentials")
-        {
+            || normalized.contains("invalid credentials") {
             return .authenticationRequired(provider: provider)
         }
 

@@ -73,7 +73,7 @@ final class HistoryWindowController: NSWindowController, NSTableViewDataSource, 
         // Apply search query
         if !searchQuery.isEmpty {
             let query = searchQuery.lowercased()
-            zipped = zipped.filter { entry, row in
+            zipped = zipped.filter { _, row in
                 row.original.lowercased().contains(query)
                     || row.generated.lowercased().contains(query)
                     || row.provider.lowercased().contains(query)

@@ -33,7 +33,7 @@ final class DiffPreviewController: NSWindowController {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
+    required init?(coder: NSCoder) { fatalError("DiffPreviewController does not support NSCoder") }
 
     private func buildUI() {
         guard let window = window else { return }

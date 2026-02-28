@@ -143,7 +143,7 @@ final class PersistentCLISession: PersistentCLISessionProtocol {
             self.outputCondition.unlock()
         }
 
-        process.terminationHandler = { [weak self] proc in
+        process.terminationHandler = { [weak self] _ in
             guard let self else { return }
             self.lock.lock()
             self.state = .dead

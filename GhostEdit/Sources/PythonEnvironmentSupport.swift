@@ -62,10 +62,9 @@ enum PythonEnvironmentSupport {
     }
 
     static func detectPythonPath(homeDirectoryPath: String, searchPaths: [String]? = nil) -> String {
-        for path in (searchPaths ?? pythonSearchPaths(homeDirectoryPath: homeDirectoryPath)) {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
+        for path in (searchPaths ?? pythonSearchPaths(homeDirectoryPath: homeDirectoryPath))
+            where FileManager.default.fileExists(atPath: path) {
+            return path
         }
         return "/usr/bin/python3"
     }

@@ -66,10 +66,8 @@ final class ClipboardManager {
             let item = NSPasteboardItem()
             var hasEntry = false
 
-            for entry in payload.entries {
-                if item.setData(entry.data, forType: entry.type) {
-                    hasEntry = true
-                }
+            for entry in payload.entries where item.setData(entry.data, forType: entry.type) {
+                hasEntry = true
             }
 
             return hasEntry ? item : nil

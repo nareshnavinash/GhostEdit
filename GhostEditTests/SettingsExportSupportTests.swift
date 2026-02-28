@@ -36,7 +36,7 @@ final class SettingsExportSupportTests: XCTestCase {
     }
 
     func testImportFromInvalidDataThrows() {
-        let data = "not json".data(using: .utf8)!
+        let data = Data("not json".utf8)
         XCTAssertThrowsError(try SettingsExportSupport.importSettings(from: data))
     }
 

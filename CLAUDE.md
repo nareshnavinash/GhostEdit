@@ -4,7 +4,7 @@
 A macOS menu bar app (AppKit, no SwiftUI/XIBs) that fixes grammar/spelling in any text field system-wide. User presses a hotkey, selected text is sent to an LLM (Claude/Gemini/Codex), corrected text is pasted back. Supports streaming preview, diff view, writing coach, and history.
 
 **Repo:** https://github.com/nareshnavinash/GhostEdit.git
-**Version:** 6.0.0 (build 26) | **macOS 13.0+** | **Swift 5**
+**Version:** 7.5.0 (build 35) | **macOS 13.0+** | **Swift 5**
 
 ## Architecture
 
@@ -13,23 +13,110 @@ A macOS menu bar app (AppKit, no SwiftUI/XIBs) that fixes grammar/spelling in an
 - **GhostEdit** — App. Only main.swift + assets. Links GhostEditCore.
 - **GhostEditTests** — Unit tests. Tests GhostEditCore.
 
-### Source Files (33 files, ~9K lines in `GhostEdit/Sources/`)
-The main file is **AppDelegate.swift** (~4,600 lines) containing:
-- `AppDelegate` (lines 6-1856) — Menu bar, hotkey handling, text processing pipeline
-- `DeveloperConsoleController` (1871-2001) — Log viewer
-- `DiffPreviewController` (2003-2151) — Side-by-side diff
-- `StreamingPreviewController` (2153-2647) — Live streaming + char-level diff + change nav
-- `LineNumberRulerView` (2651-2736) — Gutter line numbers
-- `SettingsWindowController` (2738-3636) — Tabbed settings (General/Hotkey/Behavior/Advanced)
-- `HistoryWindowController` (3638-4219) — Table with search, filter, badges
-- `HUDOverlayController` (4242-4556) — Ghost overlay with animations
+### Source Files (49 files, ~14K lines in `GhostEdit/Sources/`)
 
-All other files are **pure-logic Support modules** (no AppKit imports) that are 100% testable.
+#### AppDelegate (~2,600 lines) — Orchestration & UI
+Contains the `AppDelegate` class and `extension AppDelegate: DeveloperModeLogger`. Organized with MARK sections:
+
+| MARK Section | Line | What It Does |
+|---|---|---|
+| Properties | 8 | All stored properties (windows, controllers, state) |
+| App Lifecycle | 66 | `applicationDidFinishLaunching`, setup, teardown |
+| Menu Bar Setup | 116 | Status item, menus, NSMenu construction |
+| Menu Actions | 399 | Menu item handlers (settings, history, quit, etc.) |
+| Hotkey Registration | 463 | Carbon hotkey registration/deregistration |
+| Local Fix Pipeline (cmd+E) | 713 | `handleHotkeyTrigger()` → copy → process → paste pipeline |
+| Cloud Fix Pipeline (cmd+shift+E) | 1159 | Cloud LLM correction flow |
+| Streaming | 1582 | Streaming preview coordination |
+| Text Application & Write-back | 1694 | Paste corrected text via AX or clipboard |
+| HUD Management | 1815 | Show/hide/update HUD overlay |
+| Processing State | 1853 | Processing flag management |
+| Accessibility & Alerts | 1864 | Permission checks, alert dialogs |
+| Sound & Notifications | 1937 | Audio feedback, user notifications |
+| Status Bar | 1980 | Menu bar status text & color dot (delegates to `StatusDisplaySupport`) |
+| Window Presentation | 2035 | Present settings, history, diff, streaming windows |
+| Settings Import/Export | 2104 | Settings file import/export via NSSavePanel |
+| Update Check | 2164 | GitHub release update checking |
+| Writing Coach | 2241 | Writing coach panel management |
+| History | 2495 | History recording helpers |
+| Clipboard | 2505 | Clipboard utilities |
+| Developer Mode | 2528 | Developer console, logging |
+
+#### 7 Controller Files (extracted from AppDelegate)
+Each is a standalone `final class` communicating via closures/references passed at init.
+
+| File | Lines | Class | Purpose |
+|---|---|---|---|
+| `DeveloperConsoleController.swift` | 133 | `DeveloperConsoleController` | Log viewer with text view, clear/copy buttons |
+| `DiffPreviewController.swift` | 151 | `DiffPreviewController` | Side-by-side diff with apply/cancel |
+| `StreamingPreviewController.swift` | 592 | `StreamingPreviewController` | Live streaming + char-level diff + change navigation. Also contains `FlippedClipView` (internal) and `LineNumberRulerView` (private) |
+| `SettingsWindowController.swift` | 2,275 | `SettingsWindowController` | Tabbed settings: General / Hotkey / Behavior / Advanced. `NSToolbarDelegate` |
+| `HistoryWindowController.swift` | 605 | `HistoryWindowController` | Table with search, filter, badges. Contains `HistoryCopyTableView` (private) |
+| `HUDOverlayController.swift` | 585 | `HUDOverlayController` | Ghost overlay with animations. Contains `CGPath` extension (private) |
+| `LiveFeedbackController.swift` | 1,414 | `LiveFeedbackController` | Real-time spell/grammar feedback panel. Contains `IssueRowView` (private) |
+
+#### Infrastructure (non-UI services)
+
+| File | Lines | Purpose |
+|---|---|---|
+| `ShellRunner.swift` | 715 | Runs CLI tools, `correctTextPreservingTokens()`, `correctTextStreaming()` |
+| `ConfigManager.swift` | 537 | Reads/writes `~/.ghostedit/config.json`, `AppConfig` struct |
+| `PersistentCLISession.swift` | 542 | Long-lived CLI process for streaming |
+| `PersistentShellSession.swift` | 214 | Shell session management |
+| `LocalModelRunner.swift` | 343 | Local ML model inference |
+| `HotkeyManager.swift` | 228 | Carbon hotkey registration |
+| `ClipboardManager.swift` | 169 | NSPasteboard read/write |
+| `CorrectionHistoryStore.swift` | 94 | Persists `history.json` |
+| `HistoryTableModel.swift` | 59 | Filtering/sorting for history table |
+| `HistoryCSVExporter.swift` | 53 | Export history to CSV |
+| `HarperBridge.swift` | 61 | FFI bridge to Harper spell-checker |
+| `LaunchAtLoginManager.swift` | 27 | Launch-at-login toggle |
+
+#### Pure-Logic Support Modules (enum namespaces, no AppKit, 100% tested)
+
+| File | Lines | Key Methods |
+|---|---|---|
+| `TokenPreservationSupport.swift` | 286 | `preserveTokens()`, `restoreTokens()` — protect URLs, emails, code blocks from LLM changes |
+| `WritingCoachSupport.swift` | 244 | `analyzeWriting()`, `formatFeedback()` — writing quality analysis |
+| `DiffSupport.swift` | 225 | `wordDiff()` for summaries/counts, `charDiff()` for display highlighting |
+| `AccessibilityTextSupport.swift` | 212 | AX text extraction helpers |
+| `SpellCheckSupport.swift` | 188 | `SpellCheckIssue` struct, NSSpellChecker integration |
+| `LocalModelSupport.swift` | 155 | Local model configuration and validation |
+| `ClaudeRuntimeSupport.swift` | 143 | Claude API formatting |
+| `HUDOverlaySupport.swift` | 133 | HUD layout calculations |
+| `HotkeySupport.swift` | 119 | Hotkey string parsing/formatting |
+| `CorrectionStatisticsSupport.swift` | 108 | Stats computation from history |
+| `LiveFeedbackSupport.swift` | 103 | Issue filtering, dedup for live feedback |
+| `PythonEnvironmentSupport.swift` | 92 | Python env detection for local models |
+| `HardwareCompatibilitySupport.swift` | 85 | Hardware capability checks |
+| `DeveloperModeSupport.swift` | 67 | Dev mode state/log formatting |
+| `MenuBarIconSupport.swift` | 59 | Menu bar icon rendering |
+| `StreamingPreviewSupport.swift` | 58 | Streaming text processing |
+| `AppProfileSupport.swift` | 58 | Per-app profile matching |
+| `TooltipSupport.swift` | 57 | Tooltip text generation |
+| `PartialCorrectionSupport.swift` | 55 | Partial text correction logic |
+| `TokenEstimationSupport.swift` | 54 | Token count estimation |
+| `UpdateCheckSupport.swift` | 50 | GitHub release version comparison |
+| `SettingsExportSupport.swift` | 48 | Settings serialization |
+| `LocalFixSupport.swift` | 37 | `extractLineAtCursor()`, `mergeIssues()` — local fix pipeline helpers |
+| `FallbackSupport.swift` | 37 | Fallback provider logic |
+| `WritingCoachLayoutSupport.swift` | 31 | Writing coach panel layout |
+| `StatusDisplaySupport.swift` | 22 | `statusColor(for:)` → `.green`/`.orange`/`.red` based on status text |
+| `SettingsLayoutSupport.swift` | 16 | Settings panel layout constants |
+| `AccessibilitySupport.swift` | 11 | AX permission check |
 
 ### Key Correction Flow
 1. `handleHotkeyTrigger()` → `attemptCopySelection()` → `waitForCopiedText()` → `processSelectedText()`
 2. Non-streaming: `shellRunner.correctTextPreservingTokens()` → `recordHistoryEntry(succeeded: true)` → paste via AX or clipboard
 3. Streaming: `shellRunner.correctTextStreaming()` → `StreamingPreviewController.markComplete()` → user accepts/cancels
+
+### Key Types
+- `AppConfig` (in ConfigManager.swift) — all user settings
+- `CorrectionHistoryEntry` with `succeeded: Bool` — history records
+- `SpellCheckIssue(word:range:kind:suggestions:)` — spell check results
+- `DiffSegment` — diff display units
+- HUD states: `.working`, `.success`, `.successWithCount(Int)`, `.error(String)`
+- `FlippedClipView` (in StreamingPreviewController.swift) — used by both StreamingPreviewController and SettingsWindowController (internal access)
 
 ## Build & Test
 
@@ -37,7 +124,7 @@ All other files are **pure-logic Support modules** (no AppKit imports) that are 
 # Build release
 xcodebuild build -project GhostEdit.xcodeproj -scheme GhostEdit -configuration Release
 
-# Run tests (432+ tests)
+# Run tests (684+ tests)
 xcodebuild test -project GhostEdit.xcodeproj -scheme GhostEditTests -destination 'platform=macOS'
 
 # Full coverage check (what pre-commit/pre-push hooks run)
@@ -45,9 +132,9 @@ xcodebuild test -project GhostEdit.xcodeproj -scheme GhostEditTests -destination
 ```
 
 ## Coverage Gate (CRITICAL)
-Pre-commit and pre-push hooks (`.githooks/`) run `scripts/run_tests_with_coverage.sh` which enforces **100% line coverage** on 26 guarded files. If you add/modify code in any guarded file, you MUST add tests. The 26 guarded files are all Support modules + ConfigManager + ShellRunner + CorrectionHistoryStore + HistoryTableModel + HistoryCSVExporter.
+Pre-commit and pre-push hooks (`.githooks/`) run `scripts/run_tests_with_coverage.sh` which enforces **100% line coverage** on **33 guarded files**. If you add/modify code in any guarded file, you MUST add tests. The guarded files are all Support modules + ConfigManager + ShellRunner + CorrectionHistoryStore + HistoryTableModel + HistoryCSVExporter.
 
-**NOT guarded** (no coverage needed): AppDelegate.swift, ClipboardManager.swift, HotkeyManager.swift, LaunchAtLoginManager.swift, PersistentCLISession.swift, PersistentShellSession.swift, main.swift.
+**NOT guarded** (no coverage needed): AppDelegate.swift, the 7 controller files (DeveloperConsoleController, DiffPreviewController, StreamingPreviewController, SettingsWindowController, HistoryWindowController, HUDOverlayController, LiveFeedbackController), ClipboardManager.swift, HotkeyManager.swift, LaunchAtLoginManager.swift, PersistentCLISession.swift, PersistentShellSession.swift, LocalModelRunner.swift, HarperBridge.swift, main.swift.
 
 ## Install Flow
 ```bash
@@ -62,9 +149,10 @@ open /Applications/GhostEdit.app
 
 ## Release Flow
 ```bash
-# Bump version in project.pbxproj (MARKETING_VERSION + CURRENT_PROJECT_VERSION, 2 occurrences each)
+# Bump version in project.yml (MARKETING_VERSION + CURRENT_PROJECT_VERSION)
+# Then: xcodegen generate --spec project.yml
 # Build, test, commit, push (hooks run tests), then:
-gh release create vX.Y.Z-beta.N --prerelease --title "..." --notes "..."
+gh release create vX.Y.Z --title "..." --notes "..."
 ```
 
 ## Key Config
@@ -78,7 +166,9 @@ Cross-module SourceKit errors like "Cannot find 'AppConfig' in scope" are **fals
 ## Conventions
 - All UI is programmatic AppKit (NSWindow, NSView, NSTableView, etc.)
 - Support modules are `enum` namespaces with `static` methods (no instances)
+- Controllers are `final class` at file top level, communicate via closures (no direct AppDelegate property access)
 - History entries: `CorrectionHistoryEntry` with `succeeded: Bool`
 - Status badge uses `filteredEntries[row].succeeded` boolean directly (not string matching)
 - HUD states: `.working`, `.success`, `.successWithCount(Int)`, `.error(String)`
 - Diff: `DiffSupport.wordDiff()` for summaries/counts, `DiffSupport.charDiff()` for display highlighting
+- Version bumps go in `project.yml`, then regenerate with `xcodegen generate --spec project.yml`

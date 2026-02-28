@@ -218,7 +218,7 @@ enum WritingCoachSupport {
 
         let marker = scalars[index]
         let separator = scalars[index + 1]
-        guard (marker == "." || marker == ")"), separator == " " else {
+        guard marker == "." || marker == ")", separator == " " else {
             return nil
         }
 

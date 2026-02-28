@@ -7,11 +7,11 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     }
 
     private enum Tab: String, CaseIterable {
-        case general = "general"
-        case hotkey = "hotkey"
-        case behavior = "behavior"
-        case localModels = "localModels"
-        case advanced = "advanced"
+        case general
+        case hotkey
+        case behavior
+        case localModels
+        case advanced
 
         var label: String {
             switch self {

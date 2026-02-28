@@ -5,6 +5,7 @@ settings:
   base:
     SWIFT_VERSION: 5.0
     MACOSX_DEPLOYMENT_TARGET: 13.0
+    GCC_TREAT_WARNINGS_AS_ERRORS: YES
 targets:
   GhostEditCore:
     type: framework

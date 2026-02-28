@@ -1,0 +1,25 @@
+included:
+  - GhostEdit/Sources
+  - GhostEditTests
+excluded:
+  - build
+disabled_rules:
+  - line_length
+  - type_body_length
+  - file_length
+  - function_body_length
+  - cyclomatic_complexity
+  - identifier_name
+  - force_cast
+  - force_try
+  - nesting
+  - large_tuple
+  - function_parameter_count
+  - optional_data_string_conversion
+  - trailing_comma
+  - force_unwrapping
+opt_in_rules:
+  - empty_count
+  - identical_operands
+  - fatal_error_message
+reporter: xcode

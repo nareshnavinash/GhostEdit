@@ -4,4 +4,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Run SwiftLint if available
+if command -v swiftlint >/dev/null 2>&1; then
+  echo "Running SwiftLint..."
+  (cd "$REPO_ROOT" && swiftlint lint --strict)
+else
+  echo "Warning: swiftlint not found, skipping lint step" >&2
+fi
+
 "$REPO_ROOT/scripts/run_tests_with_coverage.sh"
