@@ -70,8 +70,15 @@ final class LiveFeedbackController {
                 let pythonPath = config.localModelPythonPath.isEmpty
                     ? PythonEnvironmentSupport.detectPythonPath(homeDirectoryPath: FileManager.default.homeDirectoryForCurrentUser.path)
                     : config.localModelPythonPath
+                let promptTemplate = LocalModelSupport.resolvedPromptTemplate(for: config.localModelRepoID, config: config)
                 backgroundQueue.async {
-                    _ = try? runner.correctText("Hello.", modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 30)
+                    _ = try? runner.correctText(
+                        "Hello.",
+                        modelPath: modelPath,
+                        pythonPath: pythonPath,
+                        timeoutSeconds: 30,
+                        promptTemplate: promptTemplate
+                    )
                 }
             }
         }
@@ -361,9 +368,16 @@ final class LiveFeedbackController {
             baseDirectoryURL: configManager.baseDirectoryURL,
             repoID: config.localModelRepoID
         ).path
+        let promptTemplate = LocalModelSupport.resolvedPromptTemplate(for: config.localModelRepoID, config: config)
 
         backgroundQueue.async { [weak self] in
-            let corrected = try? runner.correctText(text, modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 30)
+            let corrected = try? runner.correctText(
+                text,
+                modelPath: modelPath,
+                pythonPath: pythonPath,
+                timeoutSeconds: 30,
+                promptTemplate: promptTemplate
+            )
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }

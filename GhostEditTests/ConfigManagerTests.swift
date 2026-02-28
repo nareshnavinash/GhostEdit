@@ -40,6 +40,7 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertEqual(config.developerMode, AppConfig.default.developerMode)
         XCTAssertEqual(config.localModelRepoID, AppConfig.default.localModelRepoID)
         XCTAssertEqual(config.localModelCustomModels, AppConfig.default.localModelCustomModels)
+        XCTAssertEqual(config.localModelPromptTemplates, AppConfig.default.localModelPromptTemplates)
         XCTAssertEqual(config.localModelPythonPath, AppConfig.default.localModelPythonPath)
         XCTAssertEqual(config.cloudHotkeyKeyCode, AppConfig.default.cloudHotkeyKeyCode)
         XCTAssertEqual(config.cloudHotkeyModifiers, AppConfig.default.cloudHotkeyModifiers)
@@ -727,6 +728,7 @@ final class ConfigManagerTests: XCTestCase {
         let config = AppConfig.default
         XCTAssertEqual(config.localModelRepoID, "")
         XCTAssertEqual(config.localModelCustomModels, "[]")
+        XCTAssertEqual(config.localModelPromptTemplates, "{}")
         XCTAssertEqual(config.localModelPythonPath, "")
     }
 
@@ -737,6 +739,7 @@ final class ConfigManagerTests: XCTestCase {
         var config = manager.loadConfig()
         config.localModelRepoID = "grammarly/coedit-large"
         config.localModelCustomModels = "[{\"repoID\":\"custom/model\"}]"
+        config.localModelPromptTemplates = "{\"grammarly/coedit-large\":\"Fix grammar: {text}\"}"
         config.localModelPythonPath = "/opt/homebrew/bin/python3"
         try manager.saveConfig(config)
         manager.invalidateCache()
@@ -744,6 +747,9 @@ final class ConfigManagerTests: XCTestCase {
         let reloaded = manager.loadConfig()
         XCTAssertEqual(reloaded.localModelRepoID, "grammarly/coedit-large")
         XCTAssertEqual(reloaded.localModelCustomModels, "[{\"repoID\":\"custom/model\"}]")
+        let promptTemplates = try XCTUnwrap(reloaded.localModelPromptTemplates.data(using: .utf8))
+        let decodedTemplates = try JSONDecoder().decode([String: String].self, from: promptTemplates)
+        XCTAssertEqual(decodedTemplates["grammarly/coedit-large"], "Fix grammar: {text}")
         XCTAssertEqual(reloaded.localModelPythonPath, "/opt/homebrew/bin/python3")
     }
 
@@ -773,7 +779,21 @@ final class ConfigManagerTests: XCTestCase {
         let config = manager.loadConfig()
         XCTAssertEqual(config.localModelRepoID, "")
         XCTAssertEqual(config.localModelCustomModels, "[]")
+        XCTAssertEqual(config.localModelPromptTemplates, "{}")
         XCTAssertEqual(config.localModelPythonPath, "")
+    }
+
+    func testLocalModelPromptTemplatesNormalizeInvalidJSON() throws {
+        let (manager, _) = makeManager()
+        try manager.bootstrapIfNeeded()
+
+        var config = manager.loadConfig()
+        config.localModelPromptTemplates = "not-json"
+        try manager.saveConfig(config)
+        manager.invalidateCache()
+
+        let reloaded = manager.loadConfig()
+        XCTAssertEqual(reloaded.localModelPromptTemplates, "{}")
     }
 
     func testTonePresetNormalizesToDefaultForInvalidValue() throws {

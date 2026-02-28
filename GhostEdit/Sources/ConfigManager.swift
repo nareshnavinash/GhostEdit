@@ -103,6 +103,7 @@ struct AppConfig: Codable, Equatable {
     var diffPreviewDuration: Int
     var localModelRepoID: String
     var localModelCustomModels: String
+    var localModelPromptTemplates: String
     var localModelPythonPath: String
     var cloudHotkeyKeyCode: UInt32
     var cloudHotkeyModifiers: UInt32
@@ -129,6 +130,7 @@ struct AppConfig: Codable, Equatable {
         diffPreviewDuration: 5,
         localModelRepoID: "",
         localModelCustomModels: "[]",
+        localModelPromptTemplates: "{}",
         localModelPythonPath: "",
         cloudHotkeyKeyCode: 14,
         cloudHotkeyModifiers: 768
@@ -211,6 +213,7 @@ struct AppConfig: Codable, Equatable {
         case diffPreviewDuration
         case localModelRepoID
         case localModelCustomModels
+        case localModelPromptTemplates
         case localModelPythonPath
         case cloudHotkeyKeyCode
         case cloudHotkeyModifiers
@@ -238,6 +241,7 @@ struct AppConfig: Codable, Equatable {
         diffPreviewDuration: Int = 5,
         localModelRepoID: String = "",
         localModelCustomModels: String = "[]",
+        localModelPromptTemplates: String = "{}",
         localModelPythonPath: String = "",
         cloudHotkeyKeyCode: UInt32 = 14,
         cloudHotkeyModifiers: UInt32 = 768
@@ -263,6 +267,7 @@ struct AppConfig: Codable, Equatable {
         self.diffPreviewDuration = diffPreviewDuration
         self.localModelRepoID = localModelRepoID
         self.localModelCustomModels = localModelCustomModels
+        self.localModelPromptTemplates = localModelPromptTemplates
         self.localModelPythonPath = localModelPythonPath
         self.cloudHotkeyKeyCode = cloudHotkeyKeyCode
         self.cloudHotkeyModifiers = cloudHotkeyModifiers
@@ -292,6 +297,7 @@ struct AppConfig: Codable, Equatable {
         diffPreviewDuration = try container.decodeIfPresent(Int.self, forKey: .diffPreviewDuration) ?? AppConfig.default.diffPreviewDuration
         localModelRepoID = try container.decodeIfPresent(String.self, forKey: .localModelRepoID) ?? AppConfig.default.localModelRepoID
         localModelCustomModels = try container.decodeIfPresent(String.self, forKey: .localModelCustomModels) ?? AppConfig.default.localModelCustomModels
+        localModelPromptTemplates = try container.decodeIfPresent(String.self, forKey: .localModelPromptTemplates) ?? AppConfig.default.localModelPromptTemplates
         localModelPythonPath = try container.decodeIfPresent(String.self, forKey: .localModelPythonPath) ?? AppConfig.default.localModelPythonPath
         cloudHotkeyKeyCode = try container.decodeIfPresent(UInt32.self, forKey: .cloudHotkeyKeyCode) ?? hotkeyKeyCode
         cloudHotkeyModifiers = try container.decodeIfPresent(UInt32.self, forKey: .cloudHotkeyModifiers) ?? (hotkeyModifiers | 512)
@@ -476,6 +482,7 @@ final class ConfigManager {
         let historyLimit = max(1, config.historyLimit)
         let normalizedTone = config.tonePreset.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let tonePreset = AppConfig.supportedPresets.contains(normalizedTone) ? normalizedTone : "default"
+        let normalizedPromptTemplates = normalizePromptTemplateJSON(config.localModelPromptTemplates)
 
         return AppConfig(
             claudePath: config.claudePath,
@@ -499,10 +506,26 @@ final class ConfigManager {
             diffPreviewDuration: config.diffPreviewDuration,
             localModelRepoID: config.localModelRepoID,
             localModelCustomModels: config.localModelCustomModels,
+            localModelPromptTemplates: normalizedPromptTemplates,
             localModelPythonPath: config.localModelPythonPath,
             cloudHotkeyKeyCode: config.cloudHotkeyKeyCode,
             cloudHotkeyModifiers: config.cloudHotkeyModifiers
         )
+    }
+
+    private func normalizePromptTemplateJSON(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else {
+            return "{}"
+        }
+        guard let decoded = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return "{}"
+        }
+        guard let encoded = try? JSONEncoder().encode(decoded),
+              let json = String(data: encoded, encoding: .utf8) else {
+            return "{}"
+        }
+        return json
     }
 
     private func migratePromptIfNeeded() throws {

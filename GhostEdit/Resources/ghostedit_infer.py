@@ -64,12 +64,22 @@ def _load_model(model_path):
         return AutoModelForSeq2SeqLM.from_pretrained(model_path), model_type
 
 
-def _run_inference(tokenizer, model, model_type, text, max_length):
+def _render_prompt(prompt_template, text):
+    """Render a prompt template containing {text}. Fallback appends text."""
+    template = (prompt_template or "").strip()
+    if "{text}" in template:
+        return template.replace("{text}", text)
+    if template:
+        return f"{template}\n\n{text}"
+    return text
+
+
+def _run_inference(tokenizer, model, model_type, text, max_length, prompt_template):
     """Run inference with the appropriate strategy for the model type."""
+    rendered_prompt = _render_prompt(prompt_template, text)
     if model_type == "causal":
         # For causal LMs, use chat-style or text-generation approach
-        prompt = f"Fix grammatical errors in the following text:\n\n{text}\n\nCorrected text:"
-        inputs = tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
+        inputs = tokenizer(rendered_prompt, return_tensors="pt", max_length=512, truncation=True)
         input_length = inputs["input_ids"].shape[1]
         outputs = model.generate(
             **inputs,
@@ -81,7 +91,7 @@ def _run_inference(tokenizer, model, model_type, text, max_length):
         corrected = tokenizer.decode(outputs[0][input_length:], skip_special_tokens=True).strip()
     else:
         # Seq2seq: standard encode-decode
-        inputs = tokenizer(text, return_tensors="pt", max_length=512, truncation=True)
+        inputs = tokenizer(rendered_prompt, return_tensors="pt", max_length=512, truncation=True)
         outputs = model.generate(**inputs, max_length=max_length)
         corrected = tokenizer.decode(outputs[0], skip_special_tokens=True)
     return corrected
@@ -92,6 +102,7 @@ def cmd_infer(request):
     model_path = request.get("model_path", "")
     text = request.get("text", "")
     max_length = request.get("max_length", 256)
+    prompt_template = request.get("prompt_template", "{text}")
 
     if not model_path or not text:
         return {"status": "error", "message": "model_path and text are required"}
@@ -105,7 +116,7 @@ def cmd_infer(request):
         start = time.time()
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         model, model_type = _load_model(model_path)
-        corrected = _run_inference(tokenizer, model, model_type, text, max_length)
+        corrected = _run_inference(tokenizer, model, model_type, text, max_length, prompt_template)
         elapsed_ms = int((time.time() - start) * 1000)
 
         return {"status": "ok", "corrected": corrected, "elapsed_ms": elapsed_ms}
@@ -120,13 +131,14 @@ def cmd_infer_with_cache(request, tokenizer, model, model_type):
     """Run inference using pre-loaded model and tokenizer."""
     text = request.get("text", "")
     max_length = request.get("max_length", 256)
+    prompt_template = request.get("prompt_template", "{text}")
 
     if not text:
         return {"status": "error", "message": "text is required"}
 
     try:
         start = time.time()
-        corrected = _run_inference(tokenizer, model, model_type, text, max_length)
+        corrected = _run_inference(tokenizer, model, model_type, text, max_length, prompt_template)
         elapsed_ms = int((time.time() - start) * 1000)
 
         return {"status": "ok", "corrected": corrected, "elapsed_ms": elapsed_ms}

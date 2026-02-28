@@ -497,20 +497,13 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
         let cardStack = NSStackView()
         cardStack.orientation = .vertical
-        cardStack.spacing = 4
+        cardStack.spacing = 10
         cardStack.translatesAutoresizingMaskIntoConstraints = false
-
-        // Header row
-        let headerRow = makeModelRow(
-            name: "Model", params: "Params", disk: "Disk", status: "Status",
-            isHeader: true, repoID: "", isActive: false
-        )
-        cardStack.addArrangedSubview(headerRow)
 
         // Model rows
         localModelsModelRows = NSStackView()
         localModelsModelRows.orientation = .vertical
-        localModelsModelRows.spacing = 2
+        localModelsModelRows.spacing = 12
         refreshModelRows(config: config)
         cardStack.addArrangedSubview(localModelsModelRows)
 
@@ -858,9 +851,9 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     private func refreshModelRows(config: AppConfig) {
         localModelsModelRows.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        let promptOverrides = LocalModelSupport.promptTemplateOverrides(from: config)
 
         // Determine which models are actually downloaded
-        let modelsDir = LocalModelSupport.modelsDirectoryURL(baseDirectoryURL: configManager.baseDirectoryURL)
         var downloadedSet = Set<String>()
         for model in LocalModelSupport.recommendedModels {
             let modelDir = LocalModelSupport.modelDirectoryURL(
@@ -892,12 +885,13 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         for entry in merged {
             let isActive = entry.repoID == config.localModelRepoID
             let isCustom = !recommendedRepoIDs.contains(entry.repoID)
+            let isPromptOverridden = promptOverrides[entry.repoID].map(LocalModelSupport.validatePromptTemplate) ?? false
             let row = makeModelRow(
                 name: entry.displayName, params: entry.parameterCount,
                 disk: String(format: "%.1f GB", entry.approxDiskGB),
                 status: entry.status == .ready ? "Ready" : "Not downloaded",
-                isHeader: false, repoID: entry.repoID, isActive: isActive,
-                isCustom: isCustom
+                repoID: entry.repoID, isActive: isActive,
+                isCustom: isCustom, isPromptOverridden: isPromptOverridden
             )
             localModelsModelRows.addArrangedSubview(row)
         }
@@ -905,76 +899,138 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     private func makeModelRow(
         name: String, params: String, disk: String, status: String,
-        isHeader: Bool, repoID: String, isActive: Bool, isCustom: Bool = false
+        repoID: String, isActive: Bool, isCustom: Bool = false, isPromptOverridden: Bool = false
     ) -> NSView {
-        let row = NSStackView()
-        row.orientation = .horizontal
-        row.spacing = 6
-        row.alignment = .centerY
+        let card = NSBox()
+        card.boxType = .custom
+        card.cornerRadius = 8
+        card.borderWidth = 0.5
+        card.borderColor = .separatorColor
+        card.fillColor = NSColor.controlBackgroundColor.withAlphaComponent(0.55)
+        card.titlePosition = .noTitle
+        card.contentViewMargins = NSSize(width: 10, height: 8)
+        card.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSStackView()
+        container.orientation = .vertical
+        container.spacing = 8
+        container.alignment = .leading
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let topRow = NSStackView()
+        topRow.orientation = .horizontal
+        topRow.spacing = 8
+        topRow.alignment = .centerY
 
         let nameLabel = NSTextField(labelWithString: name)
-        nameLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
+        nameLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        nameLabel.lineBreakMode = .byTruncatingTail
+        nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([nameLabel.widthAnchor.constraint(equalToConstant: 100)])
+        nameLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
 
-        let paramsLabel = NSTextField(labelWithString: params)
-        paramsLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
+        let metaStack = NSStackView()
+        metaStack.orientation = .horizontal
+        metaStack.spacing = 8
+        metaStack.alignment = .centerY
+        metaStack.setContentHuggingPriority(.required, for: .horizontal)
+
+        let paramsDisplay = (params == "?" || params.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? "Unknown params" : params
+        let diskIsUnknown = disk.hasPrefix("0.0") || disk.hasPrefix("-")
+        let diskDisplay = diskIsUnknown ? "Unknown size" : disk
+        let paramsLabel = NSTextField(labelWithString: paramsDisplay)
+        paramsLabel.font = .systemFont(ofSize: 11)
         paramsLabel.textColor = .secondaryLabelColor
-        paramsLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([paramsLabel.widthAnchor.constraint(equalToConstant: 45)])
-
-        let diskLabel = NSTextField(labelWithString: disk)
-        diskLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
+        let diskLabel = NSTextField(labelWithString: diskDisplay)
+        diskLabel.font = .systemFont(ofSize: 11)
         diskLabel.textColor = .secondaryLabelColor
-        diskLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([diskLabel.widthAnchor.constraint(equalToConstant: 50)])
-
         let statusLabel = NSTextField(labelWithString: status)
-        statusLabel.font = isHeader ? .systemFont(ofSize: 11, weight: .semibold) : .systemFont(ofSize: 11)
+        statusLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         statusLabel.textColor = status == "Ready" ? .systemGreen : .secondaryLabelColor
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([statusLabel.widthAnchor.constraint(equalToConstant: 80)])
+        statusLabel.setContentHuggingPriority(.required, for: .horizontal)
 
-        row.addArrangedSubview(nameLabel)
-        row.addArrangedSubview(paramsLabel)
-        row.addArrangedSubview(diskLabel)
-        row.addArrangedSubview(statusLabel)
+        metaStack.addArrangedSubview(paramsLabel)
+        metaStack.addArrangedSubview(separatorDotLabel())
+        metaStack.addArrangedSubview(diskLabel)
+        metaStack.addArrangedSubview(separatorDotLabel())
+        metaStack.addArrangedSubview(statusLabel)
 
-        if !isHeader {
-            if status == "Ready" {
-                let selectBtn = NSButton(
-                    checkboxWithTitle: isActive ? "Active" : "Select",
-                    target: self, action: #selector(selectModelClicked(_:))
-                )
-                selectBtn.state = isActive ? .on : .off
-                selectBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
-                selectBtn.font = .systemFont(ofSize: 10)
-                row.addArrangedSubview(selectBtn)
-
-                let deleteBtn = NSButton(title: "Delete", target: self, action: #selector(deleteModelClicked(_:)))
-                deleteBtn.bezelStyle = .rounded
-                deleteBtn.font = .systemFont(ofSize: 10)
-                deleteBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
-                row.addArrangedSubview(deleteBtn)
-            } else {
-                let pullBtn = NSButton(title: "Pull", target: self, action: #selector(pullModelClicked(_:)))
-                pullBtn.bezelStyle = .rounded
-                pullBtn.font = .systemFont(ofSize: 10)
-                pullBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
-                row.addArrangedSubview(pullBtn)
-
-                // Custom models also get a Delete (remove) button when not downloaded
-                if isCustom {
-                    let removeBtn = NSButton(title: "Delete", target: self, action: #selector(deleteModelClicked(_:)))
-                    removeBtn.bezelStyle = .rounded
-                    removeBtn.font = .systemFont(ofSize: 10)
-                    removeBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
-                    row.addArrangedSubview(removeBtn)
-                }
-            }
+        if isPromptOverridden {
+            metaStack.addArrangedSubview(separatorDotLabel())
+            let promptBadge = NSTextField(labelWithString: "Custom Prompt")
+            promptBadge.font = .systemFont(ofSize: 11, weight: .medium)
+            promptBadge.textColor = .systemBlue
+            metaStack.addArrangedSubview(promptBadge)
         }
 
-        return row
+        topRow.addArrangedSubview(nameLabel)
+        topRow.addArrangedSubview(metaStack)
+        container.addArrangedSubview(topRow)
+
+        let actionsRow = NSStackView()
+        actionsRow.orientation = .horizontal
+        actionsRow.spacing = 8
+        actionsRow.alignment = .centerY
+
+        let promptBtn = NSButton(title: "Prompt", target: self, action: #selector(editModelPromptClicked(_:)))
+        promptBtn.bezelStyle = .rounded
+        promptBtn.font = .systemFont(ofSize: 10)
+        promptBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
+        actionsRow.addArrangedSubview(promptBtn)
+
+        if status == "Ready" {
+            let selectBtn = NSButton(
+                checkboxWithTitle: isActive ? "Active" : "Select",
+                target: self, action: #selector(selectModelClicked(_:))
+            )
+            selectBtn.state = isActive ? .on : .off
+            selectBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
+            selectBtn.font = .systemFont(ofSize: 10)
+            actionsRow.addArrangedSubview(selectBtn)
+
+            let deleteBtn = NSButton(title: "Delete", target: self, action: #selector(deleteModelClicked(_:)))
+            deleteBtn.bezelStyle = .rounded
+            deleteBtn.font = .systemFont(ofSize: 10)
+            deleteBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
+            actionsRow.addArrangedSubview(deleteBtn)
+        } else {
+            let pullBtn = NSButton(title: "Pull", target: self, action: #selector(pullModelClicked(_:)))
+            pullBtn.bezelStyle = .rounded
+            pullBtn.font = .systemFont(ofSize: 10)
+            pullBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
+            actionsRow.addArrangedSubview(pullBtn)
+
+            // Custom models also get a Delete (remove) button when not downloaded
+            if isCustom {
+                let removeBtn = NSButton(title: "Delete", target: self, action: #selector(deleteModelClicked(_:)))
+                removeBtn.bezelStyle = .rounded
+                removeBtn.font = .systemFont(ofSize: 10)
+                removeBtn.identifier = NSUserInterfaceItemIdentifier(repoID)
+                actionsRow.addArrangedSubview(removeBtn)
+            }
+        }
+        actionsRow.setContentHuggingPriority(.required, for: .vertical)
+        container.addArrangedSubview(actionsRow)
+
+        card.contentView?.addSubview(container)
+        if let content = card.contentView {
+            NSLayoutConstraint.activate([
+                container.topAnchor.constraint(equalTo: content.topAnchor),
+                container.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                container.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                container.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            ])
+        }
+
+        return card
+    }
+
+    private func separatorDotLabel() -> NSTextField {
+        let dot = NSTextField(labelWithString: "•")
+        dot.font = .systemFont(ofSize: 10)
+        dot.textColor = .tertiaryLabelColor
+        dot.setContentHuggingPriority(.required, for: .horizontal)
+        return dot
     }
 
     @objc private func installPythonPackagesClicked(_ sender: NSButton) {
@@ -1135,8 +1191,8 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let entry = LocalModelEntry(
             repoID: repoID,
             displayName: repoID.components(separatedBy: "/").last ?? repoID,
-            parameterCount: "?",
-            approxDiskGB: 0
+            parameterCount: "Unknown params",
+            approxDiskGB: -1
         )
         customModels.append(entry)
         if let encoded = try? JSONEncoder().encode(customModels),
@@ -1146,6 +1202,77 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         }
         customField?.stringValue = ""
         refreshModelRows(config: configManager.loadConfig())
+    }
+
+    @objc private func editModelPromptClicked(_ sender: NSButton) {
+        guard let repoID = sender.identifier?.rawValue else { return }
+        let config = configManager.loadConfig()
+        let current = LocalModelSupport.resolvedPromptTemplate(for: repoID, config: config)
+        let defaultTemplate = LocalModelSupport.defaultPromptTemplate(for: repoID)
+
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 540, height: 200))
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 540, height: 200))
+        textView.isRichText = false
+        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.string = current
+        scrollView.documentView = textView
+
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "Edit Prompt Template"
+        alert.informativeText = "Model: \(repoID)\nTemplate must include {text}. Return corrected text only."
+        alert.accessoryView = scrollView
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Reset Default")
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            let edited = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard LocalModelSupport.validatePromptTemplate(edited) else {
+                let validationAlert = NSAlert()
+                validationAlert.alertStyle = .warning
+                validationAlert.messageText = "Invalid Prompt Template"
+                validationAlert.informativeText = "The template must be non-empty and include {text}."
+                validationAlert.runModal()
+                return
+            }
+            savePromptTemplateOverride(edited, for: repoID)
+            return
+        }
+
+        if response == .alertSecondButtonReturn {
+            savePromptTemplateOverride(defaultTemplate, for: repoID, removeOverrideWhenMatchingDefault: true)
+        }
+    }
+
+    private func savePromptTemplateOverride(
+        _ template: String,
+        for repoID: String,
+        removeOverrideWhenMatchingDefault: Bool = false
+    ) {
+        var config = configManager.loadConfig()
+        var overrides = LocalModelSupport.promptTemplateOverrides(from: config)
+
+        if removeOverrideWhenMatchingDefault,
+           template == LocalModelSupport.defaultPromptTemplate(for: repoID) {
+            overrides.removeValue(forKey: repoID)
+        } else {
+            overrides[repoID] = template
+        }
+
+        guard let encoded = try? JSONEncoder().encode(overrides),
+              let encodedString = String(data: encoded, encoding: .utf8) else {
+            return
+        }
+
+        config.localModelPromptTemplates = encodedString
+        try? configManager.saveConfig(config)
+        onConfigSaved(config)
+        refreshModelRows(config: config)
     }
 
     @objc private func testInferenceClicked(_ sender: NSButton) {
@@ -1168,8 +1295,11 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         Task.detached {
             do {
                 let result = try runner?.correctText(
-                    "Fix grammatical errors in this sentence: She go to the store yesterday and buyed some food.",
-                    modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120
+                    "She go to the store yesterday and buyed some food.",
+                    modelPath: modelPath,
+                    pythonPath: pythonPath,
+                    timeoutSeconds: 120,
+                    promptTemplate: LocalModelSupport.resolvedPromptTemplate(for: config.localModelRepoID, config: config)
                 ) ?? ""
                 await MainActor.run {
                     sender.isEnabled = true

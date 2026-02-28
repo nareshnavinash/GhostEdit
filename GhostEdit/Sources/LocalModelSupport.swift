@@ -47,6 +47,12 @@ struct LocalModelEntry: Codable, Equatable {
 }
 
 enum LocalModelSupport {
+    static let fallbackPromptTemplate = """
+Revise the following text by correcting grammar, spelling, and punctuation. Preserve meaning and line breaks. Return ONLY the corrected text.
+
+{text}
+"""
+
     static let recommendedModels: [LocalModelEntry] = [
         LocalModelEntry(
             repoID: "vennify/t5-base-grammar-correction",
@@ -84,6 +90,47 @@ enum LocalModelSupport {
             return entry.taskPrefix
         }
         return "Fix grammatical errors in this sentence: "
+    }
+
+    static func defaultPromptTemplate(for repoID: String) -> String {
+        if repoID == "vennify/t5-base-grammar-correction" {
+            return "grammar: {text}"
+        }
+        if let entry = recommendedModels.first(where: { $0.repoID == repoID }) {
+            return "\(entry.taskPrefix){text}"
+        }
+        return fallbackPromptTemplate
+    }
+
+    static func validatePromptTemplate(_ template: String) -> Bool {
+        let trimmed = template.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed.contains("{text}")
+    }
+
+    static func promptTemplateOverrides(from config: AppConfig) -> [String: String] {
+        guard let data = config.localModelPromptTemplates.data(using: .utf8),
+              let overrides = try? JSONDecoder().decode([String: String].self, from: data) else {
+            return [:]
+        }
+        return overrides
+    }
+
+    static func resolvedPromptTemplate(for repoID: String, config: AppConfig) -> String {
+        let overrides = promptTemplateOverrides(from: config)
+        if let override = overrides[repoID], validatePromptTemplate(override) {
+            return override
+        }
+
+        if let customData = config.localModelCustomModels.data(using: .utf8),
+           let customModels = try? JSONDecoder().decode([LocalModelEntry].self, from: customData),
+           let customEntry = customModels.first(where: { $0.repoID == repoID }) {
+            let fromPrefix = "\(customEntry.taskPrefix){text}"
+            if validatePromptTemplate(fromPrefix) {
+                return fromPrefix
+            }
+        }
+
+        return defaultPromptTemplate(for: repoID)
     }
 
     static func isValidRepoID(_ repoID: String) -> Bool {

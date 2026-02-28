@@ -788,18 +788,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             let pythonPath = config.localModelPythonPath.isEmpty
                 ? PythonEnvironmentSupport.detectPythonPath(homeDirectoryPath: FileManager.default.homeDirectoryForCurrentUser.path)
                 : config.localModelPythonPath
+            let promptTemplate = LocalModelSupport.resolvedPromptTemplate(for: config.localModelRepoID, config: config)
 
             // Step 1: Apply Harper + Dictionary fixes first (instant spelling/punctuation)
             let spellFixed = applyRuleBasedTextFixes(textToFix)
 
             showHUD(state: .working)
-            let repoID = config.localModelRepoID
             Task.detached { [weak self] in
                 do {
                     let protection = TokenPreservationSupport.protectTokens(in: spellFixed)
                     let textForModel = protection.hasProtectedTokens ? protection.protectedText : spellFixed
-                    let prefixed = LocalModelSupport.taskPrefix(for: repoID) + textForModel
-                    let rawCorrected = try runner.correctText(prefixed, modelPath: modelPath, pythonPath: pythonPath, timeoutSeconds: 120)
+                    let rawCorrected = try runner.correctText(
+                        textForModel,
+                        modelPath: modelPath,
+                        pythonPath: pythonPath,
+                        timeoutSeconds: 120,
+                        promptTemplate: promptTemplate
+                    )
                     let corrected: String
                     if protection.hasProtectedTokens {
                         corrected = TokenPreservationSupport.bestEffortRestore(in: rawCorrected, tokens: protection.tokens)

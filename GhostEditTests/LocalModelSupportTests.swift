@@ -181,6 +181,62 @@ final class LocalModelSupportTests: XCTestCase {
         XCTAssertEqual(prefix, "Fix grammatical errors in this sentence: ")
     }
 
+    func testDefaultPromptTemplateForKnownModelUsesTaskPrefix() {
+        let template = LocalModelSupport.defaultPromptTemplate(for: "grammarly/coedit-large")
+        XCTAssertEqual(template, "Fix grammatical errors in this sentence: {text}")
+    }
+
+    func testDefaultPromptTemplateForT5GrammarUsesGrammarPrefix() {
+        let template = LocalModelSupport.defaultPromptTemplate(for: "vennify/t5-base-grammar-correction")
+        XCTAssertEqual(template, "grammar: {text}")
+    }
+
+    func testValidatePromptTemplateRequiresPlaceholder() {
+        XCTAssertTrue(LocalModelSupport.validatePromptTemplate("Fix this: {text}"))
+        XCTAssertFalse(LocalModelSupport.validatePromptTemplate("Fix this text"))
+        XCTAssertFalse(LocalModelSupport.validatePromptTemplate("   "))
+    }
+
+    func testResolvedPromptTemplateUsesOverrideFromConfig() {
+        let config = AppConfig(
+            claudePath: "",
+            codexPath: "",
+            geminiPath: "",
+            provider: "claude",
+            model: "haiku",
+            timeoutSeconds: 30,
+            hotkeyKeyCode: 14,
+            hotkeyModifiers: 256,
+            launchAtLogin: false,
+            historyLimit: 50,
+            localModelPromptTemplates: "{\"grammarly/coedit-large\":\"Custom {text}\"}"
+        )
+
+        let resolved = LocalModelSupport.resolvedPromptTemplate(for: "grammarly/coedit-large", config: config)
+        XCTAssertEqual(resolved, "Custom {text}")
+    }
+
+    func testResolvedPromptTemplateFallsBackToLegacyCustomTaskPrefix() {
+        let config = AppConfig(
+            claudePath: "",
+            codexPath: "",
+            geminiPath: "",
+            provider: "claude",
+            model: "haiku",
+            timeoutSeconds: 30,
+            hotkeyKeyCode: 14,
+            hotkeyModifiers: 256,
+            launchAtLogin: false,
+            historyLimit: 50,
+            localModelCustomModels: """
+            [{"repoID":"custom/model","displayName":"Custom","parameterCount":"1B","approxDiskGB":1.0,"taskPrefix":"legacy: "}]
+            """
+        )
+
+        let resolved = LocalModelSupport.resolvedPromptTemplate(for: "custom/model", config: config)
+        XCTAssertEqual(resolved, "legacy: {text}")
+    }
+
     // MARK: - isValidRepoID
 
     func testIsValidRepoIDAcceptsOrgSlashModel() {

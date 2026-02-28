@@ -11,12 +11,19 @@ final class LocalModelRunner {
     private var stdoutBuffer = Data()
     private let bufferLock = NSLock()
 
-    func correctText(_ input: String, modelPath: String, pythonPath: String, timeoutSeconds: Int) throws -> String {
+    func correctText(
+        _ input: String,
+        modelPath: String,
+        pythonPath: String,
+        timeoutSeconds: Int,
+        promptTemplate: String
+    ) throws -> String {
         let request: [String: Any] = [
             "command": "infer",
             "model_path": modelPath,
             "text": input,
             "max_length": 256,
+            "prompt_template": promptTemplate
         ]
 
         // Try persistent process first for fast cached inference
@@ -26,7 +33,7 @@ final class LocalModelRunner {
                 let message = response["message"] as? String ?? "Unknown inference error"
                 throw LocalModelRunnerError.inferenceFailed(message)
             }
-            return corrected
+            return sanitizeModelOutput(corrected)
         }
 
         // Fall back to one-shot
@@ -36,7 +43,7 @@ final class LocalModelRunner {
             let message = response["message"] as? String ?? "Unknown inference error"
             throw LocalModelRunnerError.inferenceFailed(message)
         }
-        return corrected
+        return sanitizeModelOutput(corrected)
     }
 
     func downloadModel(
@@ -307,6 +314,36 @@ final class LocalModelRunner {
         } catch {
             return ""
         }
+    }
+
+    private func sanitizeModelOutput(_ text: String) -> String {
+        var cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return "" }
+
+        if cleaned.hasPrefix("```") {
+            let lines = cleaned.split(separator: "\n", omittingEmptySubsequences: false)
+            if lines.count >= 3,
+               lines.first?.hasPrefix("```") == true,
+               lines.last?.trimmingCharacters(in: .whitespacesAndNewlines) == "```" {
+                let body = lines.dropFirst().dropLast().joined(separator: "\n")
+                cleaned = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        let prefixes = [
+            "corrected text:",
+            "corrected:",
+            "revised text:",
+            "revision:"
+        ]
+        let lower = cleaned.lowercased()
+        for prefix in prefixes where lower.hasPrefix(prefix) {
+            let index = cleaned.index(cleaned.startIndex, offsetBy: prefix.count)
+            cleaned = String(cleaned[index...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            break
+        }
+
+        return cleaned
     }
 }
 
