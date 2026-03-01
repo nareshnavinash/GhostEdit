@@ -61,7 +61,7 @@ final class SettingsValidationIntegrationTests: XCTestCase {
     }
 
     func testValidationCascadeStopsAtFirstError() {
-        // Missing hotkey key code — should fail immediately
+        // Missing hotkey key code - should fail immediately
         let result = SettingsValidationSupport.validateAll(
             hotkeyKeyCode: nil, hotkeyModifiers: 256,
             cloudHotkeyKeyCode: 15, cloudHotkeyModifiers: 768,

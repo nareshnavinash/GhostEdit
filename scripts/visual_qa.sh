@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# visual_qa.sh — Semi-automated screenshot capture for GhostEdit visual QA.
+# visual_qa.sh - Semi-automated screenshot capture for GhostEdit visual QA.
 # Takes screenshots of GhostEdit windows and saves them to build/visual-qa/.
 # Compare against golden screenshots to detect visual regressions.
 
@@ -109,7 +109,7 @@ if [ -d "$GOLDEN_DIR" ]; then
             golden_size=$(sips -g pixelHeight -g pixelWidth "$golden_file" 2>/dev/null | grep pixel | awk '{print $2}' | tr '\n' 'x')
             run_size=$(sips -g pixelHeight -g pixelWidth "$run_file" 2>/dev/null | grep pixel | awk '{print $2}' | tr '\n' 'x')
             if [ "$golden_size" != "$run_size" ]; then
-                echo "  DIFF: $basename — size changed ($golden_size -> $run_size)"
+                echo "  DIFF: $basename - size changed ($golden_size -> $run_size)"
                 DIFF_COUNT=$((DIFF_COUNT + 1))
             else
                 echo "  OK:   $basename"

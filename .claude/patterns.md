@@ -16,14 +16,14 @@ enum FooSupport {
 5. ALL table view methods use `filteredRows`/`filteredEntries` (not `rows`/`entries`)
 
 ## Pattern: Status Badge
-The history status badge uses `filteredEntries[row].succeeded` boolean directly — NOT string matching on the status text. Badge subview lookup uses `NSUserInterfaceItemIdentifier` for reliability.
+The history status badge uses `filteredEntries[row].succeeded` boolean directly - NOT string matching on the status text. Badge subview lookup uses `NSUserInterfaceItemIdentifier` for reliability.
 
 ## Pattern: HUD States
 ```swift
-.working           — blue tint, spinner, spectacles on ghost
-.success           — green tint, no spinner
-.successWithCount  — green tint, shows "Done! (N chars fixed)"
-.error(String)     — red tint, shows error message or default
+.working           - blue tint, spinner, spectacles on ghost
+.success           - green tint, no spinner
+.successWithCount  - green tint, shows "Done! (N chars fixed)"
+.error(String)     - red tint, shows error message or default
 ```
 
 ## Pattern: Diff Display

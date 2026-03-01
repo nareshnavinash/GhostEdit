@@ -2,7 +2,7 @@
 
 ## ConfigManager.swift
 ```
-enum CLIProvider: String, Codable, CaseIterable  — .claude, .codex, .gemini
+enum CLIProvider: String, Codable, CaseIterable  - .claude, .codex, .gemini
   .displayName, .executableName, .authCommand, .availableModels, .defaultModel(for:)
 
 struct AppConfig: Codable
@@ -19,7 +19,7 @@ class ConfigManager
 
 ## ShellRunner.swift
 ```
-enum ShellRunnerError: Error  — cliNotFound, authRequired, launchFailed, processFailed,
+enum ShellRunnerError: Error  - cliNotFound, authRequired, launchFailed, processFailed,
                                 timeout, emptyResponse, protectedTokensModified
 
 class ShellRunner
@@ -33,8 +33,8 @@ class ShellRunner
 
 ## DiffSupport.swift
 ```
-enum DiffSegmentKind: Equatable  — .equal, .insertion, .deletion
-struct DiffSegment: Equatable  — kind: DiffSegmentKind, text: String
+enum DiffSegmentKind: Equatable  - .equal, .insertion, .deletion
+struct DiffSegment: Equatable  - kind: DiffSegmentKind, text: String
 
 enum DiffSupport
   static wordDiff(old:, new:) -> [DiffSegment]     // word-level, for summaries
@@ -46,8 +46,8 @@ enum DiffSupport
 
 ## HUDOverlaySupport.swift
 ```
-enum HUDOverlayState: Equatable  — .working, .success, .successWithCount(Int), .error(String)
-struct HUDOverlayContent: Equatable  — emoji: String, message: String
+enum HUDOverlayState: Equatable  - .working, .success, .successWithCount(Int), .error(String)
+struct HUDOverlayContent: Equatable  - emoji: String, message: String
 
 enum HUDOverlaySupport
   // Layout: windowWidth/Height, cornerRadius, iconSize, messageFontSize, verticalSpacing, contentInset
@@ -73,15 +73,15 @@ class CorrectionHistoryStore
 
 ## HistoryTableModel.swift
 ```
-enum HistoryTableColumn: String, CaseIterable  — .timestamp, .status, .provider, .model, .duration, .original, .generated
-struct HistoryTableRow: Equatable  — init(entry:, timestampFormatter:), value(for:)
+enum HistoryTableColumn: String, CaseIterable  - .timestamp, .status, .provider, .model, .duration, .original, .generated
+struct HistoryTableRow: Equatable  - init(entry:, timestampFormatter:), value(for:)
   .status = entry.succeeded ? "Succeeded" : "Failed"
-enum HistoryTableModel  — static rows(from:, timestampFormatter:)
+enum HistoryTableModel  - static rows(from:, timestampFormatter:)
 ```
 
 ## HotkeySupport.swift
 ```
-struct HotkeyKeyOption  — title: String, keyCode: UInt32
+struct HotkeyKeyOption  - title: String, keyCode: UInt32
 enum HotkeySupport
   static keyOptions: [HotkeyKeyOption], defaultKeyCode: UInt32
   static keyTitle(keyCode:), makeModifiers(from:), splitModifiers(_:), displayString(keyCode:, modifiers:)
@@ -90,7 +90,7 @@ enum HotkeySupport
 ## StreamingPreviewSupport.swift
 ```
 enum StreamingPreviewSupport
-  struct StyledSegment  — text: String, kind: Kind (.unchanged/.added/.removed)
+  struct StyledSegment  - text: String, kind: Kind (.unchanged/.added/.removed)
   static styledSegments(from:) -> [StyledSegment]
   static correctedText(from:) -> String
   static streamingStatus(charCount:) -> String
@@ -101,16 +101,16 @@ enum StreamingPreviewSupport
 ## ClipboardManager.swift
 ```
 class ClipboardManager
-  enum ShortcutPosting  — .annotatedSession, .hidSystem
-  struct Snapshot  — items: [ItemPayload]
+  enum ShortcutPosting  - .annotatedSession, .hidSystem
+  struct Snapshot  - items: [ItemPayload]
   snapshot(), restore(_:), readPlainText(), readBestText(), readHTMLString()
   writePlainText(_:), simulateCopyShortcut(using:), simulatePasteShortcut(using:)
 ```
 
 ## TokenPreservationSupport.swift
 ```
-struct ProtectedToken  — placeholder, originalToken
-struct TokenProtectionResult  — protectedText, tokens, hasProtectedTokens
+struct ProtectedToken  - placeholder, originalToken
+struct TokenProtectionResult  - protectedText, tokens, hasProtectedTokens
 
 enum TokenPreservationSupport
   static protectTokens(in:) -> TokenProtectionResult
@@ -132,7 +132,7 @@ enum FallbackSupport
 
 ## UpdateCheckSupport.swift
 ```
-struct VersionInfo  — current, latest, isUpdateAvailable, releaseURL
+struct VersionInfo  - current, latest, isUpdateAvailable, releaseURL
 enum UpdateCheckSupport
   static defaultReleaseURL: String
   static isNewer(latest:, current:) -> Bool
@@ -142,7 +142,7 @@ enum UpdateCheckSupport
 
 ## AccessibilityTextSupport.swift
 ```
-protocol AXElementProviding  — createApplication(), copyAttribute(), setAttribute()
+protocol AXElementProviding  - createApplication(), copyAttribute(), setAttribute()
 struct SystemAXElementProvider: AXElementProviding
 enum AccessibilityTextSupport
   static readSelectedText(appPID:, provider:) -> String?
@@ -151,7 +151,7 @@ enum AccessibilityTextSupport
 
 ## WritingCoachSupport.swift
 ```
-struct WritingCoachInsights  — positives: [String], improvements: [String], hasContent: Bool
+struct WritingCoachInsights  - positives: [String], improvements: [String], hasContent: Bool
 enum WritingCoachSupport
   static systemPrompt: String
   static buildInput(samples:) -> String
@@ -161,7 +161,7 @@ enum WritingCoachSupport
 
 ## AppProfileSupport.swift
 ```
-struct AppProfile: Codable  — bundleIdentifier, tonePreset?, model?, provider?
+struct AppProfile: Codable  - bundleIdentifier, tonePreset?, model?, provider?
 enum AppProfileSupport
   static resolvedConfig(base:, profiles:, bundleIdentifier:) -> AppConfig
   static apply(profile:, to:) -> AppConfig
@@ -170,15 +170,15 @@ enum AppProfileSupport
 ```
 
 ## Other Support Files (smaller)
-- **CorrectionStatisticsSupport** — format stats for display (averages, counts, tokens)
-- **DeveloperModeSupport** — truncate(), formatEntry(), log phase colors
-- **MenuBarIconSupport** — icon descriptor, renderIcon()
-- **TooltipSupport** — formatTooltip() for menu bar
-- **PartialCorrectionSupport** — splitSentences(), reassembleSentences()
-- **TokenEstimationSupport** — estimateTokens(), formatTokenCount()
-- **HistoryCSVExporter** — csv(entries:, timestampFormatter:)
-- **SettingsExportSupport** — export(), `import`()
-- **WritingCoachLayoutSupport** — panel dimensions, cappedItems()
-- **SettingsLayoutSupport** — section spacing constant
-- **AccessibilitySupport** — guidanceText()
-- **ClaudeRuntimeSupport** — resolveClaudeCLIPath(), validateAuth()
+- **CorrectionStatisticsSupport** - format stats for display (averages, counts, tokens)
+- **DeveloperModeSupport** - truncate(), formatEntry(), log phase colors
+- **MenuBarIconSupport** - icon descriptor, renderIcon()
+- **TooltipSupport** - formatTooltip() for menu bar
+- **PartialCorrectionSupport** - splitSentences(), reassembleSentences()
+- **TokenEstimationSupport** - estimateTokens(), formatTokenCount()
+- **HistoryCSVExporter** - csv(entries:, timestampFormatter:)
+- **SettingsExportSupport** - export(), `import`()
+- **WritingCoachLayoutSupport** - panel dimensions, cappedItems()
+- **SettingsLayoutSupport** - section spacing constant
+- **AccessibilitySupport** - guidanceText()
+- **ClaudeRuntimeSupport** - resolveClaudeCLIPath(), validateAuth()

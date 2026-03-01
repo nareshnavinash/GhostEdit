@@ -83,7 +83,7 @@ enum WidgetPositioningSupport {
         return .reposition
     }
 
-    /// Adjust issues after a fix is applied — shift ranges for issues after the fixed location.
+    /// Adjust issues after a fix is applied - shift ranges for issues after the fixed location.
     static func adjustIssuesAfterFix(
         issues: [SpellCheckIssue],
         fixedIndex: Int,

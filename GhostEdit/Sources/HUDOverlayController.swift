@@ -328,7 +328,7 @@ final class HUDOverlayController {
                 ]
                 attrString.append(NSAttributedString(string: segment.text, attributes: attrs))
             case .deletion:
-                break  // Skip deletions — only show insertions in green
+                break  // Skip deletions - only show insertions in green
             }
         }
         diffField.attributedStringValue = attrString

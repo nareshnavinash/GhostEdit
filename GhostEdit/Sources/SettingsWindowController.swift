@@ -1425,7 +1425,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
             engineLabel.stringValue = "Local engine: \(modelName) (Hugging Face)"
         } else {
             dotView.textColor = .systemOrange
-            engineLabel.stringValue = "Local engine: Harper + NSSpellChecker (no local model) — configure in Settings > Local Models"
+            engineLabel.stringValue = "Local engine: Harper + NSSpellChecker (no local model) - configure in Settings > Local Models"
         }
 
         engineStack.addArrangedSubview(dotView)
@@ -2114,7 +2114,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private func updateHotkeyPreview() {
         guard let keyCode = selectedHotkeyKeyCode() else {
             hotkeyPreviewLabel.stringValue = "Local hotkey: unavailable"
-            hotkeyBadgeLabel.stringValue = "—"
+            hotkeyBadgeLabel.stringValue = "-"
             return
         }
 
@@ -2162,7 +2162,7 @@ final class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     private func updateCloudHotkeyPreview() {
         guard let keyCode = selectedCloudHotkeyKeyCode() else {
             cloudHotkeyPreviewLabel.stringValue = "Cloud hotkey: unavailable"
-            cloudHotkeyBadgeLabel.stringValue = "—"
+            cloudHotkeyBadgeLabel.stringValue = "-"
             return
         }
 

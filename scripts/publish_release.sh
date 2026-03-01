@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# publish_release.sh — Build, tag, upload artifacts, and update the Homebrew cask.
+# publish_release.sh - Build, tag, upload artifacts, and update the Homebrew cask.
 #
 # Usage:
 #   ./scripts/publish_release.sh          # reads version from project.yml
@@ -59,7 +59,7 @@ echo ""
 echo "[2/5] Creating GitHub release $TAG..."
 
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-  echo "  Release $TAG already exists — uploading artifacts (overwriting if present)..."
+  echo "  Release $TAG already exists - uploading artifacts (overwriting if present)..."
   gh release upload "$TAG" "$DMG_PATH" "$ZIP_PATH" --repo "$REPO" --clobber
 else
   gh release create "$TAG" "$DMG_PATH" "$ZIP_PATH" \

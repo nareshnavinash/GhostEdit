@@ -215,7 +215,7 @@ final class StreamingPreviewController: NSWindowController {
         divider.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(divider)
 
-        // Buttons — styled: Accept is green accent, Cancel is plain
+        // Buttons - styled: Accept is green accent, Cancel is plain
         acceptButton.keyEquivalent = "\t"
         acceptButton.bezelStyle = .rounded
         acceptButton.contentTintColor = .white
@@ -304,7 +304,7 @@ final class StreamingPreviewController: NSWindowController {
             statsLabel.leadingAnchor.constraint(equalTo: nextChangeButton.trailingAnchor, constant: 8),
             statsLabel.bottomAnchor.constraint(equalTo: acceptButton.topAnchor, constant: -6),
 
-            // Change navigation buttons — left side of stats bar
+            // Change navigation buttons - left side of stats bar
             prevChangeButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             prevChangeButton.centerYAnchor.constraint(equalTo: statsLabel.centerYAnchor),
             prevChangeButton.widthAnchor.constraint(equalToConstant: 28),

@@ -1,4 +1,4 @@
-# Visual QA Checklist — Run Before Each Release
+# Visual QA Checklist - Run Before Each Release
 
 ## Prerequisites
 - Build: `xcodebuild build -project GhostEdit.xcodeproj -scheme GhostEdit -configuration Release`
@@ -82,8 +82,8 @@
 Test correction in each of these apps (different text input methods):
 - [ ] TextEdit (standard Cocoa text field)
 - [ ] Safari (web form fields)
-- [ ] VS Code (Electron app — clipboard fallback)
-- [ ] Slack (Electron + emoji — U+FFFC handling)
+- [ ] VS Code (Electron app - clipboard fallback)
+- [ ] Slack (Electron + emoji - U+FFFC handling)
 - [ ] Terminal (limited accessibility)
 - [ ] Notes (rich text)
 

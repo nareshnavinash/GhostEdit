@@ -860,7 +860,7 @@ final class ConfigManagerTests: XCTestCase {
     }
 
     func testCloudHotkeyDecoderFallsBackToBaseWithShift() throws {
-        // Old JSON without cloud hotkey fields — should default to base key + Shift
+        // Old JSON without cloud hotkey fields - should default to base key + Shift
         let json = """
         {"hotkeyKeyCode": 0, "hotkeyModifiers": 256}
         """

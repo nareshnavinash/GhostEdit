@@ -159,7 +159,7 @@ enum CorrectionPipelineSupport {
         if let modelText = modelCorrectedText {
             let trimmed = modelText.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty || trimmed == spellFixedText {
-                // Model returned unchanged — use spell-fixed text if it differs
+                // Model returned unchanged - use spell-fixed text if it differs
                 if spellFixedText == originalText {
                     return nil // Nothing changed at all
                 }

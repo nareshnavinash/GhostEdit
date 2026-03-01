@@ -349,7 +349,7 @@ final class TokenPreservationSupportTests: XCTestCase {
         One <img src="x" alt=":wave:"> two three.
         """
         let result = TokenPreservationSupport.recoverObjectReplacements(in: plain, fromHTML: html)
-        // 2 U+FFFC but only 1 <img> — can't align, return original.
+        // 2 U+FFFC but only 1 <img> - can't align, return original.
         XCTAssertEqual(result, plain)
     }
 

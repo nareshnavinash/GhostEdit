@@ -501,10 +501,10 @@ final class SpellCheckSupportTests: XCTestCase {
             word: "--",
             range: NSRange(location: 0, length: 2),
             kind: .style,
-            suggestions: ["—"]
+            suggestions: ["-"]
         )
         let result = SpellCheckSupport.issueDescription(for: issue)
-        XCTAssertEqual(result, "Style: \"--\" → \"—\"")
+        XCTAssertEqual(result, "Style: \"--\" → \"-\"")
     }
 
     func testIssueDescriptionStyleNoSuggestions() {

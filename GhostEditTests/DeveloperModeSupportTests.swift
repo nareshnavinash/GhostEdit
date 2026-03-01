@@ -177,7 +177,7 @@ final class DeveloperModeSupportTests: XCTestCase {
         try manager.saveConfig(config)
 
         let runner = ShellRunner(configManager: manager)
-        // No logger set — should not crash
+        // No logger set - should not crash
         let output = try runner.correctText(systemPrompt: "Fix", selectedText: "test")
         XCTAssertEqual(output, "no logger")
     }

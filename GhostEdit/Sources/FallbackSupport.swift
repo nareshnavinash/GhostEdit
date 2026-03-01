@@ -9,11 +9,11 @@ enum FallbackSupport {
     ) -> String? {
         let models = provider.availableModels
         guard let idx = models.firstIndex(of: currentModel) else {
-            // Unknown model — try the default as fallback.
+            // Unknown model - try the default as fallback.
             let defaultModel = provider.defaultModel
             return currentModel == defaultModel ? nil : defaultModel
         }
-        // Try the next model in the list (wrapping is intentionally NOT done —
+        // Try the next model in the list (wrapping is intentionally NOT done -
         // only one fallback attempt per correction).
         let nextIdx = idx + 1
         guard nextIdx < models.count else {

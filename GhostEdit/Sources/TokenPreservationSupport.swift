@@ -77,7 +77,7 @@ enum TokenPreservationSupport {
     private static let tokenAwareInstruction = """
     CRITICAL: The text contains Slack emoji codes (e.g. :emoji_name:), @mentions, URLs, \
     file paths, and inline code. You MUST keep every one of these tokens exactly as it \
-    appears — same spelling, punctuation, and position. Only fix the surrounding grammar \
+    appears - same spelling, punctuation, and position. Only fix the surrounding grammar \
     and spelling. Return only the corrected text.
     """
 

@@ -27,7 +27,7 @@ enum HarperLinter {
         let nsText = text as NSString
 
         return lints.compactMap { lint in
-            // Harper returns byte offsets — convert to NSString (UTF-16) range
+            // Harper returns byte offsets - convert to NSString (UTF-16) range
             guard let startIndex = text.utf8.index(
                 text.utf8.startIndex,
                 offsetBy: lint.start,

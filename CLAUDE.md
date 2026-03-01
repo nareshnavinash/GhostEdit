@@ -1,4 +1,4 @@
-# GhostEdit — Project Guide
+# GhostEdit - Project Guide
 
 ## What is GhostEdit?
 A macOS menu bar app (AppKit, no SwiftUI/XIBs) that fixes grammar/spelling in any text field system-wide. User presses a hotkey, selected text is sent to an LLM (Claude/Gemini/Codex), corrected text is pasted back. Supports streaming preview, diff view, writing coach, and history.
@@ -9,13 +9,13 @@ A macOS menu bar app (AppKit, no SwiftUI/XIBs) that fixes grammar/spelling in an
 ## Architecture
 
 ### Three Targets (project.yml / GhostEdit.xcodeproj)
-- **GhostEditCore** — Framework. All source files EXCEPT main.swift. This is what tests import.
-- **GhostEdit** — App. Only main.swift + assets. Links GhostEditCore.
-- **GhostEditTests** — Unit tests. Tests GhostEditCore.
+- **GhostEditCore** - Framework. All source files EXCEPT main.swift. This is what tests import.
+- **GhostEdit** - App. Only main.swift + assets. Links GhostEditCore.
+- **GhostEditTests** - Unit tests. Tests GhostEditCore.
 
 ### Source Files (49 files, ~14K lines in `GhostEdit/Sources/`)
 
-#### AppDelegate (~2,600 lines) — Orchestration & UI
+#### AppDelegate (~2,600 lines) - Orchestration & UI
 Contains the `AppDelegate` class and `extension AppDelegate: DeveloperModeLogger`. Organized with MARK sections:
 
 | MARK Section | Line | What It Does |
@@ -76,8 +76,8 @@ Each is a standalone `final class` communicating via closures/references passed 
 
 | File | Lines | Key Methods |
 |---|---|---|
-| `TokenPreservationSupport.swift` | 286 | `preserveTokens()`, `restoreTokens()` — protect URLs, emails, code blocks from LLM changes |
-| `WritingCoachSupport.swift` | 244 | `analyzeWriting()`, `formatFeedback()` — writing quality analysis |
+| `TokenPreservationSupport.swift` | 286 | `preserveTokens()`, `restoreTokens()` - protect URLs, emails, code blocks from LLM changes |
+| `WritingCoachSupport.swift` | 244 | `analyzeWriting()`, `formatFeedback()` - writing quality analysis |
 | `DiffSupport.swift` | 225 | `wordDiff()` for summaries/counts, `charDiff()` for display highlighting |
 | `AccessibilityTextSupport.swift` | 212 | AX text extraction helpers |
 | `SpellCheckSupport.swift` | 188 | `SpellCheckIssue` struct, NSSpellChecker integration |
@@ -98,7 +98,7 @@ Each is a standalone `final class` communicating via closures/references passed 
 | `TokenEstimationSupport.swift` | 54 | Token count estimation |
 | `UpdateCheckSupport.swift` | 50 | GitHub release version comparison |
 | `SettingsExportSupport.swift` | 48 | Settings serialization |
-| `LocalFixSupport.swift` | 37 | `extractLineAtCursor()`, `mergeIssues()` — local fix pipeline helpers |
+| `LocalFixSupport.swift` | 37 | `extractLineAtCursor()`, `mergeIssues()` - local fix pipeline helpers |
 | `FallbackSupport.swift` | 37 | Fallback provider logic |
 | `WritingCoachLayoutSupport.swift` | 31 | Writing coach panel layout |
 | `StatusDisplaySupport.swift` | 22 | `statusColor(for:)` → `.green`/`.orange`/`.red` based on status text |
@@ -122,12 +122,12 @@ Each is a standalone `final class` communicating via closures/references passed 
 **LiveFeedback Auto-Apply:** After cmd+E writes text back, `requestAutoApply()` clears LiveFeedback's scan cache and sets a flag. On the next polling cycle, LiveFeedback re-checks the text, and if fixable issues remain, auto-applies them via `applyAllFixes()`.
 
 ### Key Types
-- `AppConfig` (in ConfigManager.swift) — all user settings
-- `CorrectionHistoryEntry` with `succeeded: Bool` — history records
-- `SpellCheckIssue(word:range:kind:suggestions:)` — spell check results
-- `DiffSegment` — diff display units
+- `AppConfig` (in ConfigManager.swift) - all user settings
+- `CorrectionHistoryEntry` with `succeeded: Bool` - history records
+- `SpellCheckIssue(word:range:kind:suggestions:)` - spell check results
+- `DiffSegment` - diff display units
 - HUD states: `.working`, `.success`, `.successWithCount(Int)`, `.error(String)`
-- `FlippedClipView` (in StreamingPreviewController.swift) — used by both StreamingPreviewController and SettingsWindowController (internal access)
+- `FlippedClipView` (in StreamingPreviewController.swift) - used by both StreamingPreviewController and SettingsWindowController (internal access)
 
 ## Build & Test
 
@@ -178,7 +178,7 @@ Users install via: `brew tap nareshnavinash/ghostedit && brew install --cask gho
 - Providers: Claude (.claude), Gemini (.gemini), Codex (.codex)
 
 ## SourceKit Warnings
-Cross-module SourceKit errors like "Cannot find 'AppConfig' in scope" are **false positives** — they happen because SourceKit can't resolve types across the Core framework boundary. If `xcodebuild build` succeeds, ignore them.
+Cross-module SourceKit errors like "Cannot find 'AppConfig' in scope" are **false positives** - they happen because SourceKit can't resolve types across the Core framework boundary. If `xcodebuild build` succeeds, ignore them.
 
 ## Conventions
 - All UI is programmatic AppKit (NSWindow, NSView, NSTableView, etc.)

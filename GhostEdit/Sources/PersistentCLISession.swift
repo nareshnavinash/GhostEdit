@@ -15,7 +15,7 @@ protocol PersistentCLISessionProtocol: AnyObject {
 ///
 /// Lifecycle managed by ShellRunner:
 ///   1. `spawn()` at app launch (or after each correction finishes)
-///   2. `send()` when Cmd+E fires — writes a user message to the warm process
+///   2. `send()` when Cmd+E fires - writes a user message to the warm process
 ///   3. After the result arrives the caller spawns a fresh session immediately
 ///
 /// Only the Claude provider supports stream-json today; for other providers
@@ -378,7 +378,7 @@ final class PersistentCLISession: PersistentCLISessionProtocol {
                     lock.unlock()
                     return
                 }
-                // Not the init message — keep waiting.
+                // Not the init message - keep waiting.
                 continue
             }
 
@@ -413,7 +413,7 @@ final class PersistentCLISession: PersistentCLISessionProtocol {
                 if let result = extractResult(from: msg) {
                     return result
                 }
-                // Not a result message (could be assistant, stream_event, etc.) — keep reading.
+                // Not a result message (could be assistant, stream_event, etc.) - keep reading.
                 continue
             }
 

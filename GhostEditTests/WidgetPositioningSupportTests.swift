@@ -185,7 +185,7 @@ final class WidgetPositioningSupportTests: XCTestCase {
             SpellCheckIssue(word: "teh", range: NSRange(location: 0, length: 3), kind: .spelling, suggestions: ["the"]),
             SpellCheckIssue(word: "wrold", range: NSRange(location: 10, length: 5), kind: .spelling, suggestions: ["world"])
         ]
-        // Replace "teh" (3 chars) with "the" (3 chars) — no shift
+        // Replace "teh" (3 chars) with "the" (3 chars) - no shift
         let result = WidgetPositioningSupport.adjustIssuesAfterFix(
             issues: issues, fixedIndex: 0,
             originalRange: NSRange(location: 0, length: 3), replacementLength: 3
@@ -198,7 +198,7 @@ final class WidgetPositioningSupportTests: XCTestCase {
             SpellCheckIssue(word: "ab", range: NSRange(location: 0, length: 2), kind: .spelling, suggestions: ["abc"]),
             SpellCheckIssue(word: "de", range: NSRange(location: 10, length: 2), kind: .spelling, suggestions: ["def"])
         ]
-        // Replace "ab" (2 chars) with "abc" (3 chars) — shift by +1
+        // Replace "ab" (2 chars) with "abc" (3 chars) - shift by +1
         let result = WidgetPositioningSupport.adjustIssuesAfterFix(
             issues: issues, fixedIndex: 0,
             originalRange: NSRange(location: 0, length: 2), replacementLength: 3

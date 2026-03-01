@@ -918,7 +918,7 @@ final class LiveFeedbackController {
         buttonStack.spacing = btnSpacing
         buttonStack.translatesAutoresizingMaskIntoConstraints = false
 
-        // Accept button (checkmark) — only if suggestion available
+        // Accept button (checkmark) - only if suggestion available
         if hasSuggestion {
             let acceptBtn = makeActionButton(
                 symbolName: "checkmark.circle.fill",
@@ -1057,7 +1057,7 @@ final class LiveFeedbackController {
     private func applyFix(issue: SpellCheckIssue, replacement: String, fixedIndex: Int) {
         guard let pid = currentFocusedPID else { return }
 
-        // Get the focused element directly — do NOT re-query later,
+        // Get the focused element directly - do NOT re-query later,
         // because clicking the popover row may shift AX focus.
         let appElement = AXUIElementCreateApplication(pid)
         var focusedValue: AnyObject?

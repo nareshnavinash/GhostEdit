@@ -7,9 +7,9 @@
 | GhostEdit | App | main.swift + Assets | com.ghostedit.app |
 | GhostEditTests | Unit Tests | GhostEditTests/ (26 files) | com.ghostedit.tests |
 
-## Source Files (GhostEdit/Sources/) — 33 files, ~9K lines
+## Source Files (GhostEdit/Sources/) - 33 files, ~9K lines
 
-### AppDelegate.swift (~4,600 lines) — The Monolith
+### AppDelegate.swift (~4,600 lines) - The Monolith
 Contains ALL window controllers and the main app delegate.
 
 | Class/Component | Lines | Purpose |
@@ -75,7 +75,7 @@ Contains ALL window controllers and the main app delegate.
 | SettingsLayoutSupport.swift | 16 | Settings UI constants |
 | AccessibilitySupport.swift | 11 | AX guidance text |
 
-## Test Files (GhostEditTests/) — 26 files, ~5,700 lines
+## Test Files (GhostEditTests/) - 26 files, ~5,700 lines
 Each guarded source file has a corresponding test file. Test naming: `{SourceFile}Tests.swift`.
 Total tests: 437+, all must pass with 100% line coverage on guarded files.
 

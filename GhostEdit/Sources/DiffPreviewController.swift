@@ -70,7 +70,7 @@ final class DiffPreviewController: NSWindowController {
         scrollView.documentView = textView
         contentView.addSubview(scrollView)
 
-        // Buttons — green primary, plain secondary
+        // Buttons - green primary, plain secondary
         let applyButton = NSButton(title: "Apply", target: self, action: #selector(applyClicked))
         applyButton.keyEquivalent = "\r"
         applyButton.bezelStyle = .rounded

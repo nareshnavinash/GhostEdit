@@ -92,7 +92,7 @@ final class HotkeyManager {
             hotKeyRefs[1] = ref
         }
 
-        // Register shift variant (variant 1, id=2) — base modifiers + Shift
+        // Register shift variant (variant 1, id=2) - base modifiers + Shift
         let shiftModifiers = modifiers | UInt32(shiftKey)
         let shiftID = EventHotKeyID(signature: signature, id: 2)
         var shiftRef: EventHotKeyRef?

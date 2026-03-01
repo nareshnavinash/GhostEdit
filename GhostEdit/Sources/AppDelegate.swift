@@ -521,7 +521,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         targetAppAtTrigger = targetApp
         showHUD(state: .working)
 
-        // Local fixes replace the entire field content — use AXValueAttribute directly
+        // Local fixes replace the entire field content - use AXValueAttribute directly
         if entry.provider == "Local" {
             let appElement = AXUIElementCreateApplication(targetApp.processIdentifier)
             var focusedValue: AnyObject?
@@ -767,7 +767,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Fix only the line at the cursor (not the entire document).
-        // Skip for text containing U+FFFC (Slack inline emojis) — bulk text write
+        // Skip for text containing U+FFFC (Slack inline emojis) - bulk text write
         // destroys object replacement characters in Electron apps.
         let lineExtraction: (lineText: String, lineRange: NSRange)?
         if currentText.contains(TokenPreservationSupport.objectReplacementCharacter) {
@@ -820,7 +820,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         let finalText: String
                         let toolLabel: String
                         if trimmed.isEmpty || trimmed == spellFixed {
-                            // Model returned unchanged — use spell-fixed text if it differs
+                            // Model returned unchanged - use spell-fixed text if it differs
                             if spellFixed == textToFix {
                                 // Neither Harper nor Model changed anything
                                 self.showHUD(state: .success)
@@ -859,7 +859,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 } catch {
                     await MainActor.run {
                         guard let self else { return }
-                        self.devLog(.cliExecution, "Local model error: \(error.localizedDescription) — falling back to Harper + Dictionary")
+                        self.devLog(.cliExecution, "Local model error: \(error.localizedDescription) - falling back to Harper + Dictionary")
                         // On model error, use spell-fixed text if it differs from original
                         if spellFixed != textToFix {
                             if let extraction = lineExtraction {
@@ -1220,7 +1220,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         devLog(.textCapture, "Target app: \(targetApp.localizedName ?? targetApp.bundleIdentifier ?? "unknown") (PID \(targetApp.processIdentifier))")
 
         // Try accessibility-based reading first (no clipboard round-trip needed).
-        // Skip if text contains U+FFFC (Object Replacement Character) — this means
+        // Skip if text contains U+FFFC (Object Replacement Character) - this means
         // the source app rendered inline images (e.g. Slack custom emojis) that the
         // AX API cannot represent as text. Fall through to clipboard which has HTML.
         if let selectedText = AccessibilityTextSupport.readSelectedText(
@@ -1232,13 +1232,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Nothing selected — try extracting the current line at the cursor
+        // Nothing selected - try extracting the current line at the cursor
         let pid = targetApp.processIdentifier
         if let fullText = AccessibilityTextSupport.readFullText(appPID: pid),
            !fullText.contains(TokenPreservationSupport.objectReplacementCharacter),
            let cursorPos = AccessibilityTextSupport.readCursorPosition(appPID: pid),
            let lineInfo = extractLineAtCursor(text: fullText, cursorLocation: cursorPos) {
-            devLog(.textCapture, "No selection — extracted line at cursor (\(lineInfo.lineText.count) chars)")
+            devLog(.textCapture, "No selection - extracted line at cursor (\(lineInfo.lineText.count) chars)")
             pendingLineContext = LineContext(
                 fullText: fullText, lineRange: lineInfo.lineRange,
                 lineText: lineInfo.lineText, pid: pid
@@ -1511,7 +1511,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
 
                     // Try accessibility-based text replacement first (fastest path).
-                    // Works on background apps — no focus changes needed.
+                    // Works on background apps - no focus changes needed.
                     if let targetApp = self.targetAppAtTrigger {
                         self.devLog(.pasteBack, "Attempting AX text replacement")
                         let axReplaced = AccessibilityTextSupport.replaceSelectedText(
@@ -1519,7 +1519,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                             with: correctedText
                         )
                         if axReplaced {
-                            // Verify after a short delay — some apps (e.g. TextEdit) need
+                            // Verify after a short delay - some apps (e.g. TextEdit) need
                             // time to commit the AX change, while Electron apps (Slack,
                             // Discord, VS Code) accept the call but never actually replace.
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -1542,7 +1542,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                                     self.notifySuccessIfEnabled()
                                     self.finishProcessing()
                                 } else {
-                                    // readBack is non-empty but different — AX accepted the call
+                                    // readBack is non-empty but different - AX accepted the call
                                     // but didn't actually replace (Electron: Slack, Discord, VS Code).
                                     self.devLog(.pasteBack, "AX replacement not verified, falling back to clipboard paste")
                                     self.pasteViaClipboard(correctedText: correctedText)
@@ -1552,7 +1552,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                     }
 
-                    // AX replacement not available — go straight to clipboard paste.
+                    // AX replacement not available - go straight to clipboard paste.
                     self.pasteViaClipboard(correctedText: correctedText)
                 }
             } catch {
@@ -1592,7 +1592,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                         return
                     } catch {
-                        // Fallback also failed — fall through to normal error handling.
+                        // Fallback also failed - fall through to normal error handling.
                     }
                 }
 

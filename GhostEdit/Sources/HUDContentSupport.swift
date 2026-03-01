@@ -37,7 +37,7 @@ enum HUDContentSupport {
         return HUDOverlaySupport.autoDismissDelay(for: state)
     }
 
-    /// Filter diff segments for HUD display — keep only equal and insertion segments.
+    /// Filter diff segments for HUD display - keep only equal and insertion segments.
     static func filterSegmentsForHUD(_ segments: [DiffSegment]) -> [DiffSegment] {
         return segments.filter { $0.kind != .deletion }
     }
