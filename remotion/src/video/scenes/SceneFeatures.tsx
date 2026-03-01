@@ -27,7 +27,7 @@ const FEATURES = [
   {
     icon: "🔀",
     title: "Your AI, Your Choice",
-    description: "Claude, Codex, or Gemini — bring your own API key.",
+    description: "Claude, Codex, or Gemini - bring your own API key.",
     accent: colors.phantomGreen,
   },
   {
@@ -155,7 +155,7 @@ export const SceneFeatures: React.FC = () => {
   );
 };
 
-// Individual card showcase — big centered card with glow + animation
+// Individual card showcase - big centered card with glow + animation
 const SingleCardShowcase: React.FC<{
   feature: (typeof FEATURES)[number];
   localFrame: number;

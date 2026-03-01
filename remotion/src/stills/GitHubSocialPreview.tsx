@@ -64,7 +64,7 @@ export const GitHubSocialPreview: React.FC = () => {
           }}
         >
           {[
-            "⌘E — Fix in any app",
+            "⌘E - Fix in any app",
             "🔒 Local AI providers",
             "📝 Writing coach",
             "⚡ Works everywhere",

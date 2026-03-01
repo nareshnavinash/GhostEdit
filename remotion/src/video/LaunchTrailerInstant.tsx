@@ -19,7 +19,7 @@ import { InstantSceneScreenshots } from "./scenes/InstantSceneScreenshots";
 import { InstantScenePrivacy } from "./scenes/InstantScenePrivacy";
 import { InstantSceneOutro } from "./scenes/InstantSceneOutro";
 
-// 30fps — blue glow-wipe transitions overlap by 15 frames
+// 30fps - blue glow-wipe transitions overlap by 15 frames
 //
 // Scene layout:
 //   Intro:        0      dur=120  (4.0s)

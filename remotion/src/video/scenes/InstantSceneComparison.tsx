@@ -31,12 +31,6 @@ export const InstantSceneComparison: React.FC = () => {
   });
   const rightX = interpolate(rightSpring, [0, 1], [400, 0]);
 
-  // Strikethrough on "$30/mo" (35-38)
-  const strikeWidth = interpolate(frame, [35, 38], [0, 100], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-
   // Right card glow + checkmark (40-48)
   const glowOpacity = interpolate(frame, [40, 48], [0, 1], {
     extrapolateLeft: "clamp",
@@ -45,9 +39,9 @@ export const InstantSceneComparison: React.FC = () => {
 
   // Bullet points stagger (50-75)
   const bullets = [
-    "No subscriptions",
-    "No accounts required",
-    "No cloud dependency",
+    "Free forever - no subscriptions",
+    "No account needed",
+    "100% local - nothing sent to the cloud",
   ];
 
   // Gradient tagline (75-120)
@@ -75,44 +69,41 @@ export const InstantSceneComparison: React.FC = () => {
         >
           {/* Two cards side by side */}
           <div style={{ display: "flex", gap: 40 }}>
-            {/* Left card — Others */}
-            <div style={{ transform: `translateX(${leftX}px)` }}>
+            {/* Left card — Others (mild red tint) */}
+            <div
+              style={{
+                transform: `translateX(${leftX}px)`,
+                borderRadius: 20,
+                backgroundColor: `${lightColors.error}0C`,
+                border: `1.5px solid ${lightColors.error}22`,
+                padding: 4,
+              }}
+            >
               <LightFeatureCard
                 icon="💸"
                 title="Other Tools"
-                description="$30/mo, cloud-only, account needed"
+                description="$20–30/mo, data sent to their servers"
                 accentColor={lightColors.error}
                 width={480}
               />
-              {/* Strikethrough overlay on price */}
-              {frame >= 35 && (
-                <div
-                  style={{
-                    position: "relative",
-                    top: -58,
-                    left: 52,
-                    width: `${strikeWidth * 0.6}%`,
-                    maxWidth: 90,
-                    height: 2,
-                    backgroundColor: lightColors.error,
-                    borderRadius: 1,
-                  }}
-                />
-              )}
             </div>
 
-            {/* Right card — GhostEdit */}
+            {/* Right card — GhostEdit (mild green tint) */}
             <div
               style={{
                 transform: `translateX(${rightX}px)`,
                 position: "relative",
+                borderRadius: 20,
+                backgroundColor: `${lightColors.success}0C`,
+                border: `1.5px solid ${lightColors.success}22`,
+                padding: 4,
               }}
             >
               <div
                 style={{
                   boxShadow:
                     glowOpacity > 0
-                      ? `0 0 30px ${lightColors.spectralBlue}${Math.round(glowOpacity * 40)
+                      ? `0 0 30px ${lightColors.success}${Math.round(glowOpacity * 40)
                           .toString(16)
                           .padStart(2, "0")}`
                       : "none",
@@ -122,8 +113,8 @@ export const InstantSceneComparison: React.FC = () => {
                 <LightFeatureCard
                   icon="👻"
                   title="GhostEdit"
-                  description="Free, local, no account"
-                  accentColor={lightColors.spectralBlue}
+                  description="100% free — data never leaves your Mac"
+                  accentColor={lightColors.success}
                   width={480}
                 />
               </div>
@@ -132,8 +123,8 @@ export const InstantSceneComparison: React.FC = () => {
                 <div
                   style={{
                     position: "absolute",
-                    top: -12,
-                    right: -12,
+                    top: -8,
+                    right: -8,
                     width: 36,
                     height: 36,
                     borderRadius: "50%",

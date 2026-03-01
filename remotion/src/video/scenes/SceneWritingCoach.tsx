@@ -113,7 +113,7 @@ export const SceneWritingCoach: React.FC = () => {
           Writing Coach
         </div>
 
-        {/* Button — visible until panels come in */}
+        {/* Button - visible until panels come in */}
         <div
           style={{
             position: "relative",
@@ -139,7 +139,7 @@ export const SceneWritingCoach: React.FC = () => {
             Sharpen My Writing Style
           </div>
 
-          {/* Cursor — moves from bottom-right to button center */}
+          {/* Cursor - moves from bottom-right to button center */}
           {cursorOpacity > 0 && (
             <div
               style={{
@@ -162,7 +162,7 @@ export const SceneWritingCoach: React.FC = () => {
           )}
         </div>
 
-        {/* Panels — appear after button click */}
+        {/* Panels - appear after button click */}
         <div
           style={{
             display: "flex",

@@ -13,7 +13,7 @@ import { MenuBarMockup } from "../../components/MenuBarMockup";
 import { KeyboardShortcut } from "../../components/KeyboardShortcut";
 import { SceneBackground } from "../../components/SceneBackground";
 
-// Real emojis — shows emoji preservation
+// Real emojis - shows emoji preservation
 const BEFORE_TEXT =
   "Hey @sarah and @mike 👋 I think their going to need the report from https://docs.company.com before the meeting tommorow 🙏";
 const AFTER_TEXT =
@@ -279,7 +279,7 @@ export const SceneSlackDemo: React.FC = () => {
           <MacWindow
             width={1200}
             height={320}
-            title="Slack — #team-updates"
+            title="Slack - #team-updates"
           >
             <div style={{ position: "relative" }}>
               {selectionWidth > 0 && selectionOpacity > 0 && (
@@ -388,7 +388,7 @@ export const SceneSlackDemo: React.FC = () => {
           <span>✓</span> Correction complete
         </div>
 
-        {/* Tagline — visible from the start */}
+        {/* Tagline - visible from the start */}
         <div
           style={{
             position: "absolute",

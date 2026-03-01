@@ -55,10 +55,10 @@ export const TwitterBanner: React.FC = () => {
           gap: 56,
         }}
       >
-        {/* Left — Logo with dark squircle */}
+        {/* Left - Logo with dark squircle */}
         <GhostLogo size={300} glowOpacity={0.15} variant="full" />
 
-        {/* Right — Text + feature pills */}
+        {/* Right - Text + feature pills */}
         <div
           style={{
             display: "flex",

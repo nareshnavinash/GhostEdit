@@ -87,7 +87,7 @@ final class ShellRunner {
     }
 
     /// Spawn (or respawn) a persistent CLI session in the background.
-    /// Safe to call multiple times — kills any existing session first.
+    /// Safe to call multiple times - kills any existing session first.
     func spawnPersistentSession() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
@@ -286,7 +286,7 @@ final class ShellRunner {
             devLog(.tokenRestoration, "Placeholders modified by AI on attempt \(attempt + 1)")
         }
 
-        // Placeholders were modified by the AI — retry with the original text
+        // Placeholders were modified by the AI - retry with the original text
         // and an explicit instruction to preserve emoji codes and other tokens.
         devLog(.tokenRestoration, "Retrying with original text and token-aware instruction")
         let segments = TokenPreservationSupport.splitAroundTokens(in: selectedText)
@@ -700,8 +700,8 @@ final class ShellRunner {
         let trimmedLast = relevantLines[lastIdx].replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
         relevantLines[lastIdx] = Substring(trimmedLast)
         var result = relevantLines.joined(separator: "\n")
-        // Strip em dashes (—) that models tend to insert
-        result = result.replacingOccurrences(of: "—", with: "")
+        // Strip em dashes (\u{2014}) that models tend to insert
+        result = result.replacingOccurrences(of: "\u{2014}", with: "")
         // Collapse any double spaces left behind after removal
         while result.contains("  ") {
             result = result.replacingOccurrences(of: "  ", with: " ")

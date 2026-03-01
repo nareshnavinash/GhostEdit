@@ -16,9 +16,9 @@ import { TextCursor } from "../../components/TextCursor";
 const ORIGINAL_TEXT = "Their going to effect the entire teams moral";
 
 const PROCESSING_STEPS = [
-  { icon: "🧠", text: "T5 Grammar Model — vennify/t5-base-grammar-correction", tag: "HuggingFace" },
-  { icon: "📖", text: "Harper spell checker — scanning...", tag: "Harper" },
-  { icon: "🍎", text: "Apple NSSpellChecker — verifying...", tag: "macOS" },
+  { icon: "🧠", text: "T5 Grammar Model", tag: "HuggingFace" },
+  { icon: "📖", text: "Harper spell checker", tag: "Harper" },
+  { icon: "🍎", text: "Apple NSSpellChecker", tag: "macOS" },
 ];
 
 export const InstantSceneLocalDemo: React.FC = () => {
@@ -53,15 +53,17 @@ export const InstantSceneLocalDemo: React.FC = () => {
     extrapolateRight: "clamp",
   });
 
-  // Processing steps (100-120)
+  // Processing steps - three phases: idle, processing, done
   const stepStates = PROCESSING_STEPS.map((_, i) => {
     const stepStart = 100 + i * 7;
-    const typing = interpolate(frame, [stepStart, stepStart + 5], [0, 1], {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
+    const isProcessing = frame >= stepStart && frame < stepStart + 8;
+    const isDone = frame >= stepStart + 8;
+    const tickScale = spring({
+      frame: frame - (stepStart + 8),
+      fps,
+      config: { damping: 8, stiffness: 120 },
     });
-    const done = frame >= stepStart + 10;
-    return { typing, done };
+    return { isProcessing, isDone, tickScale };
   });
 
   // Before→After transition (120-130)
@@ -217,43 +219,62 @@ export const InstantSceneLocalDemo: React.FC = () => {
                   )}
                 </div>
 
-                {/* Processing steps */}
-                {frame >= 100 && frame < 125 && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                      marginTop: 16,
-                    }}
-                  >
-                    {PROCESSING_STEPS.map((step, i) => (
+                {/* Processing steps - always visible */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                    marginTop: 16,
+                  }}
+                >
+                  {PROCESSING_STEPS.map((step, i) => {
+                    const { isProcessing, isDone, tickScale } = stepStates[i];
+                    const stepColor = isDone
+                      ? lightColors.success
+                      : isProcessing
+                        ? lightColors.spectralBlue
+                        : lightColors.textTertiary;
+                    const textColor = isDone
+                      ? lightColors.textPrimary
+                      : isProcessing
+                        ? lightColors.spectralBlue
+                        : lightColors.textTertiary;
+                    return (
                       <div
                         key={i}
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: 10,
-                          opacity: stepStates[i].typing,
+                          gap: 12,
                           ...fontStyles.body,
-                          fontSize: 18,
-                          color: lightColors.textSecondary,
+                          fontSize: 24,
+                          color: textColor,
                         }}
                       >
                         <span
                           style={{
-                            color: stepStates[i].done
-                              ? lightColors.success
-                              : lightColors.spectralBlue,
-                            fontSize: 16,
+                            color: stepColor,
+                            fontSize: 22,
+                            display: "inline-flex",
+                            width: 28,
+                            justifyContent: "center",
+                            transform: isDone ? `scale(${tickScale})` : "scale(1)",
                           }}
                         >
-                          {stepStates[i].done ? "✓" : step.icon}
+                          {isDone ? "✓" : step.icon}
                         </span>
-                        <span style={{ flex: 1 }}>{step.text}</span>
+                        <span style={{ flex: 1 }}>
+                          {step.text}
+                          {isProcessing && (
+                            <span style={{ color: lightColors.spectralBlue, opacity: 0.7 }}>
+                              {" "}- scanning...
+                            </span>
+                          )}
+                        </span>
                         <span
                           style={{
-                            padding: "2px 8px",
+                            padding: "2px 10px",
                             borderRadius: 6,
                             backgroundColor:
                               step.tag === "HuggingFace"
@@ -267,16 +288,16 @@ export const InstantSceneLocalDemo: React.FC = () => {
                                 : step.tag === "Harper"
                                   ? lightColors.success
                                   : lightColors.textTertiary,
-                            fontSize: 14,
+                            fontSize: 18,
                             ...fontStyles.regular,
                           }}
                         >
                           {step.tag}
                         </span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </div>
             </LightWindow>
 
@@ -303,16 +324,15 @@ export const InstantSceneLocalDemo: React.FC = () => {
           </div>
 
           {/* Success message */}
-          {frame >= 132 && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 6,
-                opacity: successOpacity,
-              }}
-            >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 6,
+              opacity: successOpacity,
+            }}
+          >
               <div
                 style={{
                   display: "flex",
@@ -358,12 +378,10 @@ export const InstantSceneLocalDemo: React.FC = () => {
               >
                 No network requests made
               </div>
-            </div>
-          )}
+          </div>
 
           {/* Technology badges */}
-          {frame >= 143 && (
-            <div
+          <div
               style={{
                 display: "flex",
                 gap: 12,
@@ -389,8 +407,7 @@ export const InstantSceneLocalDemo: React.FC = () => {
                   {badge.label}
                 </div>
               ))}
-            </div>
-          )}
+          </div>
         </div>
       </AbsoluteFill>
     </LightSceneBackground>

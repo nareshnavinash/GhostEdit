@@ -243,8 +243,8 @@ final class ShellRunnerTests: XCTestCase {
         let testEnv = try makeRunnerEnvironment()
         let callsLog = testEnv.homeURL.appendingPathComponent("token-aware.log")
         // With maxValidationRetries: 0:
-        //   Call 1: placeholder attempt — AI strips placeholders.
-        //   Call 2: token-aware retry with original text — AI preserves emojis.
+        //   Call 1: placeholder attempt - AI strips placeholders.
+        //   Call 2: token-aware retry with original text - AI preserves emojis.
         let script = """
         #!/bin/zsh
         count=0
@@ -334,7 +334,7 @@ final class ShellRunnerTests: XCTestCase {
             selectedText: "hello :wave: world",
             maxValidationRetries: 0
         )
-        // bestEffortRestore on "Completely rewritten text." — no placeholders survive.
+        // bestEffortRestore on "Completely rewritten text." - no placeholders survive.
         XCTAssertEqual(result, "Completely rewritten text.")
     }
 
@@ -342,7 +342,7 @@ final class ShellRunnerTests: XCTestCase {
         let testEnv = try makeRunnerEnvironment()
         let callsLog = testEnv.homeURL.appendingPathComponent("partial.log")
         // Call 1: AI keeps placeholder 0 but strips placeholder 1.
-        // Call 2: token-aware retry — only one of two tokens survives.
+        // Call 2: token-aware retry - only one of two tokens survives.
         let script = """
         #!/bin/zsh
         count=0
@@ -805,13 +805,13 @@ final class ShellRunnerTests: XCTestCase {
     }
 
     func testTrimPreservingInternalNewlinesStripsEmDash() {
-        let input = "This is a sentence — with an em dash."
+        let input = "This is a sentence \u{2014} with an em dash."
         let result = ShellRunner.trimPreservingInternalNewlines(input)
         XCTAssertEqual(result, "This is a sentence with an em dash.")
     }
 
     func testTrimPreservingInternalNewlinesStripsMultipleEmDashes() {
-        let input = "First — second — third"
+        let input = "First \u{2014} second \u{2014} third"
         let result = ShellRunner.trimPreservingInternalNewlines(input)
         XCTAssertEqual(result, "First second third")
     }
@@ -1012,7 +1012,7 @@ final class ShellRunnerTests: XCTestCase {
 
     func testCorrectTextStreamingLargeOutput() throws {
         let testEnv = try makeRunnerEnvironment()
-        // Use printf without final newline — data may linger in the pipe buffer
+        // Use printf without final newline - data may linger in the pipe buffer
         // and be collected by readDataToEndOfFile after the handler is cleared.
         let script = """
         #!/bin/zsh
@@ -1345,7 +1345,7 @@ final class ShellRunnerTests: XCTestCase {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 2.0)
-        // No crash, no session — that's the expected outcome.
+        // No crash, no session - that's the expected outcome.
     }
 
     func testSpawnPersistentSessionHandlesSpawnFailure() throws {
@@ -1366,7 +1366,7 @@ final class ShellRunnerTests: XCTestCase {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 3.0)
-        // spawn() throws because the executable is invalid — catch block runs.
+        // spawn() throws because the executable is invalid - catch block runs.
         // The important thing is no crash and no session set.
     }
 
@@ -1408,7 +1408,7 @@ final class ShellRunnerTests: XCTestCase {
 
         // The mock's spawn() should have been called and succeeded.
         XCTAssertTrue(mock.spawnCalled)
-        // After successful spawn, the session is stored — verify by injecting
+        // After successful spawn, the session is stored - verify by injecting
         // a ready state and using it for a correction.
         mock.mockIsReady = true
         mock.mockSendResult = PersistentCLISession.StreamResult(text: "factory result")
@@ -1463,7 +1463,7 @@ final class ShellRunnerTests: XCTestCase {
         }
         wait(for: [expectation], timeout: 2.0)
 
-        // spawn was called but threw — catch block handled it, no crash.
+        // spawn was called but threw - catch block handled it, no crash.
         XCTAssertTrue(mock.spawnCalled)
     }
 

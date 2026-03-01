@@ -27,7 +27,7 @@ export const SceneDemo: React.FC = () => {
     extrapolateRight: "clamp",
   });
 
-  // Phase 2: Text already visible from frame 10+ (no typing — Problem scene already typed it)
+  // Phase 2: Text already visible from frame 10+ (no typing - Problem scene already typed it)
   // Blue selection highlight sweeps left→right (frames 20-40) simulating Cmd+A
   const selectionWidth = interpolate(frame, [20, 40], [0, 100], {
     extrapolateLeft: "clamp",

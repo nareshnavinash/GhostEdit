@@ -60,7 +60,7 @@ export const LightScreenshotShowcase: React.FC<
             }}
           />
 
-          {/* Highlight rectangle — solid blue border */}
+          {/* Highlight rectangle - solid blue border */}
           {highlightRect && (
             <div
               style={{

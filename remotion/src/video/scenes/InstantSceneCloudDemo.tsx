@@ -61,17 +61,29 @@ export const InstantSceneCloudDemo: React.FC = () => {
     extrapolateRight: "clamp",
   });
 
+  // "Sending to Claude..." phase (70-85)
+  const sendingOpacity = interpolate(frame, [70, 74, 82, 85], [0, 1, 1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const dotCount = frame >= 70 && frame < 85 ? (Math.floor((frame - 70) / 4) % 3) + 1 : 0;
+
+  // Data flow line (70-88)
+  const flowLineOpacity = interpolate(frame, [70, 74, 85, 88], [0, 1, 1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  // Glowing dot travels down the line
+  const flowDotProgress = interpolate(frame, [70, 85], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+
   // Streaming words (85-125)
   const visibleWords = Math.min(
     STREAMING_WORDS.length,
     Math.max(0, Math.floor(((frame - 85) / 40) * STREAMING_WORDS.length)),
   );
-
-  // Progress bar (85-125)
-  const progressWidth = interpolate(frame, [85, 125], [0, 100], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
 
   // Diff summary (128-136)
   const summaryOpacity = interpolate(frame, [128, 136], [0, 1], {
@@ -200,28 +212,55 @@ export const InstantSceneCloudDemo: React.FC = () => {
                   )}
                 </div>
 
-                {/* Progress bar */}
-                {frame >= 85 && frame <= 130 && (
-                  <div
+                {/* Sending to Claude status — always in DOM to avoid layout jump */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 14,
+                    opacity: sendingOpacity,
+                    marginTop: 12,
+                  }}
+                >
+                  {/* Upload arrow */}
+                  <svg
+                    width="28"
+                    height="28"
+                    viewBox="0 0 20 20"
+                    fill="none"
                     style={{
-                      width: "100%",
-                      height: 3,
-                      backgroundColor: lightColors.panel,
-                      borderRadius: 2,
-                      marginTop: 16,
-                      overflow: "hidden",
+                      transform: `translateY(${-2 + 2 * Math.sin(((frame - 70) / 4) * Math.PI * 2)}px)`,
                     }}
                   >
-                    <div
-                      style={{
-                        width: `${progressWidth}%`,
-                        height: "100%",
-                        background: lightColors.spectralBlue,
-                        borderRadius: 2,
-                      }}
+                    <path
+                      d="M10 16V4M10 4L5 9M10 4L15 9"
+                      stroke={lightColors.claude}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     />
-                  </div>
-                )}
+                  </svg>
+                  <span
+                    style={{
+                      ...fontStyles.regular,
+                      fontSize: 28,
+                      color: lightColors.claude,
+                    }}
+                  >
+                    Sending to Claude{".".repeat(dotCount)}
+                  </span>
+                  {/* Pulsing dot */}
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      backgroundColor: lightColors.claude,
+                      opacity: 0.5 + 0.5 * Math.sin(((frame - 70) / 6) * Math.PI * 2),
+                    }}
+                  />
+                </div>
               </div>
             </LightWindow>
 
@@ -247,15 +286,50 @@ export const InstantSceneCloudDemo: React.FC = () => {
             )}
           </div>
 
-          {/* Provider badges */}
-          {frame >= 70 && (
+          {/* Data flow connection line — always in DOM to avoid layout jump */}
+          <div
+            style={{
+              position: "relative",
+              width: 2,
+              height: 32,
+              opacity: flowLineOpacity,
+            }}
+          >
+            {/* Dashed line */}
             <div
               style={{
-                display: "flex",
-                gap: 16,
-                alignItems: "center",
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: 2,
+                height: "100%",
+                backgroundImage: `repeating-linear-gradient(to bottom, ${lightColors.claude} 0px, ${lightColors.claude} 4px, transparent 4px, transparent 8px)`,
               }}
-            >
+            />
+            {/* Traveling glow dot */}
+            <div
+              style={{
+                position: "absolute",
+                left: -4,
+                top: `${flowDotProgress * 100}%`,
+                width: 10,
+                height: 10,
+                borderRadius: "50%",
+                backgroundColor: lightColors.claude,
+                boxShadow: `0 0 8px ${lightColors.claude}`,
+                transform: "translateY(-50%)",
+              }}
+            />
+          </div>
+
+          {/* Provider badges */}
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              alignItems: "center",
+            }}
+          >
               {providers.map((provider, i) => (
                 <div
                   key={provider}
@@ -266,52 +340,51 @@ export const InstantSceneCloudDemo: React.FC = () => {
                         ? `0 0 20px ${lightColors.claude}${Math.round(claudeGlow * 40)
                             .toString(16)
                             .padStart(2, "0")}`
-                        : "none",
+                        : provider === "Claude" && sendingOpacity > 0
+                          ? `0 0 ${12 + 8 * Math.sin(((frame - 70) / 5) * Math.PI * 2)}px ${lightColors.claude}${Math.round(sendingOpacity * 30)
+                              .toString(16)
+                              .padStart(2, "0")}`
+                          : "none",
                     borderRadius: 999,
                   }}
                 >
                   <ProviderBadge provider={provider} size="sm" />
                 </div>
               ))}
-            </div>
-          )}
+          </div>
 
           {/* Diff summary */}
-          {frame >= 128 && (
-            <div
-              style={{
-                ...fontStyles.regular,
-                fontSize: 22,
-                color: lightColors.textSecondary,
-                opacity: summaryOpacity,
-                display: "flex",
-                gap: 16,
-                alignItems: "center",
-              }}
-            >
-              <span style={{ color: lightColors.spectralBlue }}>
-                7 corrections
-              </span>
-              <span style={{ color: lightColors.border }}>|</span>
-              <span>Claude sonnet</span>
-              <span style={{ color: lightColors.border }}>|</span>
-              <span>2.1s</span>
-            </div>
-          )}
+          <div
+            style={{
+              ...fontStyles.regular,
+              fontSize: 22,
+              color: lightColors.textSecondary,
+              opacity: summaryOpacity,
+              display: "flex",
+              gap: 16,
+              alignItems: "center",
+            }}
+          >
+            <span style={{ color: lightColors.spectralBlue }}>
+              7 corrections
+            </span>
+            <span style={{ color: lightColors.border }}>|</span>
+            <span>Claude sonnet</span>
+            <span style={{ color: lightColors.border }}>|</span>
+            <span>2.1s</span>
+          </div>
 
           {/* API key note */}
-          {frame >= 140 && (
-            <div
-              style={{
-                ...fontStyles.body,
-                fontSize: 20,
-                color: lightColors.textTertiary,
-                opacity: noteOpacity,
-              }}
-            >
-              Bring your own API key
-            </div>
-          )}
+          <div
+            style={{
+              ...fontStyles.body,
+              fontSize: 20,
+              color: lightColors.textTertiary,
+              opacity: noteOpacity,
+            }}
+          >
+            Bring your own API key
+          </div>
         </div>
       </AbsoluteFill>
     </LightSceneBackground>

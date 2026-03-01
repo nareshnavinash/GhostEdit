@@ -152,21 +152,19 @@ export const InstantSceneScreenshots: React.FC = () => {
           </div>
 
           {/* Tagline */}
-          {frame >= 105 && (
-            <div
-              style={{
-                ...fontStyles.title,
-                fontSize: 42,
-                background: lightGradients.brandText,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                opacity: taglineOpacity,
-                transform: `translateY(${taglineY}px)`,
-              }}
-            >
-              Fully configurable. Every detail.
-            </div>
-          )}
+          <div
+            style={{
+              ...fontStyles.title,
+              fontSize: 42,
+              background: lightGradients.brandText,
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              opacity: taglineOpacity,
+              transform: `translateY(${taglineY}px)`,
+            }}
+          >
+            Fully configurable. Every detail.
+          </div>
         </div>
       </AbsoluteFill>
     </LightSceneBackground>

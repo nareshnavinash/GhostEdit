@@ -18,12 +18,12 @@ import { SceneWritingCoach } from "./scenes/SceneWritingCoach";
 import { SceneProviders } from "./scenes/SceneProviders";
 import { SceneOutro } from "./scenes/SceneOutro";
 
-// 30fps — glow-wipe transitions overlap by 15 frames
+// 30fps - glow-wipe transitions overlap by 15 frames
 //
 // Scene layout:
 //   Intro:        0      dur=120  (4s)
 //   SlackDemo:    105    dur=200  (6.7s)
-//   Features:     290    dur=270  (9s — 6 cards + grid)
+//   Features:     290    dur=270  (9s - 6 cards + grid)
 //   WritingCoach: 545    dur=180  (6s)
 //   Providers:    710    dur=90   (3s)
 //   Outro:        785    dur=120  (4s)
