@@ -32,6 +32,14 @@ final class LiveFeedbackController {
     /// proven detection cleans up remaining grammar/punctuation issues.
     private var autoApplyOnNextScan = false
 
+    /// Indicates whether the last `applyAllFixes()` successfully wrote via AX.
+    /// When false, the caller should use clipboard fallback.
+    private(set) var lastApplyWroteViaAX: Bool = true
+
+    /// Called when AX write fails but text was read and fixed successfully.
+    /// The caller (AppDelegate) should paste via clipboard fallback.
+    var onAXWriteBlocked: ((_ original: String, _ fixed: String) -> Void)?
+
     /// Called by the cmd+E pipeline after writing corrected text.
     /// Clears the scan cache so LiveFeedback re-checks even if the text
     /// looks the same, and auto-applies any fixable issues it finds.
@@ -157,18 +165,21 @@ final class LiveFeedbackController {
 
         let element = focused as! AXUIElement
 
-        // Check if it's a text element
+        // Check if it's a text element (relaxed: also accept web/Electron elements with readable text)
         var roleValue: AnyObject?
         AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue)
         let role = roleValue as? String ?? ""
-        guard role == kAXTextAreaRole || role == kAXTextFieldRole else {
-            DispatchQueue.main.async { [weak self] in self?.dismissWidget() }
-            return
-        }
 
         // Read text value
         var textValue: AnyObject?
         AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &textValue)
+        let hasReadableValue = (textValue as? String) != nil && !(textValue as! String).isEmpty
+
+        guard LiveFeedbackSupport.isTextInputElement(role: role, hasReadableValue: hasReadableValue) else {
+            DispatchQueue.main.async { [weak self] in self?.dismissWidget() }
+            return
+        }
+
         guard let text = textValue as? String, !text.isEmpty else {
             DispatchQueue.main.async { [weak self] in self?.dismissWidget() }
             return
@@ -338,7 +349,9 @@ final class LiveFeedbackController {
             autoApplyOnNextScan = false
             let hasFixable = displayIssues.contains { !$0.suggestions.isEmpty }
             if hasFixable {
-                applyAllFixes()
+                if let result = applyAllFixes(), !lastApplyWroteViaAX {
+                    onAXWriteBlocked?(result.original, result.fixed)
+                }
                 return
             }
         }
@@ -1117,6 +1130,16 @@ final class LiveFeedbackController {
                 replacementLength: (replacement as NSString).length
             )
             refreshPopoverContent()
+        } else {
+            // AX write failed (web/Electron) — use clipboard fallback
+            onAXWriteBlocked?(currentText, newText)
+
+            adjustIssuesAfterFix(
+                fixedIndex: fixedIndex,
+                originalRange: range,
+                replacementLength: (replacement as NSString).length
+            )
+            refreshPopoverContent()
         }
     }
 
@@ -1218,7 +1241,9 @@ final class LiveFeedbackController {
             element, kAXValueAttribute as CFString, nsText as CFTypeRef
         )
 
+        let fixedText = nsText as String
         if setResult == .success {
+            lastApplyWroteViaAX = true
             // Re-query the focused element (some apps invalidate after text changes)
             // and restore cursor position adjusted for length changes
             let newCursorPos = max(0, min(cursorLocation + cursorDelta, nsText.length))
@@ -1248,10 +1273,26 @@ final class LiveFeedbackController {
             currentCheckedText = nil
             refreshPopoverContent()
 
-            let fixedText = nsText as String
             if fixedText != currentText {
                 return (original: currentText, fixed: fixedText)
             }
+        } else if fixedText != currentText {
+            // AX write failed (web/Electron apps) — return the result anyway
+            // so the caller can use clipboard fallback
+            lastApplyWroteViaAX = false
+
+            // Update internal state as if the fix was applied
+            currentIssues = currentIssues.filter { $0.suggestions.isEmpty }
+            if currentIssues.isEmpty {
+                updateState(.clean)
+            } else {
+                updateState(.issues(currentIssues.count))
+            }
+            lastCheckedText = nil
+            currentCheckedText = nil
+            refreshPopoverContent()
+
+            return (original: currentText, fixed: fixedText)
         }
         return nil
     }

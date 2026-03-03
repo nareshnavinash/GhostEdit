@@ -433,6 +433,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         liveFeedbackController = LiveFeedbackController(
             configManager: configManager, localModelRunner: localModelRunner
         )
+        liveFeedbackController?.onAXWriteBlocked = { [weak self] original, fixed in
+            self?.writeBackViaClipboard(fixedText: fixed, original: original)
+        }
         liveFeedbackController?.start()
     }
 
@@ -722,9 +725,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         if let controller = liveFeedbackController,
            configManager.loadConfig().localModelRepoID.isEmpty {
             if let result = controller.applyAllFixes() {
-                recordLocalFixHistoryEntry(original: result.original, fixed: result.fixed)
-                // Get the focused AX element for popup positioning
-                showHUDWithDiff(original: result.original, fixed: result.fixed, toolsUsed: "Harper + Dictionary")
+                if controller.lastApplyWroteViaAX {
+                    recordLocalFixHistoryEntry(original: result.original, fixed: result.fixed)
+                    showHUDWithDiff(original: result.original, fixed: result.fixed, toolsUsed: "Harper + Dictionary")
+                } else {
+                    // AX write failed — use clipboard fallback
+                    writeBackViaClipboard(fixedText: result.fixed, original: result.original)
+                }
             }
             return
         }
@@ -743,14 +750,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             appElement, kAXFocusedUIElementAttribute as CFString, &focusedValue
         )
         guard focusResult == .success, let focused = focusedValue else {
-            playErrorSound()
+            // AX focus failed — try full clipboard round-trip
+            handleLocalFixViaClipboard()
             return
         }
         let element = focused as! AXUIElement
         var textValue: AnyObject?
         AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &textValue)
         guard let currentText = textValue as? String, !currentText.isEmpty else {
-            playErrorSound()
+            // AX read failed — try full clipboard round-trip
+            handleLocalFixViaClipboard()
             return
         }
 
@@ -980,6 +989,124 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             AXUIElementSetAttributeValue(
                 freshElement, kAXSelectedTextRangeAttribute as CFString, cursorValue
             )
+        }
+    }
+
+    /// Clipboard fallback when text was read & fixed but AX write failed (web/Electron apps).
+    /// Pastes via Cmd+A (select all) then Cmd+V (paste) in the target app.
+    private func writeBackViaClipboard(fixedText: String, original: String) {
+        guard let targetApp = NSWorkspace.shared.frontmostApplication,
+              targetApp.bundleIdentifier != Bundle.main.bundleIdentifier else {
+            if let cached = lastExternalActiveApp, !cached.isTerminated {
+                writeBackViaClipboardToApp(cached, fixedText: fixedText, original: original)
+            }
+            return
+        }
+        writeBackViaClipboardToApp(targetApp, fixedText: fixedText, original: original)
+    }
+
+    private func writeBackViaClipboardToApp(
+        _ targetApp: NSRunningApplication,
+        fixedText: String,
+        original: String
+    ) {
+        let snap = clipboardManager.snapshot()
+        clipboardManager.writePlainText(fixedText)
+
+        targetApp.activate(options: [.activateAllWindows])
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
+            guard let self else { return }
+
+            // Select all text in the field, then paste the corrected text
+            self.clipboardManager.simulateSelectAllShortcut(using: .annotatedSession)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                let pasted = self.clipboardManager.simulatePasteShortcut(using: .annotatedSession)
+                    || self.clipboardManager.simulatePasteShortcut(using: .hidSystem)
+
+                if pasted {
+                    self.recordLocalFixHistoryEntry(original: original, fixed: fixedText)
+                    self.showHUDWithDiff(original: original, fixed: fixedText, toolsUsed: "Harper + Dictionary")
+                }
+
+                // Restore clipboard after a short delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
+                    self.clipboardManager.restore(snap)
+                }
+            }
+        }
+    }
+
+    /// Full clipboard round-trip fallback when AX read also failed.
+    /// Copies text via Cmd+A → Cmd+C, fixes it, pastes back via Cmd+V.
+    private func handleLocalFixViaClipboard() {
+        guard let targetApp = NSWorkspace.shared.frontmostApplication,
+              targetApp.bundleIdentifier != Bundle.main.bundleIdentifier else {
+            if let cached = lastExternalActiveApp, !cached.isTerminated {
+                handleLocalFixViaClipboardInApp(cached)
+                return
+            }
+            playErrorSound()
+            return
+        }
+        handleLocalFixViaClipboardInApp(targetApp)
+    }
+
+    private func handleLocalFixViaClipboardInApp(_ targetApp: NSRunningApplication) {
+        let snap = clipboardManager.snapshot()
+        let sentinel = "__GHOSTEDIT_LOCALFIX_\(UUID().uuidString)__"
+        clipboardManager.writePlainText(sentinel)
+
+        targetApp.activate(options: [.activateAllWindows])
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
+            guard let self else { return }
+
+            // Select all + copy
+            self.clipboardManager.simulateSelectAllShortcut(using: .annotatedSession)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.clipboardManager.simulateCopyShortcut(using: .annotatedSession)
+
+                self.waitForCopiedText(sentinel: sentinel, timeoutSeconds: 1.4) { [weak self] copiedText in
+                    guard let self else { return }
+
+                    guard let copiedText, !copiedText.isEmpty else {
+                        // Copy failed — restore clipboard and give up
+                        self.clipboardManager.restore(snap)
+                        self.playErrorSound()
+                        return
+                    }
+
+                    // Apply rule-based fixes
+                    let fixedText = self.applyRuleBasedTextFixes(copiedText)
+
+                    guard fixedText != copiedText else {
+                        // No changes needed
+                        self.clipboardManager.restore(snap)
+                        self.showHUD(state: .success)
+                        return
+                    }
+
+                    // Paste fixed text back
+                    self.clipboardManager.writePlainText(fixedText)
+                    let pasted = self.clipboardManager.simulatePasteShortcut(using: .annotatedSession)
+                        || self.clipboardManager.simulatePasteShortcut(using: .hidSystem)
+
+                    if pasted {
+                        self.recordLocalFixHistoryEntry(original: copiedText, fixed: fixedText)
+                        self.showHUDWithDiff(original: copiedText, fixed: fixedText, toolsUsed: "Harper + Dictionary")
+                    } else {
+                        self.playErrorSound()
+                    }
+
+                    // Restore clipboard after a short delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
+                        self.clipboardManager.restore(snap)
+                    }
+                }
+            }
         }
     }
 

@@ -144,6 +144,15 @@ final class ClipboardManager {
     }
 
     @discardableResult
+    func simulateSelectAllShortcut(using posting: ShortcutPosting) -> Bool {
+        simulateShortcut(
+            keyCode: CGKeyCode(kVK_ANSI_A),
+            modifiers: [.maskCommand],
+            posting: posting
+        )
+    }
+
+    @discardableResult
     private func simulateShortcut(
         keyCode: CGKeyCode,
         modifiers: CGEventFlags,

@@ -248,4 +248,61 @@ final class LiveFeedbackSupportTests: XCTestCase {
             XCTAssertFalse(color.isEmpty, "statusColorName should not be empty for \(state)")
         }
     }
+
+    // MARK: - isTextInputElement
+
+    func testIsTextInputElementWithTextAreaRole() {
+        XCTAssertTrue(
+            LiveFeedbackSupport.isTextInputElement(role: LiveFeedbackSupport.axTextAreaRole, hasReadableValue: false)
+        )
+    }
+
+    func testIsTextInputElementWithTextFieldRole() {
+        XCTAssertTrue(
+            LiveFeedbackSupport.isTextInputElement(role: LiveFeedbackSupport.axTextFieldRole, hasReadableValue: false)
+        )
+    }
+
+    func testIsTextInputElementWithWebAreaRoleAndValue() {
+        XCTAssertTrue(
+            LiveFeedbackSupport.isTextInputElement(role: "AXWebArea", hasReadableValue: true)
+        )
+    }
+
+    func testIsTextInputElementWithGroupRoleAndValue() {
+        XCTAssertTrue(
+            LiveFeedbackSupport.isTextInputElement(role: "AXGroup", hasReadableValue: true)
+        )
+    }
+
+    func testIsTextInputElementWithUnknownRoleNoValue() {
+        XCTAssertFalse(
+            LiveFeedbackSupport.isTextInputElement(role: "AXGroup", hasReadableValue: false)
+        )
+    }
+
+    func testIsTextInputElementWithEmptyRole() {
+        XCTAssertFalse(
+            LiveFeedbackSupport.isTextInputElement(role: "", hasReadableValue: false)
+        )
+    }
+
+    func testIsTextInputElementWithEmptyRoleButHasValue() {
+        XCTAssertTrue(
+            LiveFeedbackSupport.isTextInputElement(role: "", hasReadableValue: true)
+        )
+    }
+
+    func testIsTextInputElementWithButtonRole() {
+        XCTAssertFalse(
+            LiveFeedbackSupport.isTextInputElement(role: "AXButton", hasReadableValue: false)
+        )
+    }
+
+    // MARK: - AX Role Constants
+
+    func testAXRoleConstants() {
+        XCTAssertEqual(LiveFeedbackSupport.axTextAreaRole, "AXTextArea")
+        XCTAssertEqual(LiveFeedbackSupport.axTextFieldRole, "AXTextField")
+    }
 }

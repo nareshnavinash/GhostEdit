@@ -94,6 +94,21 @@ enum LiveFeedbackSupport {
         }
     }
 
+    // MARK: - Role Detection
+
+    // AX role strings (matching kAXTextAreaRole / kAXTextFieldRole)
+    static let axTextAreaRole = "AXTextArea"
+    static let axTextFieldRole = "AXTextField"
+
+    /// Returns true if the AX role indicates a text-editable element, or if the element
+    /// exposes a readable text value (common in web/Electron apps).
+    static func isTextInputElement(role: String, hasReadableValue: Bool) -> Bool {
+        if role == axTextAreaRole || role == axTextFieldRole {
+            return true
+        }
+        return hasReadableValue
+    }
+
     /// Returns the maximum popover height based on issue count.
     static func popoverHeight(for issueCount: Int) -> CGFloat {
         let visibleRows = min(issueCount, popoverMaxVisibleRows)
