@@ -1288,8 +1288,10 @@ final class LiveFeedbackController {
             } else {
                 updateState(.issues(currentIssues.count))
             }
-            lastCheckedText = nil
-            currentCheckedText = nil
+            // Set caches to the fixed text so LiveFeedback won't re-scan
+            // until the clipboard paste is processed and text actually changes
+            lastCheckedText = fixedText
+            currentCheckedText = fixedText
             refreshPopoverContent()
 
             return (original: currentText, fixed: fixedText)

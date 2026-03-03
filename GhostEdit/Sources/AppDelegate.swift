@@ -47,6 +47,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isShowingAccessibilityAlert = false
     private var didShowAccessibilityGuidance = false
     private var clipboardSnapshot: ClipboardManager.Snapshot?
+    private var pendingClipboardRestore: DispatchWorkItem?
     private var targetAppAtTrigger: NSRunningApplication?
     private var lastExternalActiveApp: NSRunningApplication?
 
@@ -716,6 +717,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Local Fix Pipeline (cmd+E)
 
     private func handleLocalFixHotkey() {
+        pendingClipboardRestore?.cancel()
+        pendingClipboardRestore = nil
+
         guard ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: true) else {
             playErrorSound()
             return
@@ -732,6 +736,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     // AX write failed — use clipboard fallback
                     writeBackViaClipboard(fixedText: result.fixed, original: result.original)
                 }
+            } else {
+                // No fixable issues — dismiss any stale HUD overlay
+                showHUD(state: .success)
             }
             return
         }
@@ -1030,10 +1037,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.showHUDWithDiff(original: original, fixed: fixedText, toolsUsed: "Harper + Dictionary")
                 }
 
-                // Restore clipboard after a short delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
+                // Restore clipboard after a short delay (cancellable)
+                self.pendingClipboardRestore?.cancel()
+                let restoreItem = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    self.pendingClipboardRestore = nil
                     self.clipboardManager.restore(snap)
                 }
+                self.pendingClipboardRestore = restoreItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.20, execute: restoreItem)
             }
         }
     }
@@ -1101,10 +1113,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         self.playErrorSound()
                     }
 
-                    // Restore clipboard after a short delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
+                    // Restore clipboard after a short delay (cancellable)
+                    self.pendingClipboardRestore?.cancel()
+                    let restoreItem = DispatchWorkItem { [weak self] in
+                        guard let self else { return }
+                        self.pendingClipboardRestore = nil
                         self.clipboardManager.restore(snap)
                     }
+                    self.pendingClipboardRestore = restoreItem
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.20, execute: restoreItem)
                 }
             }
         }
@@ -1321,6 +1338,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Cloud Fix Pipeline (cmd+shift+E)
 
     private func handleHotkeyTrigger() {
+        pendingClipboardRestore?.cancel()
+        pendingClipboardRestore = nil
+
         guard ensureAccessibilityPermission(promptSystemDialog: false, showGuidanceAlert: true) else {
             playErrorSound()
             setStatus("Accessibility permission required")
@@ -2672,18 +2692,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         clipboardSnapshot = nil
+        pendingClipboardRestore?.cancel()
 
-        let restore: () -> Void = { [weak self] in
-            guard let self else {
-                return
-            }
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingClipboardRestore = nil
             self.clipboardManager.restore(snapshot)
         }
+        pendingClipboardRestore = workItem
 
         if delay > 0 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: restore)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
         } else {
-            restore()
+            workItem.perform()
         }
     }
 
