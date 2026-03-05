@@ -725,26 +725,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // If live feedback is active and no local model is configured, apply spell-checker fixes
-        if let controller = liveFeedbackController,
-           configManager.loadConfig().localModelRepoID.isEmpty {
-            if let result = controller.applyAllFixes() {
-                if controller.lastApplyWroteViaAX {
-                    recordLocalFixHistoryEntry(original: result.original, fixed: result.fixed)
-                    showHUDWithDiff(original: result.original, fixed: result.fixed, toolsUsed: "Harper + Dictionary")
-                } else {
-                    // AX write failed — use clipboard fallback
-                    writeBackViaClipboard(fixedText: result.fixed, original: result.original)
-                }
-            } else {
-                // No fixable issues — dismiss any stale HUD overlay
-                showHUD(state: .success)
-            }
-            return
-        }
-        // When a local model is configured, fall through to model-based correction below
-
-        // Fallback: trigger a one-shot local fix on the focused text field
+        // Trigger a one-shot local fix on the focused text field
         guard let targetApp = NSWorkspace.shared.frontmostApplication else {
             playErrorSound()
             return
@@ -902,6 +883,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 text: textToFix, pid: pid, element: element, cursorLocation: cursorLocation,
                 lineRange: lineExtraction?.lineRange, fullText: lineExtraction != nil ? currentText : nil
             ) {
+                liveFeedbackController?.requestAutoApply()
                 recordLocalFixHistoryEntry(original: textToFix, fixed: fixedText)
                 showHUDWithDiff(original: textToFix, fixed: fixedText, toolsUsed: "Harper + Dictionary")
             }

@@ -20,7 +20,7 @@ final class HUDOverlayController {
         dismissOverride = dismissAfter
 
         let needsDiff = isDiffState(state)
-        if panel == nil || needsDiff != isDiffMode {
+        if panel == nil || needsDiff != isDiffMode || needsDiff {
             tearDownPanel()
             if needsDiff {
                 buildDiffPanel(for: state)
@@ -58,7 +58,7 @@ final class HUDOverlayController {
         dismissOverride = dismissAfter
 
         let needsDiff = isDiffState(state)
-        if panel == nil || needsDiff != isDiffMode {
+        if panel == nil || needsDiff != isDiffMode || needsDiff {
             tearDownPanel()
             if needsDiff {
                 buildDiffPanel(for: state)
