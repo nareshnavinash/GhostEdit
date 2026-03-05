@@ -1076,56 +1076,66 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
             guard let self else { return }
 
-            // Select all + copy
-            self.clipboardManager.simulateSelectAllShortcut(using: .annotatedSession)
+            // Try copying just the selection first (no cmd+A)
+            self.clipboardManager.simulateCopyShortcut(using: .annotatedSession)
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                self.clipboardManager.simulateCopyShortcut(using: .annotatedSession)
-
-                self.waitForCopiedText(sentinel: sentinel, timeoutSeconds: 1.4) { [weak self] copiedText in
-                    guard let self else { return }
-
-                    guard let copiedText, !copiedText.isEmpty else {
-                        // Copy failed — restore clipboard and give up
-                        self.clipboardManager.restore(snap)
-                        self.playErrorSound()
-                        return
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                let clipContent = NSPasteboard.general.string(forType: .string) ?? ""
+                if clipContent != sentinel && !clipContent.isEmpty {
+                    // Selection was copied — proceed with just the selected text
+                    self.proceedWithClipboardFix(copiedText: clipContent, snapshot: snap, targetApp: targetApp)
+                } else {
+                    // Nothing was selected — fall back to select-all
+                    self.clipboardManager.simulateSelectAllShortcut(using: .annotatedSession)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        self.clipboardManager.simulateCopyShortcut(using: .annotatedSession)
+                        self.waitForCopiedText(sentinel: sentinel, timeoutSeconds: 1.4) { [weak self] copiedText in
+                            guard let self else { return }
+                            guard let copiedText, !copiedText.isEmpty else {
+                                self.clipboardManager.restore(snap)
+                                self.playErrorSound()
+                                return
+                            }
+                            self.proceedWithClipboardFix(copiedText: copiedText, snapshot: snap, targetApp: targetApp)
+                        }
                     }
-
-                    // Apply rule-based fixes
-                    let fixedText = self.applyRuleBasedTextFixes(copiedText)
-
-                    guard fixedText != copiedText else {
-                        // No changes needed
-                        self.clipboardManager.restore(snap)
-                        self.showHUD(state: .success)
-                        return
-                    }
-
-                    // Paste fixed text back
-                    self.clipboardManager.writePlainText(fixedText)
-                    let pasted = self.clipboardManager.simulatePasteShortcut(using: .annotatedSession)
-                        || self.clipboardManager.simulatePasteShortcut(using: .hidSystem)
-
-                    if pasted {
-                        self.recordLocalFixHistoryEntry(original: copiedText, fixed: fixedText)
-                        self.showHUDWithDiff(original: copiedText, fixed: fixedText, toolsUsed: "Harper + Dictionary")
-                    } else {
-                        self.playErrorSound()
-                    }
-
-                    // Restore clipboard after a short delay (cancellable)
-                    self.pendingClipboardRestore?.cancel()
-                    let restoreItem = DispatchWorkItem { [weak self] in
-                        guard let self else { return }
-                        self.pendingClipboardRestore = nil
-                        self.clipboardManager.restore(snap)
-                    }
-                    self.pendingClipboardRestore = restoreItem
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.20, execute: restoreItem)
                 }
             }
         }
+    }
+
+    private func proceedWithClipboardFix(copiedText: String, snapshot: ClipboardManager.Snapshot, targetApp: NSRunningApplication) {
+        // Apply rule-based fixes
+        let fixedText = applyRuleBasedTextFixes(copiedText)
+
+        guard fixedText != copiedText else {
+            // No changes needed
+            clipboardManager.restore(snapshot)
+            showHUD(state: .success)
+            return
+        }
+
+        // Paste fixed text back
+        clipboardManager.writePlainText(fixedText)
+        let pasted = clipboardManager.simulatePasteShortcut(using: .annotatedSession)
+            || clipboardManager.simulatePasteShortcut(using: .hidSystem)
+
+        if pasted {
+            recordLocalFixHistoryEntry(original: copiedText, fixed: fixedText)
+            showHUDWithDiff(original: copiedText, fixed: fixedText, toolsUsed: "Harper + Dictionary")
+        } else {
+            playErrorSound()
+        }
+
+        // Restore clipboard after a short delay (cancellable)
+        pendingClipboardRestore?.cancel()
+        let restoreItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingClipboardRestore = nil
+            self.clipboardManager.restore(snapshot)
+        }
+        pendingClipboardRestore = restoreItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20, execute: restoreItem)
     }
 
     /// Pure-text spell polish using Harper + NSSpellChecker (no AX writes).
