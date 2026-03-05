@@ -751,8 +751,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Save cursor position before applying fixes
+        // Save cursor position and selection length before applying fixes
         var cursorLocation = (currentText as NSString).length
+        var selectionLength = 0
         var rangeValue: AnyObject?
         if AXUIElementCopyAttributeValue(
             element, kAXSelectedTextRangeAttribute as CFString, &rangeValue
@@ -760,14 +761,32 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             var savedRange = CFRange(location: 0, length: 0)
             if AXValueGetValue(axValue as! AXValue, .cfRange, &savedRange) {
                 cursorLocation = savedRange.location
+                selectionLength = savedRange.length
             }
         }
 
-        // Fix only the line at the cursor (not the entire document).
+        // If user has text selected, fix only the selection.
+        // If no selection (cursor only), fix the line at cursor.
         // Skip for text containing U+FFFC (Slack inline emojis) - bulk text write
         // destroys object replacement characters in Electron apps.
         let lineExtraction: (lineText: String, lineRange: NSRange)?
-        if currentText.contains(TokenPreservationSupport.objectReplacementCharacter) {
+        if selectionLength > 0 {
+            let selRange = NSRange(location: cursorLocation, length: selectionLength)
+            let nsCurrentText = currentText as NSString
+            if selRange.location + selRange.length <= nsCurrentText.length {
+                var selectedText = nsCurrentText.substring(with: selRange)
+                if selectedText.hasSuffix("\n") {
+                    selectedText = String(selectedText.dropLast())
+                }
+                if selectedText.trimmingCharacters(in: .whitespaces).isEmpty {
+                    lineExtraction = nil
+                } else {
+                    lineExtraction = (selectedText, selRange)
+                }
+            } else {
+                lineExtraction = nil
+            }
+        } else if currentText.contains(TokenPreservationSupport.objectReplacementCharacter) {
             lineExtraction = nil
         } else {
             lineExtraction = extractLineAtCursor(text: currentText, cursorLocation: cursorLocation)
