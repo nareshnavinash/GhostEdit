@@ -1,0 +1,7 @@
+node_modules/
+dist/
+out/
+.vite/
+*.js.map
+.DS_Store
+resources/models/
