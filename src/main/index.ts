@@ -50,7 +50,7 @@ function openWindow(type: WindowType): BrowserWindow {
   }
 
   const sizeMap: Record<WindowType, { width: number; height: number }> = {
-    settings: { width: 600, height: 500 },
+    settings: { width: 680, height: 520 },
     history: { width: 700, height: 500 },
     hud: { width: 300, height: 80 },
     'streaming-preview': { width: 700, height: 400 },
@@ -425,6 +425,14 @@ app.whenReady().then(() => {
   configManager.ensureDefaults();
 
   registerIPCHandlers(openWindow);
+
+  // Cross-platform window controls (for non-macOS title bar buttons)
+  ipcMain.on('window-close', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+  ipcMain.on('window-minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  });
 
   ipcMain.handle(IPC.ACCEPT_CORRECTION, async (_event, text: string) => {
     const config = configManager.load();

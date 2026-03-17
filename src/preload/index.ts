@@ -111,6 +111,13 @@ const api = {
     ipcRenderer.send(IPC.INFERENCE_RESULT, data);
   },
 
+  // ── Platform & Window Controls ──
+  platform: process.platform,
+  windowControls: {
+    close: () => ipcRenderer.send('window-close'),
+    minimize: () => ipcRenderer.send('window-minimize'),
+  },
+
   // ── Window info (passed as query param) ──
   getWindowType: (): WindowType => {
     const params = new URLSearchParams(window.location.search);

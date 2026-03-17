@@ -41,9 +41,25 @@ body {
 
 /* Form inputs */
 .input {
-  @apply bg-white/10 border border-white/10 rounded px-3 py-1.5 text-sm text-ghost-text
-         focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400
-         placeholder:text-ghost-muted w-full;
+  @apply bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-ghost-text
+         focus:outline-none focus:ring-1 focus:ring-blue-400/60 focus:border-blue-400/40
+         placeholder:text-ghost-muted w-full h-9;
+}
+
+/* Settings row — label left, control right */
+.settings-row {
+  @apply flex items-center justify-between py-3 border-b border-ghost-row-border;
+}
+.settings-row:last-child {
+  @apply border-b-0;
+}
+
+/* Section title in content area */
+.section-title {
+  @apply text-lg font-semibold text-white/95 mb-1;
+}
+.section-subtitle {
+  @apply text-[11px] text-ghost-muted mb-5;
 }
 
 select.input {

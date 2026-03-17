@@ -14,7 +14,18 @@ const config: Config = {
           success: '#4ade80',
           error: '#f87171',
           warning: '#fbbf24',
+          sidebar: 'rgba(255, 255, 255, 0.03)',
+          'row-border': 'rgba(255, 255, 255, 0.06)',
         },
+      },
+      keyframes: {
+        'content-in': {
+          from: { opacity: '0', transform: 'translateY(4px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'content-in': 'content-in 150ms ease-out',
       },
     },
   },

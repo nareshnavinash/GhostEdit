@@ -42,11 +42,11 @@ export default function HotkeyInput({ value, onChange }: HotkeyInputProps) {
         value={recording ? 'Press a key combination...' : value}
         readOnly
         onKeyDown={handleKeyDown}
-        className={`input flex-1 ${recording ? 'ring-2 ring-blue-400' : ''}`}
+        className={`input flex-1 ${recording ? 'ring-2 ring-blue-400/50' : ''}`}
       />
       <button
         onClick={() => setRecording(!recording)}
-        className={`px-3 py-1.5 rounded text-sm ${
+        className={`px-3.5 py-2 rounded-lg text-[13px] font-medium transition-colors ${
           recording
             ? 'bg-red-500 text-white'
             : 'bg-white/10 text-ghost-muted hover:bg-white/15'

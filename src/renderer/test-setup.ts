@@ -52,6 +52,11 @@ const ghosteditMock = {
   onInferenceCommand: vi.fn().mockReturnValue(noopRemover),
   sendInferenceResult: vi.fn(),
   getWindowType: vi.fn().mockReturnValue('settings'),
+  platform: 'darwin',
+  windowControls: {
+    close: vi.fn(),
+    minimize: vi.fn(),
+  },
 };
 
 Object.defineProperty(window, 'ghostedit', {
