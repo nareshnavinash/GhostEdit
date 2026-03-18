@@ -118,6 +118,59 @@ export async function pasteText(text: string): Promise<void> {
 }
 
 /**
+ * Select and copy the current line from the focused app.
+ * macOS: Cmd+Left → Cmd+Shift+Right → Cmd+C
+ * Windows/Linux: Home → Shift+End → Ctrl+C
+ * The line remains selected after capture, so a subsequent pasteText() replaces it.
+ */
+export async function captureCurrentLine(): Promise<string> {
+  const { keyboard, Key } = getNut();
+
+  // Clear clipboard to detect if copy worked
+  clipboard.writeText('');
+
+  if (process.platform === 'darwin') {
+    // Move to line start
+    await keyboard.pressKey(Key.LeftSuper, Key.Left);
+    await keyboard.releaseKey(Key.LeftSuper, Key.Left);
+    await delay(20);
+    // Select to line end
+    await keyboard.pressKey(Key.LeftSuper, Key.LeftShift, Key.Right);
+    await keyboard.releaseKey(Key.LeftSuper, Key.LeftShift, Key.Right);
+    await delay(20);
+    // Copy
+    await keyboard.pressKey(Key.LeftSuper, Key.C);
+    await keyboard.releaseKey(Key.LeftSuper, Key.C);
+  } else {
+    // Move to line start
+    await keyboard.pressKey(Key.Home);
+    await keyboard.releaseKey(Key.Home);
+    await delay(20);
+    // Select to line end
+    await keyboard.pressKey(Key.LeftShift, Key.End);
+    await keyboard.releaseKey(Key.LeftShift, Key.End);
+    await delay(20);
+    // Copy
+    await keyboard.pressKey(Key.LeftControl, Key.C);
+    await keyboard.releaseKey(Key.LeftControl, Key.C);
+  }
+
+  // Poll clipboard until text appears
+  let elapsed = 0;
+  let text = '';
+  while (elapsed < MAX_POLL_WAIT) {
+    await delay(POLL_INTERVAL);
+    elapsed += POLL_INTERVAL;
+    text = clipboard.readText();
+    if (text) break;
+  }
+  if (!text) {
+    throw new Error('No line text was captured. Make sure the cursor is in a text field.');
+  }
+  return text;
+}
+
+/**
  * Clipboard-only mode: just write to clipboard, don't simulate paste.
  */
 export function writeToClipboard(text: string): void {

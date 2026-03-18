@@ -14,6 +14,7 @@ const EXTERNAL_MODULES = [
   'harper.js',
   'nspell',
   'dictionary-en',
+  'uiohook-napi',
   // Transitive deps of the above:
   'is-buffer',        // nspell
   'fflate',           // harper.js

@@ -41,6 +41,11 @@ export interface AppConfig {
   localModelVariant: LocalModelVariant;
   localModelSpeed: 'fast' | 'quality';
   firstRunComplete: boolean;
+  monitoringEnabled: boolean;
+  trafficLightPosition: IconPosition;
+  trafficLightInactivityMs: number;
+  lineHotkeyAccelerator: string;
+  backgroundModelRefinement: boolean;
 }
 
 export type TonePreset = 'default' | 'casual' | 'professional' | 'academic' | 'slack';
@@ -185,6 +190,13 @@ export const IPC = {
   GET_PERSONAL_DICTIONARY: 'get-personal-dictionary',
   SAVE_PERSONAL_DICTIONARY: 'save-personal-dictionary',
   GET_USAGE_STATS: 'get-usage-stats',
+  TRAFFIC_LIGHT_UPDATE: 'traffic-light-update',
+  TRAFFIC_LIGHT_HIDE: 'traffic-light-hide',
+  TRAFFIC_LIGHT_CLICKED: 'traffic-light-clicked',
+  SUGGESTIONS_UPDATE: 'suggestions-update',
+  APPLY_FIX: 'apply-fix',
+  APPLY_ALL_FIXES: 'apply-all-fixes',
+  CHECK_ACCESSIBILITY: 'check-accessibility',
 } as const;
 
 // ── Dictionary Checker ──
@@ -207,4 +219,9 @@ export interface DictionaryPrePassResult {
 
 // ── Window Types ──
 
-export type WindowType = 'settings' | 'history' | 'hud' | 'streaming-preview';
+export type WindowType = 'settings' | 'history' | 'hud' | 'streaming-preview' | 'traffic-light' | 'suggestions';
+
+// ── Traffic Light ──
+
+export type TrafficLightColor = 'green' | 'yellow' | 'red';
+export type IconPosition = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';

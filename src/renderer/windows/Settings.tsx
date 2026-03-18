@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import type { AppConfig, CLIProviderName, TonePreset, DiffPreviewMode, LocalModelInfo, LocalModelVariant, UsageStats } from '../../shared/types';
+import type { AppConfig, CLIProviderName, TonePreset, DiffPreviewMode, LocalModelInfo, LocalModelVariant, UsageStats, IconPosition } from '../../shared/types';
 import { CLI_PROVIDERS, LANGUAGES, DEFAULT_CONFIG, DEFAULT_BUNDLED_VARIANT } from '../../shared/constants';
 import HotkeyInput from '../components/HotkeyInput';
 import Welcome from '../components/Welcome';
 
 // ── Section definitions ──
 
-type Section = 'general' | 'models' | 'providers' | 'hotkeys' | 'behavior' | 'prompt' | 'dictionary' | 'stats';
+type Section = 'general' | 'models' | 'providers' | 'hotkeys' | 'behavior' | 'monitoring' | 'prompt' | 'dictionary' | 'stats';
 
 const SECTIONS: Array<{
   id: Section;
@@ -20,6 +20,7 @@ const SECTIONS: Array<{
   { id: 'providers',  label: 'Providers',  title: 'Providers',  subtitle: 'CLI provider and API configuration',         icon: <CloudIcon /> },
   { id: 'hotkeys',    label: 'Hotkeys',    title: 'Hotkeys',    subtitle: 'Keyboard shortcuts for corrections',         icon: <KeyboardIcon /> },
   { id: 'behavior',   label: 'Behavior',   title: 'Behavior',   subtitle: 'Correction workflow and notifications',      icon: <SlidersIcon /> },
+  { id: 'monitoring', label: 'Monitoring', title: 'Real-Time Monitoring', subtitle: 'Passive text analysis and traffic light indicator', icon: <EyeIcon /> },
   { id: 'prompt',     label: 'Prompt',     title: 'System Prompt', subtitle: 'Customize the AI system prompt',          icon: <TextIcon /> },
   { id: 'dictionary', label: 'Dictionary', title: 'Personal Dictionary', subtitle: 'Words to exclude from spell-checking', icon: <BookIcon /> },
   { id: 'stats',      label: 'Statistics', title: 'Usage Statistics', subtitle: 'Your correction history at a glance',  icon: <ChartIcon /> },
@@ -573,6 +574,84 @@ export default function Settings() {
               </>
             )}
 
+            {/* ── Monitoring ── */}
+            {activeSection === 'monitoring' && (
+              <>
+                <ToggleRow
+                  label="Enable real-time monitoring"
+                  description="Passively analyze text as you type and show a floating traffic light indicator"
+                  checked={config.monitoringEnabled}
+                  onChange={(v) => update({ monitoringEnabled: v })}
+                />
+
+                {config.monitoringEnabled && (
+                  <>
+                    <div className="settings-row">
+                      <div>
+                        <p className="text-[13px] font-medium">Icon position</p>
+                        <p className="text-[11px] text-ghost-muted">Screen corner for the traffic light indicator</p>
+                      </div>
+                      <select
+                        value={config.trafficLightPosition}
+                        onChange={(e) => update({ trafficLightPosition: e.target.value as IconPosition })}
+                        className="input w-40"
+                      >
+                        <option value="top-right">Top Right</option>
+                        <option value="top-left">Top Left</option>
+                        <option value="bottom-right">Bottom Right</option>
+                        <option value="bottom-left">Bottom Left</option>
+                      </select>
+                    </div>
+
+                    <div className="settings-row">
+                      <div>
+                        <p className="text-[13px] font-medium">Inactivity timeout</p>
+                        <p className="text-[11px] text-ghost-muted">Seconds of inactivity before hiding the indicator</p>
+                      </div>
+                      <input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={Math.round(config.trafficLightInactivityMs / 1000)}
+                        onChange={(e) => update({ trafficLightInactivityMs: (Number(e.target.value) || 3) * 1000 })}
+                        className="input w-20"
+                      />
+                    </div>
+
+                    <div className="settings-row">
+                      <div className="flex-1 mr-4">
+                        <p className="text-[13px] font-medium">Correct Line Hotkey</p>
+                        <p className="text-[11px] text-ghost-muted mb-2">Captures the current line and runs the full correction pipeline</p>
+                        <HotkeyInput
+                          value={config.lineHotkeyAccelerator}
+                          onChange={(v) => update({ lineHotkeyAccelerator: v })}
+                        />
+                      </div>
+                    </div>
+
+                    <ToggleRow
+                      label="Background model refinement"
+                      description="Run T5 model in background after idle for deeper analysis (uses more CPU)"
+                      checked={config.backgroundModelRefinement}
+                      onChange={(v) => update({ backgroundModelRefinement: v })}
+                    />
+
+                    {isMac && (
+                      <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-[11px] text-yellow-300/80 mt-3">
+                        macOS requires Accessibility permission for keystroke monitoring.
+                        You will be prompted to grant access when monitoring is first enabled.
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <p className="text-[11px] text-ghost-muted mt-4">
+                  When enabled, a floating colored circle (green/yellow/red) appears while you type.
+                  Click it to see detected issues and apply fixes. The keystroke buffer is kept in memory only and never persisted.
+                </p>
+              </>
+            )}
+
             {/* ── Prompt ── */}
             {activeSection === 'prompt' && (
               <>
@@ -842,6 +921,15 @@ function ChartIcon() {
   return (
     <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 14V8M6 14V4M10 14V6M14 14V2" />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8z" />
+      <circle cx={8} cy={8} r={2} />
     </svg>
   );
 }

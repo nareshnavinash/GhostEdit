@@ -1,4 +1,4 @@
-import type { AppConfig, CLIProvider, TonePreset, ProviderName, LocalModelVariant, DiffPreviewMode } from './types';
+import type { AppConfig, CLIProvider, TonePreset, ProviderName, LocalModelVariant, DiffPreviewMode, IconPosition } from './types';
 
 // ── CLI Provider Definitions ──
 
@@ -97,6 +97,11 @@ export const DEFAULT_CONFIG: AppConfig = {
   localModelVariant: 'int8',
   localModelSpeed: 'fast',
   firstRunComplete: false,
+  monitoringEnabled: true,
+  trafficLightPosition: 'top-right',
+  trafficLightInactivityMs: 3000,
+  lineHotkeyAccelerator: 'CommandOrControl+L',
+  backgroundModelRefinement: false,
 };
 
 // ── Tone Preset Prompts ──

@@ -6,7 +6,7 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      external: ['@nut-tree-fork/nut-js', '@huggingface/transformers', 'harper.js', 'nspell', 'dictionary-en'],
+      external: ['@nut-tree-fork/nut-js', '@huggingface/transformers', 'harper.js', 'nspell', 'dictionary-en', 'uiohook-napi'],
     },
   },
 });

@@ -3,6 +3,8 @@ import Settings from './windows/Settings';
 import History from './windows/History';
 import HudOverlay from './windows/HudOverlay';
 import StreamingPreview from './windows/StreamingPreview';
+import TrafficLight from './windows/TrafficLight';
+import SuggestionsDropdown from './windows/SuggestionsDropdown';
 import type { WindowType } from '../shared/types';
 
 /**
@@ -20,6 +22,10 @@ export default function App() {
       return <HudOverlay />;
     case 'streaming-preview':
       return <StreamingPreview />;
+    case 'traffic-light':
+      return <TrafficLight />;
+    case 'suggestions':
+      return <SuggestionsDropdown />;
     default:
       return <Settings />;
   }

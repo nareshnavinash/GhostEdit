@@ -18,6 +18,10 @@ import { errorToUserMessage } from './error-messages';
 import { clearDeviceCache } from './device-selector';
 import { playSuccessSound, playErrorSound } from './sound-manager';
 import { appendError } from './error-log';
+import { startMonitoring, stopMonitoring, clearBuffer, isMonitoringStarted } from './keystroke-monitor';
+import { initAnalyzer, destroyAnalyzer, onBufferChanged, clearAnalyzerState } from './realtime-analyzer';
+import { initTrafficLight, showTrafficLight, hideTrafficLight, updateColor, updateIssues, destroyAll as destroyTrafficLight, setPosition as setTrafficLightPosition } from './traffic-light-manager';
+import type { TrafficLightColor, SpellCheckIssue, IconPosition } from '../shared/types';
 
 // ── Single Instance Lock ──
 const gotLock = app.requestSingleInstanceLock();
@@ -56,6 +60,8 @@ function openWindow(type: WindowType): BrowserWindow {
     history: { width: 700, height: 500 },
     hud: { width: 300, height: 80 },
     'streaming-preview': { width: 700, height: 400 },
+    'traffic-light': { width: 24, height: 24 },
+    'suggestions': { width: 320, height: 300 },
   };
 
   const size = sizeMap[type];
@@ -527,6 +533,163 @@ async function undoLastCorrection(): Promise<void> {
   }
 }
 
+// ── Correct Current Line ──
+
+async function correctCurrentLine(): Promise<void> {
+  if (correcting) return;
+  correcting = true;
+  setTrayState('processing');
+
+  const config = configManager.load();
+  const startTime = Date.now();
+  let snap: ReturnType<typeof clipboardManager.snapshot> | null = null;
+  let lineText = '';
+
+  try {
+    showHUD('Working...');
+
+    snap = clipboardManager.snapshot();
+    lineText = await clipboardManager.captureCurrentLine();
+
+    let systemPrompt = configManager.loadSystemPrompt();
+    const tonePrompt = TONE_PROMPTS[config.tonePreset];
+    if (tonePrompt) systemPrompt = tonePrompt;
+    if (config.language && config.language !== 'auto') {
+      systemPrompt += `\n\nRespond in ${config.language}.`;
+    }
+
+    const protection = protectTokens(lineText);
+    const placeholderRanges = getPlaceholderRanges(protection.protectedText, protection.tokens);
+    const prePassResult = await dictionaryPrePass(protection.protectedText, placeholderRanges);
+    const prePassText = prePassResult.text;
+
+    const result = await correctText(systemPrompt, prePassText, config);
+
+    let correctedText: string;
+    if (protection.hasProtectedTokens) {
+      if (placeholdersAreIntact(result.text, protection.tokens)) {
+        correctedText = restoreTokens(result.text, protection.tokens);
+      } else {
+        correctedText = bestEffortRestore(result.text, protection.tokens);
+      }
+    } else {
+      correctedText = result.text;
+    }
+
+    const polishRanges = protection.hasProtectedTokens
+      ? getOriginalTokenRanges(correctedText, protection.tokens) : [];
+    const polished = await dictionaryPolish(correctedText, polishRanges);
+    correctedText = polished.text;
+    correctedText = stripLeakedPlaceholders(correctedText);
+
+    // Line is already selected from captureCurrentLine, paste replaces it
+    if (config.clipboardOnlyMode) {
+      clipboardManager.writeToClipboard(correctedText);
+      showHUD('Copied to clipboard!');
+    } else {
+      await clipboardManager.pasteText(correctedText);
+      showHUD('Done!');
+    }
+
+    if (config.soundFeedbackEnabled) playSuccessSound();
+
+    const entry: CorrectionHistoryEntry = {
+      id: randomUUID(),
+      timestamp: new Date().toISOString(),
+      originalText: lineText,
+      generatedText: correctedText,
+      provider: config.provider,
+      model: config.model,
+      durationMilliseconds: Date.now() - startTime,
+      succeeded: true,
+    };
+    appendHistory(entry, config.historyLimit);
+
+    // Clear monitoring buffer since text changed
+    clearBuffer();
+    clearAnalyzerState();
+  } catch (err: any) {
+    const message = errorToUserMessage(err, config.developerMode);
+    console.error('Line correction error:', err);
+    showHUD(`Error: ${message}`, config.developerMode ? 8000 : 5000);
+    if (config.soundFeedbackEnabled) playErrorSound();
+    appendError(message, config.provider);
+  } finally {
+    if (snap && !config.clipboardOnlyMode) {
+      setTimeout(() => {
+        if (snap) clipboardManager.restore(snap);
+      }, 2000);
+    }
+    setTrayState('idle');
+    correcting = false;
+  }
+}
+
+// ── Real-Time Monitoring ──
+
+function startRealtimeMonitoring(): void {
+  const config = configManager.load();
+  if (!config.monitoringEnabled) return;
+  if (isMonitoringStarted()) return;
+
+  // Check accessibility on macOS
+  if (process.platform === 'darwin') {
+    try {
+      const { systemPreferences } = require('electron');
+      if (!systemPreferences.isTrustedAccessibilityClient(true)) {
+        console.warn('[GhostEdit] Accessibility not granted — monitoring disabled');
+        return;
+      }
+    } catch {
+      // Continue anyway
+    }
+  }
+
+  initTrafficLight(config.trafficLightPosition as IconPosition);
+
+  initAnalyzer({
+    onColorChange: (color: TrafficLightColor) => {
+      updateColor(color);
+    },
+    onIssuesChange: (issues: SpellCheckIssue[]) => {
+      updateIssues(issues);
+    },
+  });
+
+  startMonitoring(
+    {
+      onBufferChange: (buffer: string) => {
+        onBufferChanged(buffer);
+        if (buffer.length === 0) {
+          hideTrafficLight();
+        }
+      },
+      onTypingStarted: () => {
+        showTrafficLight();
+      },
+      onTypingStopped: () => {
+        // No-op: don't hide on inactivity — user may be thinking.
+        // Icon hides when buffer is cleared (empty buffer check above).
+      },
+    },
+    config.trafficLightInactivityMs,
+  );
+
+  console.log('[GhostEdit] Real-time monitoring started');
+}
+
+function stopRealtimeMonitoring(): void {
+  stopMonitoring();
+  destroyAnalyzer();
+  destroyTrafficLight();
+  console.log('[GhostEdit] Real-time monitoring stopped');
+}
+
+function restartRealtimeMonitoring(): void {
+  stopRealtimeMonitoring();
+  startRealtimeMonitoring();
+}
+
 // ── App Lifecycle ──
 
 // Hide dock icon on macOS (tray-only app)
@@ -592,7 +755,11 @@ app.whenReady().then(() => {
       performCorrection(c.cliProvider, c.cliModel);
     },
     () => undoLastCorrection(),
+    () => correctCurrentLine(),
   );
+
+  // Start real-time monitoring if enabled
+  startRealtimeMonitoring();
 
   // Refresh tray/hotkey when config changes
   ipcMain.on('config-changed', () => {
@@ -612,7 +779,11 @@ app.whenReady().then(() => {
         performCorrection(c.cliProvider, c.cliModel);
       },
       () => undoLastCorrection(),
+      () => correctCurrentLine(),
     );
+
+    // Restart monitoring if config changed (enabled/disabled/position change)
+    restartRealtimeMonitoring();
   });
 
   // Apply launch at login setting
@@ -632,6 +803,7 @@ app.whenReady().then(() => {
 app.on('will-quit', () => {
   unregisterAll();
   destroyTray();
+  stopRealtimeMonitoring();
 });
 
 app.on('window-all-closed', () => {

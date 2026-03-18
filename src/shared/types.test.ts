@@ -106,6 +106,11 @@ describe('AppConfig type', () => {
       localModelVariant: 'fp32',
       localModelSpeed: 'fast',
       firstRunComplete: false,
+      monitoringEnabled: false,
+      trafficLightPosition: 'top-right',
+      trafficLightInactivityMs: 3000,
+      lineHotkeyAccelerator: 'CommandOrControl+L',
+      backgroundModelRefinement: false,
     };
     expect(config.firstRunComplete).toBe(false);
     expect(config.localModelSpeed).toBe('fast');
@@ -138,6 +143,11 @@ describe('AppConfig type', () => {
       localModelVariant: 'fp32',
       localModelSpeed: 'fast',
       firstRunComplete: false,
+      monitoringEnabled: false,
+      trafficLightPosition: 'top-right',
+      trafficLightInactivityMs: 3000,
+      lineHotkeyAccelerator: 'CommandOrControl+L',
+      backgroundModelRefinement: false,
     };
     expect(config.localHotkeyAccelerator).toBe('CommandOrControl+E');
     expect(config.cliHotkeyAccelerator).toBe('CommandOrControl+Shift+E');
@@ -170,6 +180,11 @@ describe('AppConfig type', () => {
       localModelVariant: 'fp32',
       localModelSpeed: 'fast',
       firstRunComplete: false,
+      monitoringEnabled: false,
+      trafficLightPosition: 'top-right',
+      trafficLightInactivityMs: 3000,
+      lineHotkeyAccelerator: 'CommandOrControl+L',
+      backgroundModelRefinement: false,
     };
     // Runtime check: no hotkeyAccelerator key
     expect(config).not.toHaveProperty('hotkeyAccelerator');

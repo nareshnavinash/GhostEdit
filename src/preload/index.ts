@@ -136,6 +136,34 @@ const api = {
   getUsageStats: (): Promise<UsageStats> =>
     ipcRenderer.invoke(IPC.GET_USAGE_STATS),
 
+  // ── Traffic Light & Suggestions (from main → renderer) ──
+  onTrafficLightUpdate: (callback: (data: { color: string; visible: boolean }) => void) => {
+    const listener = (_event: any, data: { color: string; visible: boolean }) => callback(data);
+    ipcRenderer.on(IPC.TRAFFIC_LIGHT_UPDATE, listener);
+    return () => ipcRenderer.removeListener(IPC.TRAFFIC_LIGHT_UPDATE, listener);
+  },
+  onTrafficLightHide: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(IPC.TRAFFIC_LIGHT_HIDE, listener);
+    return () => ipcRenderer.removeListener(IPC.TRAFFIC_LIGHT_HIDE, listener);
+  },
+  trafficLightClicked: () => {
+    ipcRenderer.send(IPC.TRAFFIC_LIGHT_CLICKED);
+  },
+  onSuggestionsUpdate: (callback: (issues: any[]) => void) => {
+    const listener = (_event: any, issues: any[]) => callback(issues);
+    ipcRenderer.on(IPC.SUGGESTIONS_UPDATE, listener);
+    return () => ipcRenderer.removeListener(IPC.SUGGESTIONS_UPDATE, listener);
+  },
+  applyFix: (index: number) => {
+    ipcRenderer.invoke(IPC.APPLY_FIX, index);
+  },
+  applyAllFixes: () => {
+    ipcRenderer.invoke(IPC.APPLY_ALL_FIXES);
+  },
+  checkAccessibility: (): Promise<{ trusted: boolean }> =>
+    ipcRenderer.invoke(IPC.CHECK_ACCESSIBILITY),
+
   // ── Inference IPC (for hidden inference window) ──
   onInferenceCommand: (callback: (data: any) => void) => {
     const listener = (_event: any, data: any) => callback(data);

@@ -421,6 +421,28 @@ export async function dictionaryPrePass(
 }
 
 /**
+ * Check text for issues without applying fixes.
+ * Returns raw SpellCheckIssue[] for display in the traffic light / suggestions UI.
+ */
+export async function checkTextForIssues(text: string): Promise<SpellCheckIssue[]> {
+  await ensureDictionaryCheckersLoaded();
+
+  const harperLinter = harperLinterPromise ? await harperLinterPromise.catch(() => null) : null;
+  const nspellChecker = nspellCheckerPromise ? await nspellCheckerPromise.catch(() => null) : null;
+
+  if (!harperLinter && !nspellChecker) return [];
+
+  const harperIssues = harperLinter ? await getHarperIssues(harperLinter, text) : [];
+  const nspellIssues = nspellChecker ? getNspellIssues(nspellChecker, text) : [];
+
+  let merged = mergeIssues(harperIssues, nspellIssues);
+  merged = filterProperNounsAndAcronyms(merged, text);
+  merged = filterTechWords(merged, text, nspellChecker);
+
+  return merged;
+}
+
+/**
  * Run the dictionary polish on model output (same logic as pre-pass).
  * Typically called with empty protectedRanges since tokens are already restored.
  */
