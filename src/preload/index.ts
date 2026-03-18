@@ -3,6 +3,9 @@ import { IPC } from '../shared/types';
 import type {
   AppConfig,
   CorrectionHistoryEntry,
+  DiffPreviewMode,
+  ErrorLogEntry,
+  UsageStats,
   LocalModelInfo,
   LocalModelVariant,
   WindowType,
@@ -68,6 +71,8 @@ const api = {
     ipcRenderer.invoke(IPC.GET_HISTORY),
   clearHistory: (): Promise<{ success: boolean }> =>
     ipcRenderer.invoke(IPC.CLEAR_HISTORY),
+  exportHistory: (format: 'json' | 'csv'): Promise<{ success: boolean; path?: string }> =>
+    ipcRenderer.invoke(IPC.EXPORT_HISTORY, format),
 
   // ── Windows ──
   openWindow: (type: WindowType): Promise<{ success: boolean }> =>
@@ -93,6 +98,11 @@ const api = {
     ipcRenderer.on(IPC.DOWNLOAD_VARIANT_PROGRESS, listener);
     return () => ipcRenderer.removeListener(IPC.DOWNLOAD_VARIANT_PROGRESS, listener);
   },
+  onDownloadVariantError: (callback: (data: { variant: LocalModelVariant; error: string }) => void) => {
+    const listener = (_event: any, data: { variant: LocalModelVariant; error: string }) => callback(data);
+    ipcRenderer.on(IPC.DOWNLOAD_VARIANT_ERROR, listener);
+    return () => ipcRenderer.removeListener(IPC.DOWNLOAD_VARIANT_ERROR, listener);
+  },
 
   // ── Preview original text (from main → renderer) ──
   onSetPreviewOriginal: (callback: (text: string) => void) => {
@@ -100,6 +110,31 @@ const api = {
     ipcRenderer.on(IPC.SET_PREVIEW_ORIGINAL, listener);
     return () => ipcRenderer.removeListener(IPC.SET_PREVIEW_ORIGINAL, listener);
   },
+  onSetPreviewConfig: (callback: (config: { autoPasteDelaySeconds: number; diffPreviewMode: DiffPreviewMode; passivePreviewSeconds: number }) => void) => {
+    const listener = (_event: any, config: { autoPasteDelaySeconds: number; diffPreviewMode: DiffPreviewMode; passivePreviewSeconds: number }) => callback(config);
+    ipcRenderer.on(IPC.SET_PREVIEW_CONFIG, listener);
+    return () => ipcRenderer.removeListener(IPC.SET_PREVIEW_CONFIG, listener);
+  },
+
+  // ── Error Log ──
+  getErrorLog: (): Promise<ErrorLogEntry[]> =>
+    ipcRenderer.invoke(IPC.GET_ERROR_LOG),
+
+  // ── System Prompt ──
+  getSystemPrompt: (): Promise<{ prompt: string; defaultPrompt: string }> =>
+    ipcRenderer.invoke(IPC.GET_SYSTEM_PROMPT),
+  saveSystemPrompt: (prompt: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC.SAVE_SYSTEM_PROMPT, prompt),
+
+  // ── Personal Dictionary ──
+  getPersonalDictionary: (): Promise<string[]> =>
+    ipcRenderer.invoke(IPC.GET_PERSONAL_DICTIONARY),
+  savePersonalDictionary: (words: string[]): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke(IPC.SAVE_PERSONAL_DICTIONARY, words),
+
+  // ── Usage Stats ──
+  getUsageStats: (): Promise<UsageStats> =>
+    ipcRenderer.invoke(IPC.GET_USAGE_STATS),
 
   // ── Inference IPC (for hidden inference window) ──
   onInferenceCommand: (callback: (data: any) => void) => {

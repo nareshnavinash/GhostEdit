@@ -8,7 +8,7 @@ import { registerIPCHandlers } from './ipc-handlers';
 import { correctText } from './correction-dispatcher';
 import { protectTokens, restoreTokens, bestEffortRestore, placeholdersAreIntact, getPlaceholderRanges, getOriginalTokenRanges, stripLeakedPlaceholders } from './token-preservation';
 import { dictionaryPrePass, dictionaryPolish } from './dictionary-checker';
-import { appendHistory } from './history-store';
+import { appendHistory, lastSuccessfulEntry } from './history-store';
 import * as clipboardManager from './clipboard-manager';
 import { getCached, putCache, clearCache } from './correction-cache';
 import { TONE_PROMPTS } from '../shared/constants';
@@ -16,6 +16,8 @@ import type { ProviderName } from '../shared/types';
 import { IPC, type WindowType, type CorrectionHistoryEntry } from '../shared/types';
 import { errorToUserMessage } from './error-messages';
 import { clearDeviceCache } from './device-selector';
+import { playSuccessSound, playErrorSound } from './sound-manager';
+import { appendError } from './error-log';
 
 // ── Single Instance Lock ──
 const gotLock = app.requestSingleInstanceLock();
@@ -60,21 +62,21 @@ function openWindow(type: WindowType): BrowserWindow {
   const isHud = type === 'hud';
   const isPreview = type === 'streaming-preview';
 
-  const isOverlay = isHud || isPreview;
+  const isOverlay = isHud; // Preview is now interactive, not a passive overlay
 
   const win = new BrowserWindow({
     width: size.width,
     height: size.height,
     show: false,
-    frame: !isOverlay,
-    transparent: isOverlay,
+    frame: !isHud && !isPreview,
+    transparent: isHud || isPreview,
     alwaysOnTop: isHud || isPreview,
-    skipTaskbar: isHud || isPreview,
-    focusable: !isHud && !isPreview,
+    skipTaskbar: isHud,
+    focusable: !isHud,
     resizable: !isHud,
     hasShadow: !isHud,
-    ...(isOverlay ? {} : { titleBarStyle: 'hiddenInset' as const }),
-    ...(process.platform === 'darwin' && !isOverlay ? { vibrancy: 'under-window' as const } : {}),
+    ...(isHud || isPreview ? {} : { titleBarStyle: 'hiddenInset' as const }),
+    ...(process.platform === 'darwin' && !isHud && !isPreview ? { vibrancy: 'under-window' as const } : {}),
     webPreferences: {
       preload: getPreloadPath(),
       contextIsolation: true,
@@ -91,9 +93,6 @@ function openWindow(type: WindowType): BrowserWindow {
   win.once('ready-to-show', () => {
     if (isHud) {
       // HUD window is shown/positioned by showHUD()
-    } else if (isPreview) {
-      // Preview shows inactive so it doesn't steal focus from the text field
-      win.showInactive();
     } else {
       win.show();
     }
@@ -194,8 +193,58 @@ function hideHUD(): void {
   }
 }
 
+// ── Passive Preview Window ──
+let passivePreviewWin: BrowserWindow | null = null;
+let passivePreviewTimer: ReturnType<typeof setTimeout> | null = null;
+
+function openPassivePreviewWindow(): BrowserWindow {
+  // Close previous passive preview if still open
+  if (passivePreviewWin && !passivePreviewWin.isDestroyed()) {
+    passivePreviewWin.close();
+    passivePreviewWin = null;
+  }
+  if (passivePreviewTimer) {
+    clearTimeout(passivePreviewTimer);
+    passivePreviewTimer = null;
+  }
+
+  const point = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(point);
+  const { x, y, width, height } = display.workArea;
+
+  const win = new BrowserWindow({
+    width: 700,
+    height: 400,
+    x: Math.round(x + width / 2 - 350),
+    y: Math.round(y + height / 2 - 200),
+    show: false,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    resizable: false,
+    hasShadow: false,
+    webPreferences: {
+      preload: getPreloadPath(),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+    },
+  });
+
+  win.loadURL(getRendererURL('streaming-preview')).catch((err) => {
+    console.error('[GhostEdit] Failed to load passive preview:', err.message);
+  });
+
+  passivePreviewWin = win;
+  return win;
+}
+
 // ── Core Correction Pipeline ──
 let correcting = false;
+let pendingPreviewDecision: { resolve: (accepted: boolean) => void } | null = null;
 
 async function performCorrection(providerOverride?: ProviderName, modelOverride?: string): Promise<void> {
   if (correcting) return;
@@ -240,51 +289,45 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
     // 5. Check correction cache (using pre-passed text)
     const cached = getCached(prePassText, effectiveConfig.provider, effectiveConfig.model, config.tonePreset, config.language);
 
-    // 6. Diff preview path vs direct path
-    if (config.showDiffPreview) {
-      // Run correction (same logic as non-preview path)
-      let correctedText: string;
+    // 6. Run correction (shared logic for both paths)
+    let correctedText: string;
 
-      if (cached) {
-        correctedText = cached.text;
-        if (protection.hasProtectedTokens) {
-          if (placeholdersAreIntact(cached.text, protection.tokens)) {
-            correctedText = restoreTokens(cached.text, protection.tokens);
-          } else {
-            correctedText = bestEffortRestore(cached.text, protection.tokens);
-          }
-        }
-      } else {
-        const result = await correctText(systemPrompt, prePassText, effectiveConfig);
-        putCache(prePassText, effectiveConfig.provider, effectiveConfig.model, config.tonePreset, config.language, result);
-
-        if (protection.hasProtectedTokens) {
-          if (placeholdersAreIntact(result.text, protection.tokens)) {
-            correctedText = restoreTokens(result.text, protection.tokens);
-          } else {
-            correctedText = bestEffortRestore(result.text, protection.tokens);
-          }
+    if (cached) {
+      correctedText = cached.text;
+      if (protection.hasProtectedTokens) {
+        if (placeholdersAreIntact(cached.text, protection.tokens)) {
+          correctedText = restoreTokens(cached.text, protection.tokens);
         } else {
-          correctedText = result.text;
+          correctedText = bestEffortRestore(cached.text, protection.tokens);
         }
-
-        const polishRanges = protection.hasProtectedTokens
-          ? getOriginalTokenRanges(correctedText, protection.tokens) : [];
-        const polished = await dictionaryPolish(correctedText, polishRanges);
-        correctedText = polished.text;
       }
+    } else {
+      const result = await correctText(systemPrompt, prePassText, effectiveConfig);
+      putCache(prePassText, effectiveConfig.provider, effectiveConfig.model, config.tonePreset, config.language, result);
 
-      correctedText = stripLeakedPlaceholders(correctedText);
-
-      // Paste corrected text immediately
-      if (config.clipboardOnlyMode) {
-        clipboardManager.writeToClipboard(correctedText);
+      if (protection.hasProtectedTokens) {
+        if (placeholdersAreIntact(result.text, protection.tokens)) {
+          correctedText = restoreTokens(result.text, protection.tokens);
+        } else {
+          correctedText = bestEffortRestore(result.text, protection.tokens);
+        }
       } else {
-        await clipboardManager.pasteText(correctedText);
+        correctedText = result.text;
       }
+
+      const polishRanges = protection.hasProtectedTokens
+        ? getOriginalTokenRanges(correctedText, protection.tokens) : [];
+      const polished = await dictionaryPolish(correctedText, polishRanges);
+      correctedText = polished.text;
+    }
+
+    correctedText = stripLeakedPlaceholders(correctedText);
+
+    // 7. Three-way branch: interactive / passive / none
+    if (config.diffPreviewMode === 'interactive') {
       hideHUD();
 
-      // Show informational diff overlay (non-focusable, auto-dismisses)
+      // Show interactive diff preview — wait for user decision
       const previewWin = openWindow('streaming-preview');
       await new Promise<void>((resolve) => {
         if (previewWin.webContents.isLoading()) {
@@ -295,13 +338,101 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
       });
       previewWin.webContents.send(IPC.SET_PREVIEW_ORIGINAL, selectedText);
       previewWin.webContents.send(IPC.STREAMING_DONE, correctedText);
+      previewWin.webContents.send(IPC.SET_PREVIEW_CONFIG, {
+        autoPasteDelaySeconds: config.autoPasteDelaySeconds,
+        diffPreviewMode: 'interactive',
+        passivePreviewSeconds: 0,
+      });
 
-      // Auto-close after 5 seconds
-      setTimeout(() => {
-        if (!previewWin.isDestroyed()) previewWin.close();
-      }, 5000);
+      // Wait for Accept/Reject (or window close = reject)
+      const accepted = await new Promise<boolean>((resolve) => {
+        pendingPreviewDecision = { resolve };
+        previewWin.on('closed', () => {
+          if (pendingPreviewDecision) {
+            pendingPreviewDecision.resolve(false);
+            pendingPreviewDecision = null;
+          }
+        });
+      });
+
+      // Close preview window first (before pasting) so focus returns to the original app
+      if (!previewWin.isDestroyed()) previewWin.close();
+
+      if (accepted) {
+        // On macOS, hide Electron so the previously-focused app regains focus
+        if (process.platform === 'darwin') {
+          app.hide();
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        if (config.clipboardOnlyMode) {
+          clipboardManager.writeToClipboard(correctedText);
+        } else {
+          await clipboardManager.pasteText(correctedText);
+        }
+        if (config.soundFeedbackEnabled) playSuccessSound();
+        if (config.notifyOnSuccess) {
+          new Notification({ title: 'GhostEdit', body: 'Correction applied.' }).show();
+        }
+      }
 
       // Log to history
+      const entry: CorrectionHistoryEntry = {
+        id: randomUUID(),
+        timestamp: new Date().toISOString(),
+        originalText: selectedText,
+        generatedText: correctedText,
+        provider: effectiveConfig.provider,
+        model: effectiveConfig.model,
+        durationMilliseconds: Date.now() - startTime,
+        succeeded: accepted,
+        rejected: !accepted,
+      };
+      appendHistory(entry, config.historyLimit);
+
+    } else if (config.diffPreviewMode === 'passive') {
+      // Paste first, then show non-focusable overlay
+      hideHUD();
+
+      if (config.clipboardOnlyMode) {
+        clipboardManager.writeToClipboard(correctedText);
+      } else {
+        await clipboardManager.pasteText(correctedText);
+      }
+
+      if (config.soundFeedbackEnabled) playSuccessSound();
+      if (config.notifyOnSuccess) {
+        new Notification({ title: 'GhostEdit', body: 'Correction applied.' }).show();
+      }
+
+      // Show passive preview overlay (non-focusable, auto-closes)
+      const passiveWin = openPassivePreviewWindow();
+      const sendPassiveData = () => {
+        passiveWin.webContents.send(IPC.SET_PREVIEW_ORIGINAL, selectedText);
+        passiveWin.webContents.send(IPC.STREAMING_DONE, correctedText);
+        passiveWin.webContents.send(IPC.SET_PREVIEW_CONFIG, {
+          autoPasteDelaySeconds: 0,
+          diffPreviewMode: 'passive',
+          passivePreviewSeconds: config.passivePreviewSeconds,
+        });
+        passiveWin.showInactive();
+      };
+
+      if (passiveWin.webContents.isLoading()) {
+        passiveWin.webContents.once('did-finish-load', sendPassiveData);
+      } else {
+        sendPassiveData();
+      }
+
+      // Auto-close after passivePreviewSeconds
+      passivePreviewTimer = setTimeout(() => {
+        if (passivePreviewWin && !passivePreviewWin.isDestroyed()) {
+          passivePreviewWin.close();
+          passivePreviewWin = null;
+        }
+        passivePreviewTimer = null;
+      }, config.passivePreviewSeconds * 1000);
+
+      // Log to history (always applied)
       const entry: CorrectionHistoryEntry = {
         id: randomUUID(),
         timestamp: new Date().toISOString(),
@@ -313,47 +444,9 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
         succeeded: true,
       };
       appendHistory(entry, config.historyLimit);
+
     } else {
-      let correctedText: string;
-
-      if (cached) {
-        // Use cached result — skip AI entirely
-        correctedText = cached.text;
-        if (protection.hasProtectedTokens) {
-          if (placeholdersAreIntact(cached.text, protection.tokens)) {
-            correctedText = restoreTokens(cached.text, protection.tokens);
-          } else {
-            correctedText = bestEffortRestore(cached.text, protection.tokens);
-          }
-        }
-      } else {
-        // Direct correction (non-preview path)
-        const result = await correctText(systemPrompt, prePassText, effectiveConfig);
-
-        // Cache the result
-        putCache(prePassText, effectiveConfig.provider, effectiveConfig.model, config.tonePreset, config.language, result);
-
-        // Restore tokens
-        if (protection.hasProtectedTokens) {
-          if (placeholdersAreIntact(result.text, protection.tokens)) {
-            correctedText = restoreTokens(result.text, protection.tokens);
-          } else {
-            correctedText = bestEffortRestore(result.text, protection.tokens);
-          }
-        } else {
-          correctedText = result.text;
-        }
-
-        // Dictionary polish on model output
-        const polishRanges = protection.hasProtectedTokens
-          ? getOriginalTokenRanges(correctedText, protection.tokens) : [];
-        const polished = await dictionaryPolish(correctedText, polishRanges);
-        correctedText = polished.text;
-      }
-
-      correctedText = stripLeakedPlaceholders(correctedText);
-
-      // Paste back or copy to clipboard
+      // Direct paste (non-preview path)
       if (config.clipboardOnlyMode) {
         clipboardManager.writeToClipboard(correctedText);
         showHUD('Copied to clipboard!');
@@ -362,7 +455,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
         showHUD('Done!');
       }
 
-      // Success notification
+      if (config.soundFeedbackEnabled) playSuccessSound();
       if (config.notifyOnSuccess) {
         new Notification({ title: 'GhostEdit', body: 'Correction applied.' }).show();
       }
@@ -384,6 +477,9 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
     const message = errorToUserMessage(err, config.developerMode);
     console.error('Correction error:', err);
     showHUD(`Error: ${message}`, config.developerMode ? 8000 : 5000);
+
+    if (config.soundFeedbackEnabled) playErrorSound();
+    appendError(message, effectiveConfig.provider);
 
     // Native notification for errors
     new Notification({ title: 'GhostEdit', body: message }).show();
@@ -412,6 +508,25 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
   }
 }
 
+// ── Undo Last Correction ──
+
+async function undoLastCorrection(): Promise<void> {
+  const entry = lastSuccessfulEntry();
+  if (!entry) {
+    showHUD('Nothing to undo');
+    return;
+  }
+
+  const config = configManager.load();
+  if (config.clipboardOnlyMode) {
+    clipboardManager.writeToClipboard(entry.originalText);
+    showHUD('Original text copied to clipboard');
+  } else {
+    await clipboardManager.pasteText(entry.originalText);
+    showHUD('Undo: original text restored');
+  }
+}
+
 // ── App Lifecycle ──
 
 // Hide dock icon on macOS (tray-only app)
@@ -434,17 +549,19 @@ app.whenReady().then(() => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
 
-  ipcMain.handle(IPC.ACCEPT_CORRECTION, async (_event, text: string) => {
-    const config = configManager.load();
-    if (config.clipboardOnlyMode) {
-      clipboardManager.writeToClipboard(text);
-    } else {
-      await clipboardManager.pasteText(text);
+  ipcMain.handle(IPC.ACCEPT_CORRECTION, async (_event, _text: string) => {
+    if (pendingPreviewDecision) {
+      pendingPreviewDecision.resolve(true);
+      pendingPreviewDecision = null;
     }
     return { success: true };
   });
 
   ipcMain.handle(IPC.REJECT_CORRECTION, () => {
+    if (pendingPreviewDecision) {
+      pendingPreviewDecision.resolve(false);
+      pendingPreviewDecision = null;
+    }
     return { success: true };
   });
 
@@ -453,16 +570,19 @@ app.whenReady().then(() => {
     return { success: true };
   });
 
-  // Create tray
-  createTray({
+  const trayCallbacks = {
     onCorrectLocal: () => performCorrection('local'),
     onCorrectCLI: () => {
       const c = configManager.load();
       performCorrection(c.cliProvider, c.cliModel);
     },
+    onUndoLastCorrection: () => undoLastCorrection(),
     onOpenSettings: () => openWindow('settings'),
     onOpenHistory: () => openWindow('history'),
-  });
+  };
+
+  // Create tray
+  createTray(trayCallbacks);
 
   // Register global hotkeys
   registerGlobalShortcuts(
@@ -471,6 +591,7 @@ app.whenReady().then(() => {
       const c = configManager.load();
       performCorrection(c.cliProvider, c.cliModel);
     },
+    () => undoLastCorrection(),
   );
 
   // Refresh tray/hotkey when config changes
@@ -478,26 +599,27 @@ app.whenReady().then(() => {
     configManager.invalidateCache();
     clearCache(); // Invalidate correction cache on config change
     clearDeviceCache(); // Re-probe device on next correction if model variant changed
-    updateMenu({
-      onCorrectLocal: () => performCorrection('local'),
-      onCorrectCLI: () => {
-        const c = configManager.load();
-        performCorrection(c.cliProvider, c.cliModel);
-      },
-      onOpenSettings: () => openWindow('settings'),
-      onOpenHistory: () => openWindow('history'),
-    });
+
+    // Wire up launch at login
+    const updatedConfig = configManager.load();
+    app.setLoginItemSettings({ openAtLogin: updatedConfig.launchAtLogin });
+
+    updateMenu(trayCallbacks);
     refreshGlobalShortcuts(
       () => performCorrection('local'),
       () => {
         const c = configManager.load();
         performCorrection(c.cliProvider, c.cliModel);
       },
+      () => undoLastCorrection(),
     );
   });
 
-  // Only open settings on first run (lazy settings)
+  // Apply launch at login setting
   const config = configManager.load();
+  app.setLoginItemSettings({ openAtLogin: config.launchAtLogin });
+
+  // Only open settings on first run (lazy settings)
   if (!config.firstRunComplete) {
     openWindow('settings');
   }

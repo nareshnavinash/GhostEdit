@@ -39,33 +39,37 @@ beforeEach(() => {
   mockLoad.mockReturnValue({
     localHotkeyAccelerator: 'CommandOrControl+E',
     cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+    undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
   });
 });
 
 describe('registerGlobalShortcuts', () => {
-  it('registers two shortcuts when accelerators differ', async () => {
+  it('registers three shortcuts when all accelerators differ', async () => {
     const { registerGlobalShortcuts } = await freshModule();
     const localHandler = vi.fn();
     const cliHandler = vi.fn();
+    const undoHandler = vi.fn();
 
-    registerGlobalShortcuts(localHandler, cliHandler);
+    registerGlobalShortcuts(localHandler, cliHandler, undoHandler);
 
-    expect(mockRegister).toHaveBeenCalledTimes(2);
+    expect(mockRegister).toHaveBeenCalledTimes(3);
     expect(mockRegister).toHaveBeenCalledWith('CommandOrControl+E', localHandler);
     expect(mockRegister).toHaveBeenCalledWith('CommandOrControl+Shift+E', cliHandler);
+    expect(mockRegister).toHaveBeenCalledWith('CommandOrControl+Shift+Z', undoHandler);
   });
 
-  it('only registers local when both accelerators are the same and logs warning', async () => {
+  it('only registers local and undo when local and CLI accelerators are the same and logs warning', async () => {
     mockLoad.mockReturnValue({
       localHotkeyAccelerator: 'CommandOrControl+E',
       cliHotkeyAccelerator: 'CommandOrControl+E',
+      undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
     });
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const { registerGlobalShortcuts } = await freshModule();
-    registerGlobalShortcuts(vi.fn(), vi.fn());
+    registerGlobalShortcuts(vi.fn(), vi.fn(), vi.fn());
 
-    expect(mockRegister).toHaveBeenCalledTimes(1);
+    expect(mockRegister).toHaveBeenCalledTimes(2); // local + undo
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('same'));
     warnSpy.mockRestore();
   });
@@ -77,7 +81,7 @@ describe('registerGlobalShortcuts', () => {
     });
 
     const { registerGlobalShortcuts } = await freshModule();
-    registerGlobalShortcuts(vi.fn(), vi.fn());
+    registerGlobalShortcuts(vi.fn(), vi.fn(), vi.fn());
 
     // Both fall back to defaults; defaults differ so both register
     expect(mockRegister).toHaveBeenCalledWith(DEFAULT_CONFIG.localHotkeyAccelerator, expect.any(Function));
@@ -87,7 +91,7 @@ describe('registerGlobalShortcuts', () => {
   it('captured local handler is invoked when shortcut fires', async () => {
     const { registerGlobalShortcuts } = await freshModule();
     const localHandler = vi.fn();
-    registerGlobalShortcuts(localHandler, vi.fn());
+    registerGlobalShortcuts(localHandler, vi.fn(), vi.fn());
 
     // Get the handler passed to register for the local shortcut
     const registeredHandler = mockRegister.mock.calls[0][1];
@@ -98,7 +102,7 @@ describe('registerGlobalShortcuts', () => {
   it('captured cli handler is invoked when shortcut fires', async () => {
     const { registerGlobalShortcuts } = await freshModule();
     const cliHandler = vi.fn();
-    registerGlobalShortcuts(vi.fn(), cliHandler);
+    registerGlobalShortcuts(vi.fn(), cliHandler, vi.fn());
 
     // CLI is the second call
     const registeredHandler = mockRegister.mock.calls[1][1];
@@ -111,7 +115,7 @@ describe('registerGlobalShortcuts', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { registerGlobalShortcuts } = await freshModule();
-    registerGlobalShortcuts(vi.fn(), vi.fn());
+    registerGlobalShortcuts(vi.fn(), vi.fn(), vi.fn());
 
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to register'));
     errorSpy.mockRestore();
@@ -122,7 +126,7 @@ describe('registerGlobalShortcuts', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { registerGlobalShortcuts } = await freshModule();
-    registerGlobalShortcuts(vi.fn(), vi.fn());
+    registerGlobalShortcuts(vi.fn(), vi.fn(), vi.fn());
 
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Error registering'), expect.any(Error));
     errorSpy.mockRestore();
@@ -132,7 +136,7 @@ describe('registerGlobalShortcuts', () => {
 describe('refreshGlobalShortcuts', () => {
   it('calls unregisterAll then re-registers', async () => {
     const { refreshGlobalShortcuts } = await freshModule();
-    refreshGlobalShortcuts(vi.fn(), vi.fn());
+    refreshGlobalShortcuts(vi.fn(), vi.fn(), vi.fn());
 
     expect(mockUnregisterAll).toHaveBeenCalledTimes(1);
     expect(mockRegister).toHaveBeenCalled();

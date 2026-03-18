@@ -1,4 +1,6 @@
 import type { SpellCheckIssue, SpellCheckIssueKind, DictionaryPrePassResult } from '../shared/types';
+import { configManager } from './config-manager';
+import techDictionaryRaw from './data/tech-dictionary.txt?raw';
 
 const MAX_PASSES = 3;
 
@@ -6,6 +8,8 @@ const MAX_PASSES = 3;
 
 let harperLinterPromise: Promise<any> | null = null;
 let nspellCheckerPromise: Promise<any> | null = null;
+let techDictionaryLoaded = false;
+let personalDictionaryLoaded = false;
 
 // ── Initialization ──
 
@@ -63,12 +67,55 @@ export async function ensureDictionaryCheckersLoaded(): Promise<void> {
     console.warn('[GhostEdit] nspell init failed:', nspellResult.reason?.message);
     nspellCheckerPromise = null; // Allow retry
   }
+
+  // Load tech dictionary words into nspell (before personal so personal can override)
+  if (!techDictionaryLoaded && nspellResult.status === 'fulfilled') {
+    loadTechDictionaryIntoNspell(nspellResult.value);
+  }
+
+  // Load personal dictionary words into nspell
+  if (!personalDictionaryLoaded && nspellResult.status === 'fulfilled') {
+    loadPersonalDictionaryIntoNspell();
+  }
+}
+
+/** Load built-in tech dictionary words into nspell checker. */
+function loadTechDictionaryIntoNspell(checker: any): void {
+  const words = techDictionaryRaw
+    .split('\n')
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0);
+  for (const word of words) {
+    checker.add(word);
+  }
+  techDictionaryLoaded = true;
+}
+
+/** Load personal dictionary words into nspell checker. */
+function loadPersonalDictionaryIntoNspell(): void {
+  if (!nspellCheckerPromise) return;
+  nspellCheckerPromise.then((checker) => {
+    const words = configManager.loadPersonalDictionary();
+    for (const word of words) {
+      checker.add(word);
+    }
+    personalDictionaryLoaded = true;
+  }).catch(() => {});
+}
+
+/** Reload personal dictionary (call after dictionary changes). */
+export function reloadPersonalDictionary(): void {
+  personalDictionaryLoaded = false;
+  if (nspellCheckerPromise) {
+    loadPersonalDictionaryIntoNspell();
+  }
 }
 
 /** Reset state — used in tests. */
 export function resetDictionaryChecker(): void {
   harperLinterPromise = null;
   nspellCheckerPromise = null;
+  techDictionaryLoaded = false;
 }
 
 // ── Harper Issue Extraction ──
@@ -116,6 +163,43 @@ export async function getHarperIssues(linter: any, text: string): Promise<SpellC
   return issues;
 }
 
+// ── Tech Word Heuristics ──
+
+const TECH_PREFIXES = [
+  'web', 'micro', 'multi', 'auto', 'pre', 'un', 're', 'sub',
+  'super', 'over', 'under', 'cross', 'inter', 'semi', 'non',
+  'meta', 'pseudo', 'cyber', 'dev',
+];
+
+/** Detect camelCase words like `backgroundColor`, `userId`. */
+export function isCamelCase(word: string): boolean {
+  return /^[a-z]+[A-Z]/.test(word);
+}
+
+/** Detect words with embedded digits like `utf8`, `base64`, `h264`. */
+export function hasEmbeddedDigits(word: string): boolean {
+  return /[a-zA-Z]/.test(word) && /\d/.test(word);
+}
+
+/** Detect tech compound words where prefix + real English suffix. */
+export function isTechCompound(word: string, checker: any): boolean {
+  const lower = word.toLowerCase();
+  for (const prefix of TECH_PREFIXES) {
+    if (lower.startsWith(prefix) && lower.length > prefix.length) {
+      const suffix = lower.slice(prefix.length);
+      if (suffix.length >= 3 && checker.correct(suffix)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** Returns true if the word should be skipped as a tech/code word. */
+function shouldSkipAsTechWord(word: string, checker: any): boolean {
+  return isCamelCase(word) || hasEmbeddedDigits(word) || isTechCompound(word, checker);
+}
+
 // ── nspell Issue Extraction ──
 
 export function getNspellIssues(checker: any, text: string): SpellCheckIssue[] {
@@ -133,6 +217,9 @@ export function getNspellIssues(checker: any, text: string): SpellCheckIssue[] {
 
     // Skip words that are just apostrophes
     if (/^['\u2019]+$/.test(word)) continue;
+
+    // Skip tech/code words (camelCase, embedded digits, tech compounds)
+    if (shouldSkipAsTechWord(word, checker)) continue;
 
     if (!checker.correct(word)) {
       const suggestions: string[] = checker.suggest(word);
@@ -212,6 +299,31 @@ export function filterProperNounsAndAcronyms(
   });
 }
 
+export function filterTechWords(
+  issues: SpellCheckIssue[],
+  text: string,
+  nspellChecker: any | null,
+): SpellCheckIssue[] {
+  return issues.filter((issue) => {
+    // Look at the full token in the original text containing this issue range
+    const fullTokenRegex = /[a-zA-Z0-9]+/g;
+    let tokenMatch: RegExpExecArray | null;
+    while ((tokenMatch = fullTokenRegex.exec(text)) !== null) {
+      const tStart = tokenMatch.index;
+      const tEnd = tStart + tokenMatch[0].length;
+      // Check if this token contains the issue range
+      if (tStart <= issue.range.start && tEnd >= issue.range.end) {
+        const fullToken = tokenMatch[0];
+        if (isCamelCase(fullToken) || hasEmbeddedDigits(fullToken)) return false;
+        if (nspellChecker && isTechCompound(fullToken, nspellChecker)) return false;
+        break;
+      }
+    }
+
+    return true;
+  });
+}
+
 // ── Fix Application ──
 
 export function applyFixes(
@@ -277,6 +389,9 @@ async function runIterativeFixes(
 
     // Filter proper nouns and acronyms
     merged = filterProperNounsAndAcronyms(merged, currentText);
+
+    // Filter tech words (camelCase, embedded digits, tech compounds)
+    merged = filterTechWords(merged, currentText, nspellChecker);
 
     if (merged.length === 0) break;
 

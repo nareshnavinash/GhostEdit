@@ -17,11 +17,13 @@ vi.mock('harper.js', () => ({
 
 const mockCorrect = vi.fn((_word: string) => true);
 const mockSuggest = vi.fn((_word: string): string[] => []);
+const mockAdd = vi.fn((_word: string) => {});
 
 vi.mock('nspell', () => ({
   default: vi.fn().mockImplementation(function (this: any) {
     this.correct = (w: string) => mockCorrect(w);
     this.suggest = (w: string) => mockSuggest(w);
+    this.add = (w: string) => mockAdd(w);
   }),
 }));
 
@@ -29,6 +31,10 @@ vi.mock('dictionary-en', () => ({
   default: vi.fn((cb: (err: Error | null, result: any) => void) =>
     cb(null, { aff: Buffer.from(''), dic: Buffer.from('') }),
   ),
+}));
+
+vi.mock('./data/tech-dictionary.txt?raw', () => ({
+  default: 'webhook\nmicroservice\nkubernetes\n',
 }));
 
 // Helper to get a fresh module (resets module-level state)
@@ -46,12 +52,16 @@ async function freshModule() {
     default: vi.fn().mockImplementation(function (this: any) {
       this.correct = (w: string) => mockCorrect(w);
       this.suggest = (w: string) => mockSuggest(w);
+      this.add = (w: string) => mockAdd(w);
     }),
   }));
   vi.doMock('dictionary-en', () => ({
     default: vi.fn((cb: (err: Error | null, result: any) => void) =>
       cb(null, { aff: Buffer.from(''), dic: Buffer.from('') }),
     ),
+  }));
+  vi.doMock('./data/tech-dictionary.txt?raw', () => ({
+    default: 'webhook\nmicroservice\nkubernetes\n',
   }));
   return import('./dictionary-checker');
 }
@@ -80,6 +90,7 @@ beforeEach(() => {
   mockLint.mockReset();
   mockCorrect.mockImplementation(() => true);
   mockSuggest.mockImplementation(() => []);
+  mockAdd.mockReset();
 });
 
 // ═══════════════════════════════════════
@@ -509,6 +520,9 @@ describe('dictionaryPrePass', () => {
     vi.doMock('dictionary-en', () => ({
       default: vi.fn((cb: any) => cb(new Error('no dict'))),
     }));
+    vi.doMock('./data/tech-dictionary.txt?raw', () => ({
+      default: 'webhook\nmicroservice\nkubernetes\n',
+    }));
     const mod = await import('./dictionary-checker');
     await mod.ensureDictionaryCheckersLoaded();
     const result = await mod.dictionaryPrePass('Hello world', []);
@@ -560,12 +574,16 @@ describe('dictionaryPrePass', () => {
       default: vi.fn().mockImplementation(function (this: any) {
         this.correct = (w: string) => mockCorrect(w);
         this.suggest = (w: string) => mockSuggest(w);
+        this.add = (w: string) => mockAdd(w);
       }),
     }));
     vi.doMock('dictionary-en', () => ({
       default: vi.fn((cb: (err: Error | null, result: any) => void) =>
         cb(null, { aff: Buffer.from(''), dic: Buffer.from('') }),
       ),
+    }));
+    vi.doMock('./data/tech-dictionary.txt?raw', () => ({
+      default: 'webhook\nmicroservice\nkubernetes\n',
     }));
     mockCorrect.mockImplementation((w) => w !== 'teh');
     mockSuggest.mockImplementation((w) => (w === 'teh' ? ['the'] : []));
@@ -634,12 +652,16 @@ describe('initialization', () => {
       default: vi.fn().mockImplementation(() => ({
         correct: (w: string) => mockCorrect(w),
         suggest: (w: string) => mockSuggest(w),
+        add: (w: string) => mockAdd(w),
       })),
     }));
     vi.doMock('dictionary-en', () => ({
       default: vi.fn((cb: (err: Error | null, result: any) => void) =>
         cb(null, { aff: Buffer.from(''), dic: Buffer.from('') }),
       ),
+    }));
+    vi.doMock('./data/tech-dictionary.txt?raw', () => ({
+      default: 'webhook\nmicroservice\nkubernetes\n',
     }));
 
     const mod = await import('./dictionary-checker');
@@ -667,6 +689,9 @@ describe('initialization', () => {
         cb(new Error('dict failed'), null),
       ),
     }));
+    vi.doMock('./data/tech-dictionary.txt?raw', () => ({
+      default: 'webhook\nmicroservice\nkubernetes\n',
+    }));
 
     const mod = await import('./dictionary-checker');
     // Should not throw
@@ -675,5 +700,137 @@ describe('initialization', () => {
     mockLint.mockResolvedValue([]);
     const result = await mod.dictionaryPrePass('Hello', []);
     expect(result.text).toBe('Hello');
+  });
+});
+
+// ═══════════════════════════════════════
+// isCamelCase
+// ═══════════════════════════════════════
+
+describe('isCamelCase', () => {
+  it('detects camelCase words', async () => {
+    const { isCamelCase } = await freshModule();
+    expect(isCamelCase('backgroundColor')).toBe(true);
+    expect(isCamelCase('userId')).toBe(true);
+    expect(isCamelCase('onClick')).toBe(true);
+  });
+
+  it('rejects non-camelCase words', async () => {
+    const { isCamelCase } = await freshModule();
+    expect(isCamelCase('webhook')).toBe(false);
+    expect(isCamelCase('ALLCAPS')).toBe(false);
+    expect(isCamelCase('PascalCase')).toBe(false);
+    expect(isCamelCase('hello')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════
+// hasEmbeddedDigits
+// ═══════════════════════════════════════
+
+describe('hasEmbeddedDigits', () => {
+  it('detects words with embedded digits', async () => {
+    const { hasEmbeddedDigits } = await freshModule();
+    expect(hasEmbeddedDigits('utf8')).toBe(true);
+    expect(hasEmbeddedDigits('base64')).toBe(true);
+    expect(hasEmbeddedDigits('h264')).toBe(true);
+    expect(hasEmbeddedDigits('3d')).toBe(true);
+  });
+
+  it('rejects pure letter words', async () => {
+    const { hasEmbeddedDigits } = await freshModule();
+    expect(hasEmbeddedDigits('hello')).toBe(false);
+    expect(hasEmbeddedDigits('webhook')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════
+// isTechCompound
+// ═══════════════════════════════════════
+
+describe('isTechCompound', () => {
+  it('detects tech compound words', async () => {
+    const { isTechCompound } = await freshModule();
+    // "hook" and "service" pass checker.correct() since mock returns true by default
+    mockCorrect.mockReturnValue(true);
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    expect(isTechCompound('webhook', checker)).toBe(true);
+    expect(isTechCompound('microservice', checker)).toBe(true);
+    expect(isTechCompound('preload', checker)).toBe(true);
+  });
+
+  it('rejects when suffix is not a real word', async () => {
+    const { isTechCompound } = await freshModule();
+    mockCorrect.mockReturnValue(false);
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    expect(isTechCompound('webxyz', checker)).toBe(false);
+  });
+
+  it('rejects when suffix is less than 3 chars', async () => {
+    const { isTechCompound } = await freshModule();
+    mockCorrect.mockReturnValue(true);
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    // "webit" has suffix "it" which is only 2 chars
+    expect(isTechCompound('webit', checker)).toBe(false);
+  });
+
+  it('rejects words that do not start with a tech prefix', async () => {
+    const { isTechCompound } = await freshModule();
+    mockCorrect.mockReturnValue(true);
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    expect(isTechCompound('something', checker)).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════
+// getNspellIssues — heuristic skips
+// ═══════════════════════════════════════
+
+describe('getNspellIssues heuristic skips', () => {
+  it('skips camelCase words', async () => {
+    const { getNspellIssues } = await freshModule();
+    mockCorrect.mockImplementation((w) => w !== 'backgroundColor');
+    mockSuggest.mockImplementation((w) => (w === 'backgroundColor' ? ['background'] : []));
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    const issues = getNspellIssues(checker, 'set backgroundColor here');
+    expect(issues.find((i) => i.word === 'backgroundColor')).toBeUndefined();
+  });
+
+  it('skips words with embedded digits', async () => {
+    const { getNspellIssues } = await freshModule();
+    mockCorrect.mockImplementation((w) => !['base64', 'utf8'].includes(w));
+    mockSuggest.mockImplementation((w) => {
+      if (w === 'base64') return ['based'];
+      if (w === 'utf8') return ['utf'];
+      return [];
+    });
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    const issues = getNspellIssues(checker, 'encode as base64 using utf8');
+    expect(issues.find((i) => i.word === 'base64')).toBeUndefined();
+    expect(issues.find((i) => i.word === 'utf8')).toBeUndefined();
+  });
+
+  it('skips tech compound words', async () => {
+    const { getNspellIssues } = await freshModule();
+    // "webhook" is not correct, but suffix "hook" is correct
+    mockCorrect.mockImplementation((w) => {
+      if (w === 'webhook') return false;
+      if (w === 'hook') return true;
+      return true;
+    });
+    mockSuggest.mockImplementation((w) => (w === 'webhook' ? ['webfoot'] : []));
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    const issues = getNspellIssues(checker, 'configure the webhook');
+    expect(issues.find((i) => i.word === 'webhook')).toBeUndefined();
+  });
+
+  it('still catches real misspellings', async () => {
+    const { getNspellIssues } = await freshModule();
+    // "recieved" is not correct; "cieved" is also not a real word so isTechCompound won't match
+    mockCorrect.mockImplementation((w) => !['recieved', 'cieved'].includes(w));
+    mockSuggest.mockImplementation((w) => (w === 'recieved' ? ['received'] : []));
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    const issues = getNspellIssues(checker, 'I recieved the email');
+    expect(issues.find((i) => i.word === 'recieved')).toBeDefined();
   });
 });

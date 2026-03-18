@@ -26,6 +26,7 @@ export interface AppConfig {
   timeoutSeconds: number;
   localHotkeyAccelerator: string; // Electron accelerator for local model correction e.g. "CommandOrControl+E"
   cliHotkeyAccelerator: string; // Electron accelerator for CLI provider correction e.g. "CommandOrControl+Shift+E"
+  undoHotkeyAccelerator: string; // Electron accelerator for undo last correction e.g. "CommandOrControl+Shift+Z"
   launchAtLogin: boolean;
   historyLimit: number;
   developerMode: boolean;
@@ -34,13 +35,17 @@ export interface AppConfig {
   notifyOnSuccess: boolean;
   clipboardOnlyMode: boolean;
   tonePreset: TonePreset;
-  showDiffPreview: boolean;
+  diffPreviewMode: DiffPreviewMode;
+  passivePreviewSeconds: number;
+  autoPasteDelaySeconds: number;
   localModelVariant: LocalModelVariant;
   localModelSpeed: 'fast' | 'quality';
   firstRunComplete: boolean;
 }
 
 export type TonePreset = 'default' | 'casual' | 'professional' | 'academic' | 'slack';
+
+export type DiffPreviewMode = 'none' | 'passive' | 'interactive';
 
 // ── Correction History ──
 
@@ -53,6 +58,30 @@ export interface CorrectionHistoryEntry {
   model: string;
   durationMilliseconds: number;
   succeeded: boolean;
+  rejected?: boolean; // true if user rejected interactive diff preview
+}
+
+// ── Error Log ──
+
+export interface ErrorLogEntry {
+  id: string;
+  timestamp: string; // ISO 8601
+  message: string;
+  provider?: ProviderName;
+}
+
+// ── Usage Statistics ──
+
+export interface UsageStats {
+  totalCorrections: number;
+  successfulCorrections: number;
+  failedCorrections: number;
+  successRate: number;
+  totalDurationMs: number;
+  avgDurationMs: number;
+  totalWordsProcessed: number;
+  correctionsByProvider: Record<string, number>;
+  correctionsByDate: Record<string, number>;
 }
 
 // ── Diff ──
@@ -133,6 +162,7 @@ export const IPC = {
   SAVE_CONFIG: 'save-config',
   GET_HISTORY: 'get-history',
   CLEAR_HISTORY: 'clear-history',
+  EXPORT_HISTORY: 'export-history',
   OPEN_WINDOW: 'open-window',
   HUD_SHOW: 'hud-show',
   HUD_HIDE: 'hud-hide',
@@ -143,10 +173,18 @@ export const IPC = {
   GET_LOCAL_MODEL_STATUS: 'get-local-model-status',
   DOWNLOAD_MODEL_VARIANT: 'download-model-variant',
   DOWNLOAD_VARIANT_PROGRESS: 'download-variant-progress',
+  DOWNLOAD_VARIANT_ERROR: 'download-variant-error',
   SET_PREVIEW_ORIGINAL: 'set-preview-original',
+  SET_PREVIEW_CONFIG: 'set-preview-config',
   INFERENCE_COMMAND: 'inference:command',
   INFERENCE_RESULT: 'inference:result',
   GET_INFERENCE_DEVICE: 'get-inference-device',
+  GET_ERROR_LOG: 'get-error-log',
+  GET_SYSTEM_PROMPT: 'get-system-prompt',
+  SAVE_SYSTEM_PROMPT: 'save-system-prompt',
+  GET_PERSONAL_DICTIONARY: 'get-personal-dictionary',
+  SAVE_PERSONAL_DICTIONARY: 'save-personal-dictionary',
+  GET_USAGE_STATS: 'get-usage-stats',
 } as const;
 
 // ── Dictionary Checker ──

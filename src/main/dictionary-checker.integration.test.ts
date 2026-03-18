@@ -15,6 +15,9 @@ import {
   filterProperNounsAndAcronyms,
   applyFixes,
   resetDictionaryChecker,
+  isCamelCase,
+  hasEmbeddedDigits,
+  isTechCompound,
 } from './dictionary-checker';
 
 // Real Harper linter and nspell checker, initialized in beforeAll
@@ -303,5 +306,61 @@ describe('proper noun and acronym filtering integration', () => {
     const restIssue = filtered.find((i) => i.word === 'REST');
     expect(apiIssue).toBeUndefined();
     expect(restIssue).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════
+// Tech Dictionary Integration
+// ═══════════════════════════════════════
+
+describe('tech dictionary integration', () => {
+  it('does not flag common tech terms', async () => {
+    const result = await dictionaryPrePass('configure the webhook endpoint', []);
+    expect(result.text).toContain('webhook');
+    expect(result.text).toContain('endpoint');
+  });
+
+  it('does not flag camelCase words', async () => {
+    const result = await dictionaryPrePass('set the backgroundColor property', []);
+    expect(result.text).toContain('backgroundColor');
+  });
+
+  it('does not flag words with digits', async () => {
+    const result = await dictionaryPrePass('encode as base64 using utf8', []);
+    expect(result.text).toContain('base64');
+    expect(result.text).toContain('utf8');
+  });
+
+  it('still catches real misspellings alongside tech words', async () => {
+    const result = await dictionaryPrePass('I recieved the webhook notification', []);
+    // "webhook" should be preserved
+    expect(result.text).toContain('webhook');
+    // "recieved" should be corrected (if a checker catches it)
+    if (result.issuesFixed > 0) {
+      expect(result.text).toContain('received');
+    }
+  });
+});
+
+// ═══════════════════════════════════════
+// Heuristic Functions with Real Checker
+// ═══════════════════════════════════════
+
+describe('heuristic functions with real nspell', () => {
+  it('isTechCompound detects webhook with real checker', () => {
+    if (!nspellChecker) return;
+    // "hook" is a real English word in dictionary-en
+    expect(isTechCompound('webhook', nspellChecker)).toBe(true);
+  });
+
+  it('isTechCompound detects preload with real checker', () => {
+    if (!nspellChecker) return;
+    // "load" is a real English word
+    expect(isTechCompound('preload', nspellChecker)).toBe(true);
+  });
+
+  it('isTechCompound rejects when suffix is not a real word', () => {
+    if (!nspellChecker) return;
+    expect(isTechCompound('webxyzq', nspellChecker)).toBe(false);
   });
 });

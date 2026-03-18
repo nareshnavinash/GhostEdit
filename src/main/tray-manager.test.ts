@@ -119,6 +119,7 @@ describe('createTray', () => {
     const callbacks = {
       onCorrectLocal: vi.fn(),
       onCorrectCLI: vi.fn(),
+      onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
     };
@@ -135,6 +136,7 @@ describe('updateMenu', () => {
     const callbacks = {
       onCorrectLocal: vi.fn(),
       onCorrectCLI: vi.fn(),
+      onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
     };
@@ -153,6 +155,7 @@ describe('updateMenu', () => {
     const callbacks = {
       onCorrectLocal: vi.fn(),
       onCorrectCLI: vi.fn(),
+      onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
     };
@@ -172,6 +175,7 @@ describe('updateMenu', () => {
     const callbacks = {
       onCorrectLocal,
       onCorrectCLI: vi.fn(),
+      onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
     };
@@ -190,6 +194,7 @@ describe('updateMenu', () => {
     const callbacks = {
       onCorrectLocal: vi.fn(),
       onCorrectCLI,
+      onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
     };
@@ -216,6 +221,7 @@ describe('updateMenu', () => {
     const callbacks = {
       onCorrectLocal: vi.fn(),
       onCorrectCLI: vi.fn(),
+      onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
     };
@@ -234,6 +240,7 @@ describe('setTrayState', () => {
     const callbacks = {
       onCorrectLocal: vi.fn(),
       onCorrectCLI: vi.fn(),
+      onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
     };
@@ -251,6 +258,7 @@ describe('destroyTray', () => {
     const callbacks = {
       onCorrectLocal: vi.fn(),
       onCorrectCLI: vi.fn(),
+      onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
     };
@@ -308,6 +316,7 @@ describe('developer mode', () => {
     const callbacks = {
       onCorrectLocal: vi.fn(),
       onCorrectCLI: vi.fn(),
+      onUndoLastCorrection: vi.fn(),
       onOpenSettings: vi.fn(),
       onOpenHistory: vi.fn(),
     };

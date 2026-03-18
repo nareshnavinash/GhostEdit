@@ -53,6 +53,14 @@ beforeEach(() => {
   window.ghostedit.getInferenceDevice = vi.fn().mockResolvedValue(null) as any;
   window.ghostedit.saveConfig = vi.fn().mockResolvedValue({ success: true }) as any;
   window.ghostedit.onDownloadVariantProgress = vi.fn().mockReturnValue(() => {}) as any;
+  window.ghostedit.onDownloadVariantError = vi.fn().mockReturnValue(() => {}) as any;
+  window.ghostedit.getSystemPrompt = vi.fn().mockResolvedValue({ prompt: '', defaultPrompt: '' }) as any;
+  window.ghostedit.saveSystemPrompt = vi.fn().mockResolvedValue({ success: true }) as any;
+  window.ghostedit.getPersonalDictionary = vi.fn().mockResolvedValue([]) as any;
+  window.ghostedit.savePersonalDictionary = vi.fn().mockResolvedValue({ success: true }) as any;
+  window.ghostedit.getUsageStats = vi.fn().mockResolvedValue({ totalCorrections: 0, successfulCorrections: 0, failedCorrections: 0, successRate: 0, totalDurationMs: 0, avgDurationMs: 0, totalWordsProcessed: 0, correctionsByProvider: {}, correctionsByDate: {} }) as any;
+  window.ghostedit.getErrorLog = vi.fn().mockResolvedValue([]) as any;
+  window.ghostedit.exportHistory = vi.fn().mockResolvedValue({ success: true }) as any;
   (window.ghostedit as any).platform = 'darwin';
   (window.ghostedit as any).windowControls = { close: vi.fn(), minimize: vi.fn() };
 });
@@ -70,7 +78,7 @@ describe('Settings component', () => {
 
   // ── Sidebar Navigation ──
 
-  it('renders all 5 sidebar section buttons', async () => {
+  it('renders all 8 sidebar section buttons', async () => {
     render(<Settings />);
     await waitForSettingsLoaded();
 
@@ -80,6 +88,9 @@ describe('Settings component', () => {
     expect(within(nav).getByText('Providers')).toBeInTheDocument();
     expect(within(nav).getByText('Hotkeys')).toBeInTheDocument();
     expect(within(nav).getByText('Behavior')).toBeInTheDocument();
+    expect(within(nav).getByText('Prompt')).toBeInTheDocument();
+    expect(within(nav).getByText('Dictionary')).toBeInTheDocument();
+    expect(within(nav).getByText('Statistics')).toBeInTheDocument();
   });
 
   it('General section is active by default', async () => {
@@ -226,7 +237,7 @@ describe('Settings component', () => {
 
   // ── Hotkeys Section ──
 
-  it('Hotkeys section shows two HotkeyInput components', async () => {
+  it('Hotkeys section shows three HotkeyInput components', async () => {
     render(<Settings />);
     await waitForSettingsLoaded();
 
@@ -235,7 +246,7 @@ describe('Settings component', () => {
 
     await waitFor(() => {
       const inputs = screen.getAllByTestId('hotkey-input');
-      expect(inputs).toHaveLength(2);
+      expect(inputs).toHaveLength(3);
     });
   });
 
@@ -261,13 +272,105 @@ describe('Settings component', () => {
     fireEvent.click(within(nav).getByText('Behavior'));
 
     await waitFor(() => {
-      expect(screen.getByText('Fast correction mode')).toBeInTheDocument();
+      expect(screen.getByText('Launch at login')).toBeInTheDocument();
     });
+    expect(screen.getByText('Fast correction mode')).toBeInTheDocument();
     expect(screen.getByText('Clipboard-only mode')).toBeInTheDocument();
-    expect(screen.getByText('Show diff preview')).toBeInTheDocument();
     expect(screen.getByText('Sound feedback')).toBeInTheDocument();
     expect(screen.getByText('Notify on success')).toBeInTheDocument();
     expect(screen.getByText('Developer mode')).toBeInTheDocument();
+  });
+
+  it('Behavior section shows Diff preview dropdown with 3 options', async () => {
+    render(<Settings />);
+    await waitForSettingsLoaded();
+
+    const nav = getSidebar();
+    fireEvent.click(within(nav).getByText('Behavior'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Diff preview')).toBeInTheDocument();
+    });
+
+    const diffRow = screen.getByText('Diff preview').closest('.settings-row');
+    const select = diffRow?.querySelector('select');
+    expect(select).toBeTruthy();
+    const options = select!.querySelectorAll('option');
+    expect(options).toHaveLength(3);
+  });
+
+  it('Behavior section shows auto-paste delay when diffPreviewMode is interactive', async () => {
+    window.ghostedit.getConfig = vi.fn().mockResolvedValue({
+      ...DEFAULT_CONFIG,
+      firstRunComplete: true,
+      diffPreviewMode: 'interactive',
+    }) as any;
+
+    render(<Settings />);
+    await waitForSettingsLoaded();
+
+    const nav = getSidebar();
+    fireEvent.click(within(nav).getByText('Behavior'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Auto-paste delay')).toBeInTheDocument();
+    });
+  });
+
+  it('Behavior section hides auto-paste delay when diffPreviewMode is none', async () => {
+    window.ghostedit.getConfig = vi.fn().mockResolvedValue({
+      ...DEFAULT_CONFIG,
+      firstRunComplete: true,
+      diffPreviewMode: 'none',
+    }) as any;
+
+    render(<Settings />);
+    await waitForSettingsLoaded();
+
+    const nav = getSidebar();
+    fireEvent.click(within(nav).getByText('Behavior'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Diff preview')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Auto-paste delay')).not.toBeInTheDocument();
+  });
+
+  it('Behavior section shows Preview duration when diffPreviewMode is passive', async () => {
+    window.ghostedit.getConfig = vi.fn().mockResolvedValue({
+      ...DEFAULT_CONFIG,
+      firstRunComplete: true,
+      diffPreviewMode: 'passive',
+    }) as any;
+
+    render(<Settings />);
+    await waitForSettingsLoaded();
+
+    const nav = getSidebar();
+    fireEvent.click(within(nav).getByText('Behavior'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Preview duration')).toBeInTheDocument();
+    });
+  });
+
+  it('Behavior section hides Preview duration when diffPreviewMode is interactive', async () => {
+    window.ghostedit.getConfig = vi.fn().mockResolvedValue({
+      ...DEFAULT_CONFIG,
+      firstRunComplete: true,
+      diffPreviewMode: 'interactive',
+    }) as any;
+
+    render(<Settings />);
+    await waitForSettingsLoaded();
+
+    const nav = getSidebar();
+    fireEvent.click(within(nav).getByText('Behavior'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Diff preview')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Preview duration')).not.toBeInTheDocument();
   });
 
   it('Behavior section shows History limit input', async () => {

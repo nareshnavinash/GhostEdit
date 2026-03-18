@@ -11,6 +11,7 @@ let currentTrayState: 'idle' | 'processing' = 'idle';
 interface TrayCallbacks {
   onCorrectLocal: () => void;
   onCorrectCLI: () => void;
+  onUndoLastCorrection: () => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
 }
@@ -126,6 +127,11 @@ export function updateMenu(callbacks: TrayCallbacks): void {
     {
       label: `Correct (${cliProviderDef?.displayName ?? 'CLI'}) (${formatAccelerator(config.cliHotkeyAccelerator)})`,
       click: callbacks.onCorrectCLI,
+    },
+    { type: 'separator' },
+    {
+      label: `Undo Last Correction (${formatAccelerator(config.undoHotkeyAccelerator)})`,
+      click: callbacks.onUndoLastCorrection,
     },
     { type: 'separator' },
     {

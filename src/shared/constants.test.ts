@@ -34,8 +34,12 @@ describe('DEFAULT_CONFIG', () => {
     expect(DEFAULT_CONFIG.localModelVariant).toBe('int8');
   });
 
-  it('enables showDiffPreview by default', () => {
-    expect(DEFAULT_CONFIG.showDiffPreview).toBe(true);
+  it('sets diffPreviewMode to passive by default', () => {
+    expect(DEFAULT_CONFIG.diffPreviewMode).toBe('passive');
+  });
+
+  it('sets passivePreviewSeconds to 5 by default', () => {
+    expect(DEFAULT_CONFIG.passivePreviewSeconds).toBe(5);
   });
 
   it('has firstRunComplete set to false by default', () => {

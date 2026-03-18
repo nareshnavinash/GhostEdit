@@ -7,6 +7,7 @@ import {
   CONFIG_FILE_NAME,
   HISTORY_FILE_NAME,
   PROMPT_FILE_NAME,
+  PERSONAL_DICTIONARY_FILE_NAME,
   DEFAULT_CONFIG,
   DEFAULT_SYSTEM_PROMPT,
   CLI_PROVIDERS,
@@ -60,6 +61,11 @@ class ConfigManager {
         }
         // else: DEFAULT_CONFIG spread below provides 'claude'/'sonnet'
       }
+      // Migrate: showDiffPreview boolean → diffPreviewMode enum
+      if ('showDiffPreview' in parsed && !('diffPreviewMode' in parsed)) {
+        parsed.diffPreviewMode = parsed.showDiffPreview ? 'interactive' : 'none';
+        delete parsed.showDiffPreview;
+      }
       // Migrate: fp32 is no longer bundled — switch to int8 default
       if (parsed.localModelVariant === 'fp32') {
         parsed.localModelVariant = 'int8';
@@ -111,9 +117,40 @@ class ConfigManager {
     }
   }
 
+  /** Save custom system prompt to prompt.txt */
+  saveSystemPrompt(prompt: string): void {
+    if (!fs.existsSync(this.configDir)) {
+      fs.mkdirSync(this.configDir, { recursive: true });
+    }
+    fs.writeFileSync(this.promptPath, prompt, 'utf-8');
+  }
+
+  /** Load personal dictionary words */
+  loadPersonalDictionary(): string[] {
+    try {
+      const raw = fs.readFileSync(this.personalDictionaryPath, 'utf-8');
+      return raw.split('\n').map((w) => w.trim()).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Save personal dictionary words */
+  savePersonalDictionary(words: string[]): void {
+    if (!fs.existsSync(this.configDir)) {
+      fs.mkdirSync(this.configDir, { recursive: true });
+    }
+    fs.writeFileSync(this.personalDictionaryPath, words.join('\n'), 'utf-8');
+  }
+
   /** Get path to history file */
   get historyPath(): string {
     return path.join(this.configDir, HISTORY_FILE_NAME);
+  }
+
+  /** Get path to personal dictionary file */
+  get personalDictionaryPath(): string {
+    return path.join(this.configDir, PERSONAL_DICTIONARY_FILE_NAME);
   }
 
   /** Get the config directory path */

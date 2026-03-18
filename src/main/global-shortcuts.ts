@@ -6,14 +6,20 @@ type ShortcutHandler = () => void;
 
 let registeredLocalAccelerator: string | null = null;
 let registeredCliAccelerator: string | null = null;
+let registeredUndoAccelerator: string | null = null;
 
 /**
- * Register both global hotkeys for text correction.
+ * Register all global hotkeys for text correction and undo.
  */
-export function registerGlobalShortcuts(localHandler: ShortcutHandler, cliHandler: ShortcutHandler): void {
+export function registerGlobalShortcuts(
+  localHandler: ShortcutHandler,
+  cliHandler: ShortcutHandler,
+  undoHandler: ShortcutHandler,
+): void {
   const config = configManager.load();
   const localAcc = config.localHotkeyAccelerator || DEFAULT_CONFIG.localHotkeyAccelerator;
   const cliAcc = config.cliHotkeyAccelerator || DEFAULT_CONFIG.cliHotkeyAccelerator;
+  const undoAcc = config.undoHotkeyAccelerator || DEFAULT_CONFIG.undoHotkeyAccelerator;
 
   if (localAcc === cliAcc) {
     console.warn('[GhostEdit] Local and CLI hotkeys are the same — only local will be registered');
@@ -22,6 +28,9 @@ export function registerGlobalShortcuts(localHandler: ShortcutHandler, cliHandle
   registerOne(localAcc, localHandler, 'local');
   if (localAcc !== cliAcc) {
     registerOne(cliAcc, cliHandler, 'cli');
+  }
+  if (undoAcc && undoAcc !== localAcc && undoAcc !== cliAcc) {
+    registerOne(undoAcc, undoHandler, 'undo');
   }
 }
 
@@ -35,7 +44,8 @@ function registerOne(accelerator: string, handler: ShortcutHandler, label: strin
     const success = globalShortcut.register(accelerator, handler);
     if (success) {
       if (label === 'local') registeredLocalAccelerator = accelerator;
-      else registeredCliAccelerator = accelerator;
+      else if (label === 'cli') registeredCliAccelerator = accelerator;
+      else if (label === 'undo') registeredUndoAccelerator = accelerator;
     } else {
       console.error(`[GhostEdit] Failed to register ${label} global shortcut: ${accelerator}`);
     }
@@ -45,11 +55,15 @@ function registerOne(accelerator: string, handler: ShortcutHandler, label: strin
 }
 
 /**
- * Re-register both hotkeys (e.g. after settings change).
+ * Re-register all hotkeys (e.g. after settings change).
  */
-export function refreshGlobalShortcuts(localHandler: ShortcutHandler, cliHandler: ShortcutHandler): void {
+export function refreshGlobalShortcuts(
+  localHandler: ShortcutHandler,
+  cliHandler: ShortcutHandler,
+  undoHandler: ShortcutHandler,
+): void {
   unregisterAll();
-  registerGlobalShortcuts(localHandler, cliHandler);
+  registerGlobalShortcuts(localHandler, cliHandler, undoHandler);
 }
 
 /**
@@ -59,4 +73,5 @@ export function unregisterAll(): void {
   globalShortcut.unregisterAll();
   registeredLocalAccelerator = null;
   registeredCliAccelerator = null;
+  registeredUndoAccelerator = null;
 }

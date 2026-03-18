@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import type { CorrectionHistoryEntry } from '../shared/types';
+import type { CorrectionHistoryEntry, UsageStats } from '../shared/types';
 import { configManager } from './config-manager';
 
 /**
@@ -65,4 +65,39 @@ export function lastSuccessfulEntry(): CorrectionHistoryEntry | null {
     if (entries[i].succeeded) return entries[i];
   }
   return null;
+}
+
+export function computeUsageStats(): UsageStats {
+  const entries = ensureLoaded();
+  const successful = entries.filter((e) => e.succeeded);
+  const failed = entries.filter((e) => !e.succeeded);
+  const totalDurationMs = successful.reduce((sum, e) => sum + e.durationMilliseconds, 0);
+  const totalWordsProcessed = successful.reduce(
+    (sum, e) => sum + (e.originalText ? e.originalText.split(/\s+/).length : 0),
+    0,
+  );
+
+  const correctionsByProvider: Record<string, number> = {};
+  for (const entry of entries) {
+    const key = entry.provider;
+    correctionsByProvider[key] = (correctionsByProvider[key] || 0) + 1;
+  }
+
+  const correctionsByDate: Record<string, number> = {};
+  for (const entry of entries) {
+    const date = entry.timestamp.split('T')[0];
+    correctionsByDate[date] = (correctionsByDate[date] || 0) + 1;
+  }
+
+  return {
+    totalCorrections: entries.length,
+    successfulCorrections: successful.length,
+    failedCorrections: failed.length,
+    successRate: entries.length > 0 ? Math.round((successful.length / entries.length) * 100) : 0,
+    totalDurationMs,
+    avgDurationMs: successful.length > 0 ? Math.round(totalDurationMs / successful.length) : 0,
+    totalWordsProcessed,
+    correctionsByProvider,
+    correctionsByDate,
+  };
 }

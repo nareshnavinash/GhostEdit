@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { IPC } from './types';
-import type { ProviderName, CLIProviderName, CorrectionResult, LocalModelInfo, LocalModelVariant, LocalModelVariantInfo, AppConfig } from './types';
+import type { ProviderName, CLIProviderName, CorrectionResult, LocalModelInfo, LocalModelVariant, LocalModelVariantInfo, AppConfig, DiffPreviewMode } from './types';
 
 describe('ProviderName type', () => {
   it('includes local', () => {
@@ -91,6 +91,7 @@ describe('AppConfig type', () => {
       timeoutSeconds: 60,
       localHotkeyAccelerator: 'CommandOrControl+E',
       cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
       launchAtLogin: false,
       historyLimit: 50,
       developerMode: false,
@@ -99,7 +100,9 @@ describe('AppConfig type', () => {
       notifyOnSuccess: false,
       clipboardOnlyMode: false,
       tonePreset: 'default',
-      showDiffPreview: true,
+      diffPreviewMode: 'interactive',
+      passivePreviewSeconds: 5,
+      autoPasteDelaySeconds: 5,
       localModelVariant: 'fp32',
       localModelSpeed: 'fast',
       firstRunComplete: false,
@@ -120,6 +123,7 @@ describe('AppConfig type', () => {
       timeoutSeconds: 60,
       localHotkeyAccelerator: 'CommandOrControl+E',
       cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
       launchAtLogin: false,
       historyLimit: 50,
       developerMode: false,
@@ -128,7 +132,9 @@ describe('AppConfig type', () => {
       notifyOnSuccess: false,
       clipboardOnlyMode: false,
       tonePreset: 'default',
-      showDiffPreview: true,
+      diffPreviewMode: 'interactive',
+      passivePreviewSeconds: 5,
+      autoPasteDelaySeconds: 5,
       localModelVariant: 'fp32',
       localModelSpeed: 'fast',
       firstRunComplete: false,
@@ -149,6 +155,7 @@ describe('AppConfig type', () => {
       timeoutSeconds: 60,
       localHotkeyAccelerator: 'CommandOrControl+E',
       cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+      undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
       launchAtLogin: false,
       historyLimit: 50,
       developerMode: false,
@@ -157,12 +164,21 @@ describe('AppConfig type', () => {
       notifyOnSuccess: false,
       clipboardOnlyMode: false,
       tonePreset: 'default',
-      showDiffPreview: true,
+      diffPreviewMode: 'interactive',
+      passivePreviewSeconds: 5,
+      autoPasteDelaySeconds: 5,
       localModelVariant: 'fp32',
       localModelSpeed: 'fast',
       firstRunComplete: false,
     };
     // Runtime check: no hotkeyAccelerator key
     expect(config).not.toHaveProperty('hotkeyAccelerator');
+  });
+});
+
+describe('DiffPreviewMode type', () => {
+  it('accepts all three mode values', () => {
+    const modes: DiffPreviewMode[] = ['none', 'passive', 'interactive'];
+    expect(modes).toHaveLength(3);
   });
 });

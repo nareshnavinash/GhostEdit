@@ -1,4 +1,4 @@
-import type { AppConfig, CLIProvider, TonePreset, ProviderName, LocalModelVariant } from './types';
+import type { AppConfig, CLIProvider, TonePreset, ProviderName, LocalModelVariant, DiffPreviewMode } from './types';
 
 // ── CLI Provider Definitions ──
 
@@ -82,6 +82,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   timeoutSeconds: 60,
   localHotkeyAccelerator: 'CommandOrControl+E',
   cliHotkeyAccelerator: 'CommandOrControl+Shift+E',
+  undoHotkeyAccelerator: 'CommandOrControl+Shift+Z',
   launchAtLogin: false,
   historyLimit: 50,
   developerMode: false,
@@ -90,7 +91,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   notifyOnSuccess: false,
   clipboardOnlyMode: false,
   tonePreset: 'default',
-  showDiffPreview: true,
+  diffPreviewMode: 'passive',
+  passivePreviewSeconds: 5,
+  autoPasteDelaySeconds: 5,
   localModelVariant: 'int8',
   localModelSpeed: 'fast',
   firstRunComplete: false,
@@ -120,6 +123,8 @@ export const CONFIG_DIR_NAME = '.ghostedit';
 export const CONFIG_FILE_NAME = 'config.json';
 export const HISTORY_FILE_NAME = 'history.json';
 export const PROMPT_FILE_NAME = 'prompt.txt';
+export const PERSONAL_DICTIONARY_FILE_NAME = 'personal-dictionary.txt';
+export const ERROR_LOG_MAX_ENTRIES = 10;
 
 // ── Languages ──
 

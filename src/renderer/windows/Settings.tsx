@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import type { AppConfig, CLIProviderName, TonePreset, LocalModelInfo, LocalModelVariant } from '../../shared/types';
+import type { AppConfig, CLIProviderName, TonePreset, DiffPreviewMode, LocalModelInfo, LocalModelVariant, UsageStats } from '../../shared/types';
 import { CLI_PROVIDERS, LANGUAGES, DEFAULT_CONFIG, DEFAULT_BUNDLED_VARIANT } from '../../shared/constants';
 import HotkeyInput from '../components/HotkeyInput';
 import Welcome from '../components/Welcome';
 
 // ── Section definitions ──
 
-type Section = 'general' | 'models' | 'providers' | 'hotkeys' | 'behavior';
+type Section = 'general' | 'models' | 'providers' | 'hotkeys' | 'behavior' | 'prompt' | 'dictionary' | 'stats';
 
 const SECTIONS: Array<{
   id: Section;
@@ -15,11 +15,14 @@ const SECTIONS: Array<{
   subtitle: string;
   icon: React.ReactNode;
 }> = [
-  { id: 'general',   label: 'General',   title: 'General',   subtitle: 'Language, tone, and correction preferences', icon: <GearIcon /> },
-  { id: 'models',    label: 'Models',    title: 'Models',    subtitle: 'Local T5 grammar model configuration',       icon: <ChipIcon /> },
-  { id: 'providers', label: 'Providers', title: 'Providers', subtitle: 'CLI provider and API configuration',         icon: <CloudIcon /> },
-  { id: 'hotkeys',   label: 'Hotkeys',   title: 'Hotkeys',   subtitle: 'Keyboard shortcuts for corrections',        icon: <KeyboardIcon /> },
-  { id: 'behavior',  label: 'Behavior',  title: 'Behavior',  subtitle: 'Correction workflow and notifications',      icon: <SlidersIcon /> },
+  { id: 'general',    label: 'General',    title: 'General',    subtitle: 'Language, tone, and correction preferences', icon: <GearIcon /> },
+  { id: 'models',     label: 'Models',     title: 'Models',     subtitle: 'Local T5 grammar model configuration',       icon: <ChipIcon /> },
+  { id: 'providers',  label: 'Providers',  title: 'Providers',  subtitle: 'CLI provider and API configuration',         icon: <CloudIcon /> },
+  { id: 'hotkeys',    label: 'Hotkeys',    title: 'Hotkeys',    subtitle: 'Keyboard shortcuts for corrections',         icon: <KeyboardIcon /> },
+  { id: 'behavior',   label: 'Behavior',   title: 'Behavior',   subtitle: 'Correction workflow and notifications',      icon: <SlidersIcon /> },
+  { id: 'prompt',     label: 'Prompt',     title: 'System Prompt', subtitle: 'Customize the AI system prompt',          icon: <TextIcon /> },
+  { id: 'dictionary', label: 'Dictionary', title: 'Personal Dictionary', subtitle: 'Words to exclude from spell-checking', icon: <BookIcon /> },
+  { id: 'stats',      label: 'Statistics', title: 'Usage Statistics', subtitle: 'Your correction history at a glance',  icon: <ChartIcon /> },
 ];
 
 // ── Main component ──
@@ -34,7 +37,21 @@ export default function Settings() {
   const [modelInfo, setModelInfo] = useState<LocalModelInfo>({ ready: false, activeVariant: DEFAULT_BUNDLED_VARIANT, variants: [] });
   const [downloadingVariant, setDownloadingVariant] = useState<LocalModelVariant | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [inferenceDevice, setInferenceDevice] = useState<{ device: string; runtime: string; label: string } | null>(null);
+
+  // Prompt editor state
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [defaultPrompt, setDefaultPrompt] = useState('');
+  const [promptSaved, setPromptSaved] = useState(false);
+
+  // Personal dictionary state
+  const [dictWords, setDictWords] = useState<string[]>([]);
+  const [newWord, setNewWord] = useState('');
+  const [dictSaved, setDictSaved] = useState(false);
+
+  // Usage stats state
+  const [stats, setStats] = useState<UsageStats | null>(null);
 
   useEffect(() => {
     window.ghostedit.getConfig().then(setConfig);
@@ -45,8 +62,25 @@ export default function Settings() {
     const removeProgressListener = window.ghostedit.onDownloadVariantProgress((data) => {
       setDownloadProgress(data.progress);
     });
-    return () => { removeProgressListener(); };
+    const removeErrorListener = window.ghostedit.onDownloadVariantError((data) => {
+      setDownloadError(data.error);
+    });
+    return () => { removeProgressListener(); removeErrorListener(); };
   }, []);
+
+  // Load section-specific data when switching
+  useEffect(() => {
+    if (activeSection === 'prompt') {
+      window.ghostedit.getSystemPrompt().then(({ prompt, defaultPrompt: dp }) => {
+        setSystemPrompt(prompt);
+        setDefaultPrompt(dp);
+      });
+    } else if (activeSection === 'dictionary') {
+      window.ghostedit.getPersonalDictionary().then(setDictWords);
+    } else if (activeSection === 'stats') {
+      window.ghostedit.getUsageStats().then(setStats);
+    }
+  }, [activeSection]);
 
   const save = useCallback(async (updated: AppConfig) => {
     setConfig(updated);
@@ -70,17 +104,53 @@ export default function Settings() {
     if (downloadingVariant) return;
     setDownloadingVariant(variant);
     setDownloadProgress(0);
+    setDownloadError(null);
     try {
       const result = await window.ghostedit.downloadModelVariant(variant);
       if (result.success) {
         const info = await window.ghostedit.getLocalModelStatus();
         setModelInfo(info);
+        setDownloadError(null);
+      } else {
+        setDownloadError(result.error || 'Download failed');
       }
+    } catch (err: any) {
+      setDownloadError(err?.message || 'Download failed');
     } finally {
       setDownloadingVariant(null);
       setDownloadProgress(0);
     }
   }, [downloadingVariant]);
+
+  const handleSavePrompt = useCallback(async () => {
+    await window.ghostedit.saveSystemPrompt(systemPrompt);
+    setPromptSaved(true);
+    setTimeout(() => setPromptSaved(false), 1500);
+  }, [systemPrompt]);
+
+  const handleResetPrompt = useCallback(async () => {
+    setSystemPrompt(defaultPrompt);
+    await window.ghostedit.saveSystemPrompt(defaultPrompt);
+    setPromptSaved(true);
+    setTimeout(() => setPromptSaved(false), 1500);
+  }, [defaultPrompt]);
+
+  const handleAddWord = useCallback(async () => {
+    const word = newWord.trim();
+    if (!word || dictWords.includes(word)) return;
+    const updated = [...dictWords, word].sort();
+    setDictWords(updated);
+    setNewWord('');
+    await window.ghostedit.savePersonalDictionary(updated);
+    setDictSaved(true);
+    setTimeout(() => setDictSaved(false), 1500);
+  }, [newWord, dictWords]);
+
+  const handleRemoveWord = useCallback(async (word: string) => {
+    const updated = dictWords.filter((w) => w !== word);
+    setDictWords(updated);
+    await window.ghostedit.savePersonalDictionary(updated);
+  }, [dictWords]);
 
   // Show onboarding if first run hasn't been completed
   if (!config.firstRunComplete) {
@@ -127,7 +197,7 @@ export default function Settings() {
       {/* Main: sidebar + content */}
       <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
-        <nav className="w-[180px] shrink-0 bg-ghost-sidebar border-r border-white/[0.06] pt-3 px-2 space-y-0.5">
+        <nav className="w-[180px] shrink-0 bg-ghost-sidebar border-r border-white/[0.06] pt-3 px-2 space-y-0.5 overflow-y-auto">
           {SECTIONS.map((section) => (
             <button
               key={section.id}
@@ -242,6 +312,16 @@ export default function Settings() {
                           <span className="bg-green-500/15 text-green-400 text-[11px] font-medium rounded-full px-2.5 py-0.5">Downloaded</span>
                         ) : downloadingVariant === v.variant ? (
                           <span className="text-blue-400 text-[11px] font-medium">{downloadProgress}%</span>
+                        ) : downloadError && downloadingVariant === null ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-ghost-error text-[11px]">Failed</span>
+                            <button
+                              onClick={() => { setDownloadError(null); handleDownloadVariant(v.variant); }}
+                              className="px-3 py-1 rounded-lg bg-ghost-error/20 text-ghost-error text-[12px] font-medium hover:bg-ghost-error/30 transition-colors"
+                            >
+                              Retry
+                            </button>
+                          </div>
                         ) : (
                           <button
                             onClick={() => handleDownloadVariant(v.variant)}
@@ -264,6 +344,10 @@ export default function Settings() {
                       style={{ width: `${downloadProgress}%` }}
                     />
                   </div>
+                )}
+
+                {downloadError && !downloadingVariant && (
+                  <p className="text-[11px] text-ghost-error mt-2">{downloadError}</p>
                 )}
 
                 <p className="text-[11px] text-ghost-muted mt-4">
@@ -359,12 +443,28 @@ export default function Settings() {
                     />
                   </div>
                 </div>
+                <div className="settings-row">
+                  <div className="flex-1 mr-4">
+                    <p className="text-[13px] font-medium">Undo Last Correction</p>
+                    <p className="text-[11px] text-ghost-muted mb-2">Re-pastes the original text from the most recent correction</p>
+                    <HotkeyInput
+                      value={config.undoHotkeyAccelerator}
+                      onChange={(v) => update({ undoHotkeyAccelerator: v })}
+                    />
+                  </div>
+                </div>
               </>
             )}
 
             {/* ── Behavior ── */}
             {activeSection === 'behavior' && (
               <>
+                <ToggleRow
+                  label="Launch at login"
+                  description="Start GhostEdit automatically when you log in"
+                  checked={config.launchAtLogin}
+                  onChange={(v) => update({ launchAtLogin: v })}
+                />
                 <ToggleRow
                   label="Fast correction mode"
                   description="Use greedy decoding for faster local model corrections (slight quality trade-off)"
@@ -377,15 +477,60 @@ export default function Settings() {
                   checked={config.clipboardOnlyMode}
                   onChange={(v) => update({ clipboardOnlyMode: v })}
                 />
-                <ToggleRow
-                  label="Show diff preview"
-                  description="Show a side-by-side diff before accepting corrections"
-                  checked={config.showDiffPreview}
-                  onChange={(v) => update({ showDiffPreview: v })}
-                />
+                <div className="settings-row">
+                  <div>
+                    <p className="text-[13px] font-medium">Diff preview</p>
+                    <p className="text-[11px] text-ghost-muted">How to show correction comparisons</p>
+                  </div>
+                  <select
+                    value={config.diffPreviewMode}
+                    onChange={(e) => update({ diffPreviewMode: e.target.value as DiffPreviewMode })}
+                    className="input w-44"
+                  >
+                    <option value="none">Off</option>
+                    <option value="passive">Passive (auto-close)</option>
+                    <option value="interactive">Interactive (accept/reject)</option>
+                  </select>
+                </div>
+                {config.diffPreviewMode === 'interactive' && (
+                  <div className="settings-row">
+                    <div>
+                      <p className="text-[13px] font-medium">Auto-paste delay</p>
+                      <p className="text-[11px] text-ghost-muted">
+                        Seconds before auto-accepting the preview (0 = manual only)
+                      </p>
+                    </div>
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      value={config.autoPasteDelaySeconds}
+                      onChange={(e) => update({ autoPasteDelaySeconds: Number(e.target.value) })}
+                      className="input w-20"
+                    />
+                  </div>
+                )}
+                {config.diffPreviewMode === 'passive' && (
+                  <div className="settings-row">
+                    <div>
+                      <p className="text-[13px] font-medium">Preview duration</p>
+                      <p className="text-[11px] text-ghost-muted">
+                        Seconds to show the passive diff overlay
+                      </p>
+                    </div>
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={config.passivePreviewSeconds}
+                      onChange={(e) => update({ passivePreviewSeconds: Number(e.target.value) })}
+                      className="input w-20"
+                    />
+                  </div>
+                )}
                 <ToggleRow
                   label="Sound feedback"
-                  description="Play a sound when correction completes"
+                  description="Play a sound when correction completes or fails"
                   checked={config.soundFeedbackEnabled}
                   onChange={(v) => update({ soundFeedbackEnabled: v })}
                 />
@@ -425,6 +570,133 @@ export default function Settings() {
                     className="input w-20"
                   />
                 </div>
+              </>
+            )}
+
+            {/* ── Prompt ── */}
+            {activeSection === 'prompt' && (
+              <>
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  className="input w-full h-48 resize-y font-mono text-[12px]"
+                  placeholder="Enter a custom system prompt..."
+                />
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    onClick={handleSavePrompt}
+                    className="px-4 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-[13px] font-medium hover:bg-blue-500/30 transition-colors"
+                  >
+                    {promptSaved ? 'Saved!' : 'Save Prompt'}
+                  </button>
+                  <button
+                    onClick={handleResetPrompt}
+                    className="px-4 py-1.5 rounded-lg bg-white/5 text-ghost-muted text-[13px] font-medium hover:bg-white/10 transition-colors"
+                  >
+                    Reset to Default
+                  </button>
+                </div>
+                <p className="text-[11px] text-ghost-muted mt-4">
+                  The system prompt is sent to the AI before your text. It controls correction behavior, style, and output format.
+                  Changes also apply to CLI providers. Stored in ~/.ghostedit/prompt.txt.
+                </p>
+              </>
+            )}
+
+            {/* ── Dictionary ── */}
+            {activeSection === 'dictionary' && (
+              <>
+                <div className="flex items-center gap-2 mb-4">
+                  <input
+                    type="text"
+                    value={newWord}
+                    onChange={(e) => setNewWord(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddWord(); }}
+                    placeholder="Add a word..."
+                    className="input flex-1"
+                  />
+                  <button
+                    onClick={handleAddWord}
+                    disabled={!newWord.trim()}
+                    className="px-4 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-[13px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {dictSaved && (
+                  <p className="text-[11px] text-ghost-success mb-2">Dictionary updated</p>
+                )}
+
+                {dictWords.length === 0 ? (
+                  <p className="text-[11px] text-ghost-muted">
+                    No custom words yet. Add proper nouns, product names, or jargon that the spell checker flags incorrectly.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {dictWords.map((word) => (
+                      <span
+                        key={word}
+                        className="inline-flex items-center gap-1 bg-white/[0.06] border border-white/[0.08] rounded-lg px-2.5 py-1 text-[12px]"
+                      >
+                        {word}
+                        <button
+                          onClick={() => handleRemoveWord(word)}
+                          className="text-ghost-muted hover:text-ghost-error ml-0.5"
+                          aria-label={`Remove ${word}`}
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-[11px] text-ghost-muted mt-4">
+                  Words in your personal dictionary won't be flagged by the spell checker.
+                  Stored in ~/.ghostedit/personal-dictionary.txt.
+                </p>
+              </>
+            )}
+
+            {/* ── Statistics ── */}
+            {activeSection === 'stats' && (
+              <>
+                {stats ? (
+                  <div className="space-y-4">
+                    {/* Summary cards */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <StatCard label="Total Corrections" value={stats.totalCorrections} />
+                      <StatCard label="Success Rate" value={`${stats.successRate}%`} />
+                      <StatCard label="Avg Duration" value={`${stats.avgDurationMs}ms`} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <StatCard label="Succeeded" value={stats.successfulCorrections} color="green" />
+                      <StatCard label="Failed" value={stats.failedCorrections} color="red" />
+                      <StatCard label="Words Processed" value={stats.totalWordsProcessed} />
+                    </div>
+
+                    {/* By provider */}
+                    {Object.keys(stats.correctionsByProvider).length > 0 && (
+                      <>
+                        <div className="border-b border-ghost-row-border my-2" />
+                        <h3 className="text-[13px] font-medium mb-2">By Provider</h3>
+                        {Object.entries(stats.correctionsByProvider).map(([provider, count]) => (
+                          <div key={provider} className="settings-row">
+                            <span className="text-[13px] capitalize">{provider}</span>
+                            <span className="text-[13px] text-ghost-muted">{count} corrections</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+
+                    <p className="text-[11px] text-ghost-muted mt-4">
+                      All data is computed locally from your correction history. Nothing is sent externally.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-ghost-muted">Loading statistics...</p>
+                )}
               </>
             )}
           </div>
@@ -490,6 +762,16 @@ const ToggleRow = React.memo(function ToggleRow({
   );
 });
 
+function StatCard({ label, value, color }: { label: string; value: string | number; color?: 'green' | 'red' }) {
+  const textColor = color === 'green' ? 'text-ghost-success' : color === 'red' ? 'text-ghost-error' : 'text-white/90';
+  return (
+    <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg px-3 py-3 text-center">
+      <p className={`text-lg font-semibold ${textColor}`}>{value}</p>
+      <p className="text-[11px] text-ghost-muted mt-0.5">{label}</p>
+    </div>
+  );
+}
+
 // ── Icons (16x16 inline SVGs) ──
 
 function GearIcon() {
@@ -535,6 +817,31 @@ function SlidersIcon() {
       <circle cx={7} cy={4} r={2} />
       <circle cx={11} cy={8} r={2} />
       <circle cx={5} cy={12} r={2} />
+    </svg>
+  );
+}
+
+function TextIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3h10M8 3v10M5 13h6" />
+    </svg>
+  );
+}
+
+function BookIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 2.5h4.5c1.1 0 1.5.5 1.5 1v10c0-.5-.4-1-1.5-1H2z" />
+      <path d="M14 2.5H9.5c-1.1 0-1.5.5-1.5 1v10c0-.5.4-1 1.5-1H14z" />
+    </svg>
+  );
+}
+
+function ChartIcon() {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 14V8M6 14V4M10 14V6M14 14V2" />
     </svg>
   );
 }

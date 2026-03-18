@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import DiffMatchPatch from 'diff-match-patch';
 import DiffView from '../components/DiffView';
-import type { DiffSegment } from '../../shared/types';
+import type { DiffSegment, DiffPreviewMode } from '../../shared/types';
 
 /**
- * Read-only diff overlay that auto-dismisses after 5 seconds.
- * Shows original vs corrected text side-by-side.
- * The corrected text has already been pasted — this is informational only.
+ * Interactive diff preview overlay.
+ * Shows original vs corrected text side-by-side with Accept/Reject buttons.
+ * User must explicitly accept to paste, or reject/close to cancel.
  */
 
 const dmp = new DiffMatchPatch();
@@ -24,7 +24,10 @@ function computeDiff(original: string, corrected: string): DiffSegment[] {
 export default function StreamingPreview() {
   const [original, setOriginal] = useState('');
   const [corrected, setCorrected] = useState('');
-  const [countdown, setCountdown] = useState(5);
+  const [autoPasteDelay, setAutoPasteDelay] = useState(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [previewMode, setPreviewMode] = useState<DiffPreviewMode>('interactive');
+  const [passiveCountdown, setPassiveCountdown] = useState<number | null>(null);
 
   useEffect(() => {
     const offOriginal = window.ghostedit.onSetPreviewOriginal((text) => {
@@ -35,38 +38,85 @@ export default function StreamingPreview() {
       setCorrected(text);
     });
 
+    const offConfig = window.ghostedit.onSetPreviewConfig((cfg) => {
+      setAutoPasteDelay(cfg.autoPasteDelaySeconds);
+      setPreviewMode(cfg.diffPreviewMode);
+      if (cfg.diffPreviewMode === 'passive' && cfg.passivePreviewSeconds > 0) {
+        setPassiveCountdown(cfg.passivePreviewSeconds);
+      }
+    });
+
     return () => {
       offOriginal();
       offDone();
+      offConfig();
     };
   }, []);
 
-  // Countdown timer — auto-close after 5 seconds
+  // Start countdown when corrected text arrives and autoPasteDelay > 0 (interactive mode)
   useEffect(() => {
-    if (!corrected) return;
-
+    if (previewMode !== 'interactive' || !corrected || autoPasteDelay <= 0) return;
+    setCountdown(autoPasteDelay);
     const interval = setInterval(() => {
       setCountdown((prev) => {
-        if (prev <= 1) {
+        if (prev === null || prev <= 1) {
           clearInterval(interval);
-          window.close();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(interval);
-  }, [corrected]);
+  }, [corrected, autoPasteDelay, previewMode]);
 
-  // Esc to dismiss early, click anywhere to dismiss
+  // Passive countdown (visual only — main process handles the actual close)
   useEffect(() => {
+    if (previewMode !== 'passive' || passiveCountdown === null || passiveCountdown <= 0) return;
+    const interval = setInterval(() => {
+      setPassiveCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [previewMode, passiveCountdown]);
+
+  // Auto-accept when countdown reaches 0
+  useEffect(() => {
+    if (countdown === 0) {
+      handleAccept();
+    }
+  }, [countdown]);
+
+  // Esc to reject, Enter to accept (interactive mode only)
+  useEffect(() => {
+    if (previewMode !== 'interactive') return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') window.close();
+      if (e.key === 'Escape') {
+        handleReject();
+      }
+      if (e.key === 'Enter') {
+        handleAccept();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [corrected, previewMode]);
+
+  const handleAccept = async () => {
+    if (!corrected) return;
+    await window.ghostedit.acceptCorrection(corrected);
+    window.close();
+  };
+
+  const handleReject = async () => {
+    setCountdown(null);
+    await window.ghostedit.rejectCorrection();
+    window.close();
+  };
 
   const segments = useMemo(
     () => (original && corrected ? computeDiff(original, corrected) : []),
@@ -76,19 +126,26 @@ export default function StreamingPreview() {
   const additions = segments.filter((s) => s.kind === 'insertion').length;
   const deletions = segments.filter((s) => s.kind === 'deletion').length;
 
+  const isPassive = previewMode === 'passive';
+
   return (
-    <div
-      className="flex flex-col h-screen backdrop-blur-2xl bg-black/65 border border-white/[0.08] rounded-xl overflow-hidden text-white/90"
-      onClick={() => window.close()}
-    >
+    <div className={`flex flex-col h-screen backdrop-blur-2xl bg-black/65 border border-white/[0.08] rounded-xl overflow-hidden text-white/90${isPassive ? ' pointer-events-none' : ''}`}>
       {/* Title bar */}
       <div className="h-10 flex items-center justify-between px-4 border-b border-white/[0.08] shrink-0">
         <span className="text-sm font-medium text-white/70">
-          Correction Applied
+          {isPassive ? 'Correction Applied' : 'Review Correction'}
         </span>
         <div className="flex items-center gap-3 text-xs text-white/40">
-          <span>Closing in {countdown}s</span>
-          <span>Esc to dismiss</span>
+          {isPassive ? (
+            passiveCountdown !== null && passiveCountdown > 0 && (
+              <span>Closing in {passiveCountdown}s</span>
+            )
+          ) : (
+            <>
+              <span>Enter to accept</span>
+              <span>Esc to reject</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -98,6 +155,15 @@ export default function StreamingPreview() {
           <span>
             {additions} addition{additions !== 1 ? 's' : ''}, {deletions} deletion
             {deletions !== 1 ? 's' : ''}
+            {isPassive ? (
+              passiveCountdown !== null && passiveCountdown > 0 && (
+                <span className="ml-2 text-green-400">— Applied — closing in {passiveCountdown}s</span>
+              )
+            ) : (
+              countdown !== null && countdown > 0 && (
+                <span className="ml-2 text-blue-400">— Auto-applying in {countdown}s</span>
+              )
+            )}
           </span>
         ) : (
           <div className="flex items-center gap-2">
@@ -128,6 +194,24 @@ export default function StreamingPreview() {
           )}
         </div>
       </div>
+
+      {/* Action buttons (interactive mode only) */}
+      {corrected && !isPassive && (
+        <div className="flex items-center justify-end gap-3 px-4 py-3 border-t border-white/[0.08] shrink-0">
+          <button
+            onClick={handleReject}
+            className="px-4 py-1.5 rounded-lg bg-white/10 text-white/70 text-[13px] font-medium hover:bg-white/15 transition-colors"
+          >
+            Reject
+          </button>
+          <button
+            onClick={handleAccept}
+            className="px-4 py-1.5 rounded-lg bg-blue-500 text-white text-[13px] font-medium hover:bg-blue-400 transition-colors"
+          >
+            {countdown !== null && countdown > 0 ? `Accept (${countdown}s)` : 'Accept'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

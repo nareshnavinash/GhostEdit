@@ -16,6 +16,13 @@ body {
   user-select: none;
 }
 
+/* Allow text selection in history detail and preview text areas */
+.selectable-text {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
