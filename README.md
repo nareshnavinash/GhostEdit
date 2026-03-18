@@ -1,8 +1,50 @@
-# GhostEdit
+<p align="center">
+  <img src="assets/AppIcon1024.png" width="128" height="128" alt="GhostEdit" style="border-radius: 22px;">
+</p>
 
-Cross-platform AI text correction from the menu bar. Select text anywhere, press a hotkey, and get instant grammar, spelling, and style fixes — powered by local AI or cloud providers.
+<h1 align="center">GhostEdit</h1>
 
-GhostEdit runs as a system tray application on macOS, Windows, and Linux. It captures selected text via clipboard simulation, corrects it through a multi-stage pipeline (dictionary pre-pass, AI model, dictionary polish), and pastes the result back — all in under a second.
+<p align="center">
+  <strong>Fix your writing anywhere. No cloud required.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/nareshnavinash/ghostedit-electron/releases/latest"><img src="https://img.shields.io/github/v/release/nareshnavinash/ghostedit-electron?color=22c55e&label=version" alt="Version"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/nareshnavinash/ghostedit-electron" alt="License"></a>
+</p>
+
+<p align="center">Cross-platform AI text correction from the menu bar</p>
+
+---
+
+### Why GhostEdit?
+
+| | **GhostEdit** | Grammarly | LanguageTool | Apple Writing Tools |
+|---|---|---|---|---|
+| Works in any app | **Yes** (system-wide) | Browser + select apps | Browser + select apps | Yes |
+| Offline mode | **Yes** (built-in T5 model) | No | Server only | Yes |
+| Multi-provider AI | **Claude, GPT, Gemini, local** | Grammarly AI only | LanguageTool only | Apple AI only |
+| Open source | **MIT** | No | LGPL | No |
+| Price | **Free** | $12/mo | $5/mo (premium) | Free (Apple only) |
+
+### Key Features
+
+- **Works in every app** -- System-wide hotkey correction, not a browser extension
+- **Offline-first AI** -- Built-in T5 grammar model runs on-device, no API keys needed
+- **Multi-provider** -- Switch between local AI, Claude, GPT, or Gemini in one click
+- **Real-time monitoring** -- Traffic light indicator shows writing quality as you type
+- **Developer-friendly** -- Preserves code, URLs, @mentions, :emoji:, and file paths
+- **13 languages + tone presets** -- Auto-detect language, choose from 5 writing styles
+
+### Quick Start
+
+1. **Download** the latest release from [GitHub Releases](https://github.com/nareshnavinash/ghostedit-electron/releases/latest)
+2. **Open** GhostEdit -- it lives in your menu bar
+3. **Select text** anywhere and press `Cmd+Shift+E` (Mac) or `Ctrl+Shift+E` (Win/Linux)
+
+<!-- Add screenshot/GIF here: place a demo GIF or screenshot at assets/demo.gif and uncomment the line below -->
+<!-- <p align="center"><img src="assets/demo.gif" width="600" alt="GhostEdit demo"></p> -->
 
 ---
 
@@ -68,7 +110,7 @@ Cloud providers are **not required** — the built-in local model works offline 
 ### Clone and install dependencies
 
 ```bash
-git clone https://github.com/your-org/ghostedit-electron.git
+git clone https://github.com/nareshnavinash/ghostedit-electron.git
 cd ghostedit-electron
 npm install
 ```

@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GhostEdit - Fix your writing anywhere. No cloud required.</title>
+  <meta name="description" content="Cross-platform AI text correction from the menu bar. Works in every app, offline-first, open source.">
+  <meta property="og:title" content="GhostEdit">
+  <meta property="og:description" content="Fix your writing anywhere. No cloud required.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nareshnavinash.github.io/ghostedit-electron/">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0a0a0a;
+      --bg-card: #141414;
+      --bg-card-hover: #1a1a1a;
+      --border: #222;
+      --text: #f5f5f5;
+      --text-muted: #888;
+      --green: #22c55e;
+      --green-dim: rgba(34, 197, 94, 0.12);
+      --radius: 12px;
+      --max-width: 1100px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--green); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 10, 10, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+    }
+    nav .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 16px;
+      color: var(--text);
+    }
+    nav .logo img { width: 28px; height: 28px; border-radius: 6px; }
+    nav .nav-links { display: flex; gap: 24px; align-items: center; }
+    nav .nav-links a { color: var(--text-muted); font-size: 14px; }
+    nav .nav-links a:hover { color: var(--text); text-decoration: none; }
+
+    /* Hero */
+    .hero {
+      padding: 160px 0 100px;
+      text-align: center;
+    }
+    .hero-icon {
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      margin-bottom: 32px;
+      box-shadow: 0 0 60px rgba(34, 197, 94, 0.15);
+    }
+    .hero h1 {
+      font-size: clamp(36px, 5vw, 56px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 16px;
+    }
+    .hero h1 .accent { color: var(--green); }
+    .hero .subtitle {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 520px;
+      margin: 0 auto 40px;
+    }
+    .hero-cta {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--green);
+      color: #000;
+    }
+    .btn-primary:hover { background: #16a34a; text-decoration: none; }
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg-card-hover); border-color: #333; text-decoration: none; }
+
+    /* How it works */
+    .how-it-works { padding: 80px 0; }
+    .section-label {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--green);
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .section-title {
+      font-size: clamp(28px, 3.5vw, 40px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+    .step {
+      text-align: center;
+      padding: 32px 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--green-dim);
+      color: var(--green);
+      font-weight: 700;
+      font-size: 16px;
+      margin-bottom: 16px;
+    }
+    .step h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .step p { font-size: 14px; color: var(--text-muted); }
+    .step .hotkey {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Features */
+    .features { padding: 80px 0; }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .feature-card {
+      padding: 28px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: border-color 0.15s ease;
+    }
+    .feature-card:hover { border-color: #333; }
+    .feature-icon {
+      font-size: 24px;
+      margin-bottom: 14px;
+      display: block;
+    }
+    .feature-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .feature-card p { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+
+    /* Comparison */
+    .comparison { padding: 80px 0; }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 14px 20px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: var(--bg-card);
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    th:first-child { color: var(--text); }
+    td:first-child { font-weight: 500; }
+    tr:last-child td { border-bottom: none; }
+    .check { color: var(--green); }
+    .cross { color: #555; }
+    .highlight-col { background: rgba(34, 197, 94, 0.04); }
+
+    /* Download */
+    .download { padding: 100px 0; text-align: center; }
+    .download h2 {
+      font-size: clamp(28px, 3.5vw, 40px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    .download .subtitle {
+      color: var(--text-muted);
+      font-size: 16px;
+      margin-bottom: 40px;
+    }
+    .download-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 28px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .download-btn:hover { border-color: var(--green); text-decoration: none; }
+    .download-btn .platform { font-size: 12px; color: var(--text-muted); }
+    .download-btn svg { width: 20px; height: 20px; fill: currentColor; }
+
+    /* Footer */
+    footer {
+      padding: 32px 0;
+      border-top: 1px solid var(--border);
+    }
+    footer .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--text); }
+    .footer-links { display: flex; gap: 20px; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .steps { grid-template-columns: 1fr; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .hero { padding: 120px 0 60px; }
+      .hero-icon { width: 72px; height: 72px; }
+      nav .nav-links { gap: 16px; }
+    }
+    @media (min-width: 769px) and (max-width: 1024px) {
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="container">
+      <a href="#" class="logo">
+        <img src="../assets/AppIcon1024.png" alt="GhostEdit">
+        GhostEdit
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#comparison">Compare</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/nareshnavinash/ghostedit-electron">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <img src="../assets/AppIcon1024.png" alt="GhostEdit" class="hero-icon">
+      <h1>Fix your writing anywhere.<br><span class="accent">No cloud required.</span></h1>
+      <p class="subtitle">Cross-platform AI text correction that lives in your menu bar. Works in every app, runs offline, and stays out of your way.</p>
+      <div class="hero-cta">
+        <a href="https://github.com/nareshnavinash/ghostedit-electron/releases/latest" class="btn btn-primary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download for macOS
+        </a>
+        <a href="https://github.com/nareshnavinash/ghostedit-electron" class="btn btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="how-it-works">
+    <div class="container">
+      <p class="section-label">How it works</p>
+      <h2 class="section-title">Three steps. Under a second.</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h3>Select text</h3>
+          <p>Highlight text in any app. Email, Slack, your code editor, a browser, anywhere.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h3>Press the hotkey</h3>
+          <p><span class="hotkey">Cmd+Shift+E</span> on Mac or <span class="hotkey">Ctrl+Shift+E</span> on Windows/Linux.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h3>Fixed instantly</h3>
+          <p>Grammar, spelling, and style corrections replace your selection in place.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="container">
+      <p class="section-label">Features</p>
+      <h2 class="section-title">Everything you need, nothing you don't.</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F310;</span>
+          <h3>Works in every app</h3>
+          <p>System-wide correction, not a browser extension. Works in your editor, email client, Slack, terminal, and everywhere else.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">&#x2708;&#xFE0F;</span>
+          <h3>Offline-first AI</h3>
+          <p>Built-in T5 grammar model runs entirely on your device. No API keys, no internet, no data leaving your machine.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F504;</span>
+          <h3>Multi-provider</h3>
+          <p>Use the local model or connect Claude, GPT, or Gemini through their CLI tools. Switch providers in one click.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F6A6;</span>
+          <h3>Real-time monitoring</h3>
+          <p>A floating traffic light indicator shows writing quality as you type. Green, yellow, or red with one-click fixes.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F4BB;</span>
+          <h3>Developer-friendly</h3>
+          <p>Preserves code blocks, URLs, @mentions, :emoji:, email addresses, and file paths. Never mangles your tokens.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">&#x1F30D;</span>
+          <h3>13 languages + tone presets</h3>
+          <p>Auto-detect or choose from 13 languages. Five tone presets: default, casual, professional, academic, and Slack.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison -->
+  <section class="comparison" id="comparison">
+    <div class="container">
+      <p class="section-label">Compare</p>
+      <h2 class="section-title">How GhostEdit stacks up.</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th class="highlight-col">GhostEdit</th>
+              <th>Grammarly</th>
+              <th>LanguageTool</th>
+              <th>Apple Writing Tools</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Works in any app</td>
+              <td class="highlight-col"><span class="check">&#10003;</span></td>
+              <td><span class="cross">Browser + select apps</span></td>
+              <td><span class="cross">Browser + select apps</span></td>
+              <td><span class="check">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td>Offline mode</td>
+              <td class="highlight-col"><span class="check">&#10003; Built-in T5 model</span></td>
+              <td><span class="cross">&#10005;</span></td>
+              <td><span class="cross">Server only</span></td>
+              <td><span class="check">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td>Multi-provider AI</td>
+              <td class="highlight-col"><span class="check">&#10003; Claude, GPT, Gemini, local</span></td>
+              <td><span class="cross">Grammarly AI only</span></td>
+              <td><span class="cross">LanguageTool only</span></td>
+              <td><span class="cross">Apple AI only</span></td>
+            </tr>
+            <tr>
+              <td>Open source</td>
+              <td class="highlight-col"><span class="check">&#10003; MIT</span></td>
+              <td><span class="cross">&#10005;</span></td>
+              <td><span class="check">&#10003; LGPL</span></td>
+              <td><span class="cross">&#10005;</span></td>
+            </tr>
+            <tr>
+              <td>Cross-platform</td>
+              <td class="highlight-col"><span class="check">&#10003; macOS, Windows, Linux</span></td>
+              <td><span class="check">&#10003;</span></td>
+              <td><span class="check">&#10003;</span></td>
+              <td><span class="cross">Apple only</span></td>
+            </tr>
+            <tr>
+              <td>Real-time monitoring</td>
+              <td class="highlight-col"><span class="check">&#10003; Traffic light indicator</span></td>
+              <td><span class="check">&#10003;</span></td>
+              <td><span class="check">&#10003;</span></td>
+              <td><span class="cross">&#10005;</span></td>
+            </tr>
+            <tr>
+              <td>Price</td>
+              <td class="highlight-col"><span class="check">Free</span></td>
+              <td>$12/mo</td>
+              <td>$5/mo (premium)</td>
+              <td>Free (Apple devices)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download -->
+  <section class="download" id="download">
+    <div class="container">
+      <h2>Ready to fix your writing?</h2>
+      <p class="subtitle">Download GhostEdit and start correcting text in under a minute.</p>
+      <div class="download-buttons">
+        <a href="https://github.com/nareshnavinash/ghostedit-electron/releases/latest" class="download-btn">
+          <svg viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          <span>
+            <strong>macOS</strong>
+            <span class="platform">Apple Silicon (.zip)</span>
+          </span>
+        </a>
+        <a href="https://github.com/nareshnavinash/ghostedit-electron/releases/latest" class="download-btn">
+          <svg viewBox="0 0 24 24"><path d="M3 12l-.938-5.625L8.438 3 12 7.5 15.563 3l6.375 3.375L21 12l.938 5.625L15.563 21 12 16.5 8.438 21l-6.376-3.375L3 12z"/></svg>
+          <span>
+            <strong>Windows</strong>
+            <span class="platform">Coming soon</span>
+          </span>
+        </a>
+        <a href="https://github.com/nareshnavinash/ghostedit-electron/releases/latest" class="download-btn">
+          <svg viewBox="0 0 24 24"><path d="M12.504 0c-.155 0-.311.015-.466.046-3.08.639-5.138 3.678-4.5 6.758a5.68 5.68 0 004.106 4.359c.364.09.752-.059.972-.372a.814.814 0 00-.084-1.023 3.99 3.99 0 01-1.086-2.006c-.367-1.77.741-3.516 2.475-3.9a3.282 3.282 0 013.877 2.482c.37 1.77-.74 3.516-2.474 3.9a.8.8 0 00-.584.606.812.812 0 00.313.836c.44.32.984.494 1.545.494 2.254 0 4.088-1.77 4.234-4.04.165-2.58-1.808-4.828-4.39-5.09A5.107 5.107 0 0012.504 0zm-2.5 12c-2.254 0-4.088 1.77-4.234 4.04-.165 2.58 1.808 4.828 4.39 5.09.212.022.424.032.636.032 2.352 0 4.313-1.744 4.6-4.086.324-2.63-1.57-5.02-4.228-5.342a5.105 5.105 0 00-.636-.04c-.178 0-.355.01-.528.032z"/></svg>
+          <span>
+            <strong>Linux</strong>
+            <span class="platform">Coming soon</span>
+          </span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <span>GhostEdit v1.3.0 &middot; MIT License</span>
+      <div class="footer-links">
+        <a href="https://github.com/nareshnavinash/ghostedit-electron">GitHub</a>
+        <a href="https://github.com/nareshnavinash/ghostedit-electron/releases">Releases</a>
+        <a href="https://github.com/nareshnavinash/ghostedit-electron/issues">Issues</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
