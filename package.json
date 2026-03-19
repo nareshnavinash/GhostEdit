@@ -1,6 +1,6 @@
 {
   "name": "ghostedit",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Cross-platform AI text correction from the menu bar",
   "main": ".vite/build/index.js",
   "scripts": {
@@ -41,6 +41,7 @@
     "@nut-tree-fork/nut-js": "^4.2.6",
     "dictionary-en": "^4.0.0",
     "diff-match-patch": "^1.0.5",
+    "electron-updater": "^6.8.3",
     "harper.js": "^1.9.0",
     "nspell": "^2.1.5",
     "react": "^19.0.0",

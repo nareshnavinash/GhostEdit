@@ -1,27 +1,30 @@
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { app, BrowserWindow, ipcMain, screen, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, Notification, dialog, shell } from 'electron';
 import { configManager } from './config-manager';
-import { createTray, updateMenu, destroyTray, setTrayState } from './tray-manager';
+import { createTray, updateMenu, destroyTray, setTrayState, setTrayTrafficColor } from './tray-manager';
 import { registerGlobalShortcuts, refreshGlobalShortcuts, unregisterAll } from './global-shortcuts';
 import { registerIPCHandlers } from './ipc-handlers';
 import { correctText } from './correction-dispatcher';
+import { preWarmModel } from './local-model-runner';
 import { protectTokens, restoreTokens, bestEffortRestore, placeholdersAreIntact, getPlaceholderRanges, getOriginalTokenRanges, stripLeakedPlaceholders } from './token-preservation';
 import { dictionaryPrePass, dictionaryPolish } from './dictionary-checker';
-import { appendHistory, lastSuccessfulEntry } from './history-store';
+import { appendHistory, lastSuccessfulEntry, updateStreak, getTodayStats } from './history-store';
 import * as clipboardManager from './clipboard-manager';
 import { getCached, putCache, clearCache } from './correction-cache';
 import { TONE_PROMPTS } from '../shared/constants';
 import type { ProviderName } from '../shared/types';
 import { IPC, type WindowType, type CorrectionHistoryEntry } from '../shared/types';
-import { errorToUserMessage } from './error-messages';
+import { errorToUserMessage, errorToUserInfo } from './error-messages';
 import { clearDeviceCache } from './device-selector';
 import { playSuccessSound, playErrorSound } from './sound-manager';
 import { appendError } from './error-log';
-import { startMonitoring, stopMonitoring, clearBuffer, isMonitoringStarted } from './keystroke-monitor';
+import { startMonitoring, stopMonitoring, clearBuffer, resetTypingState, isMonitoringStarted } from './keystroke-monitor';
+import { initAppContextTracker, markTypingContext, checkForAppSwitch, clearContext, destroyAppContextTracker, getCurrentAppName } from './app-context-tracker';
 import { initAnalyzer, destroyAnalyzer, onBufferChanged, clearAnalyzerState } from './realtime-analyzer';
-import { initTrafficLight, showTrafficLight, hideTrafficLight, updateColor, updateIssues, destroyAll as destroyTrafficLight, setPosition as setTrafficLightPosition } from './traffic-light-manager';
-import type { TrafficLightColor, SpellCheckIssue, IconPosition } from '../shared/types';
+import { initSuggestionsIPC, updateColor, updateIssues, closeDropdown, destroyAll as destroyTrafficLight, showSuggestionsFromTray } from './traffic-light-manager';
+import { initAutoUpdater, getAvailableUpdate, downloadAndInstall } from './auto-updater';
+import type { TrafficLightColor, SpellCheckIssue } from '../shared/types';
 
 // ── Single Instance Lock ──
 const gotLock = app.requestSingleInstanceLock();
@@ -60,7 +63,6 @@ function openWindow(type: WindowType): BrowserWindow {
     history: { width: 700, height: 500 },
     hud: { width: 300, height: 80 },
     'streaming-preview': { width: 700, height: 400 },
-    'traffic-light': { width: 24, height: 24 },
     'suggestions': { width: 320, height: 300 },
   };
 
@@ -248,6 +250,27 @@ function openPassivePreviewWindow(): BrowserWindow {
   return win;
 }
 
+// ── Streak Tracking ──
+
+function recordStreak(): void {
+  const config = configManager.load();
+  const { streakDates } = updateStreak(config.streakDates ?? []);
+  configManager.save({ ...config, streakDates });
+}
+
+// ── Recent Corrections Ring Buffer (Feature 5) ──
+const MAX_RECENT = 5;
+const recentCorrections: Array<{ original: string; corrected: string; timestamp: number }> = [];
+
+function pushRecentCorrection(original: string, corrected: string): void {
+  recentCorrections.unshift({ original, corrected, timestamp: Date.now() });
+  if (recentCorrections.length > MAX_RECENT) recentCorrections.length = MAX_RECENT;
+}
+
+export function getRecentCorrections(): Array<{ original: string; corrected: string; timestamp: number }> {
+  return recentCorrections;
+}
+
 // ── Core Correction Pipeline ──
 let correcting = false;
 let pendingPreviewDecision: { resolve: (accepted: boolean) => void } | null = null;
@@ -266,7 +289,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
   let selectedText = '';
 
   try {
-    showHUD('Working...');
+    showHUD(effectiveConfig.provider === 'local' ? 'Loading model...' : 'Working...');
 
     // 1. Save clipboard
     snap = clipboardManager.snapshot();
@@ -274,9 +297,13 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
     // 2. Capture selected text
     selectedText = await clipboardManager.captureSelectedText();
 
-    // 3. Build prompt
+    // 3. Build prompt (with per-app tone override)
     let systemPrompt = configManager.loadSystemPrompt();
-    const tonePrompt = TONE_PROMPTS[config.tonePreset];
+    const currentApp = getCurrentAppName();
+    const effectiveTone = (currentApp && config.appToneOverrides[currentApp])
+      ? config.appToneOverrides[currentApp]
+      : config.tonePreset;
+    const tonePrompt = TONE_PROMPTS[effectiveTone];
     if (tonePrompt) {
       systemPrompt = tonePrompt;
     }
@@ -375,6 +402,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
         } else {
           await clipboardManager.pasteText(correctedText);
         }
+        pushRecentCorrection(selectedText, correctedText);
         if (config.soundFeedbackEnabled) playSuccessSound();
         if (config.notifyOnSuccess) {
           new Notification({ title: 'GhostEdit', body: 'Correction applied.' }).show();
@@ -394,6 +422,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
         rejected: !accepted,
       };
       appendHistory(entry, config.historyLimit);
+      if (accepted) recordStreak();
 
     } else if (config.diffPreviewMode === 'passive') {
       // Paste first, then show non-focusable overlay
@@ -404,6 +433,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
       } else {
         await clipboardManager.pasteText(correctedText);
       }
+      pushRecentCorrection(selectedText, correctedText);
 
       if (config.soundFeedbackEnabled) playSuccessSound();
       if (config.notifyOnSuccess) {
@@ -450,6 +480,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
         succeeded: true,
       };
       appendHistory(entry, config.historyLimit);
+      recordStreak();
 
     } else {
       // Direct paste (non-preview path)
@@ -460,6 +491,7 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
         await clipboardManager.pasteText(correctedText);
         showHUD('Done!');
       }
+      pushRecentCorrection(selectedText, correctedText);
 
       if (config.soundFeedbackEnabled) playSuccessSound();
       if (config.notifyOnSuccess) {
@@ -478,17 +510,29 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
         succeeded: true,
       };
       appendHistory(entry, config.historyLimit);
+      recordStreak();
     }
   } catch (err: any) {
-    const message = errorToUserMessage(err, config.developerMode);
+    const errInfo = errorToUserInfo(err, config.developerMode);
     console.error('Correction error:', err);
-    showHUD(`Error: ${message}`, config.developerMode ? 8000 : 5000);
+
+    // Persistent HUD for actionable errors, timed HUD for others
+    if (errInfo.action) {
+      showHUD(`Error: ${errInfo.message}`, 15000);
+      if (errInfo.action === 'open-settings') {
+        setTimeout(() => openWindow('settings'), 200);
+      } else if (errInfo.action === 'copy-command' && errInfo.actionPayload) {
+        clipboardManager.writeToClipboard(errInfo.actionPayload);
+      }
+    } else {
+      showHUD(`Error: ${errInfo.message}`, config.developerMode ? 8000 : 5000);
+    }
 
     if (config.soundFeedbackEnabled) playErrorSound();
-    appendError(message, effectiveConfig.provider);
+    appendError(errInfo.message, effectiveConfig.provider);
 
     // Native notification for errors
-    new Notification({ title: 'GhostEdit', body: message }).show();
+    new Notification({ title: 'GhostEdit', body: errInfo.message }).show();
 
     const entry: CorrectionHistoryEntry = {
       id: randomUUID(),
@@ -604,6 +648,7 @@ async function correctCurrentLine(): Promise<void> {
       succeeded: true,
     };
     appendHistory(entry, config.historyLimit);
+    recordStreak();
 
     // Clear monitoring buffer since text changed
     clearBuffer();
@@ -636,8 +681,21 @@ function startRealtimeMonitoring(): void {
   if (process.platform === 'darwin') {
     try {
       const { systemPreferences } = require('electron');
-      if (!systemPreferences.isTrustedAccessibilityClient(true)) {
+      if (!systemPreferences.isTrustedAccessibilityClient(false)) {
         console.warn('[GhostEdit] Accessibility not granted — monitoring disabled');
+        dialog.showMessageBox({
+          type: 'warning',
+          title: 'Accessibility Permission Required',
+          message: 'GhostEdit needs Accessibility permission to monitor your typing.',
+          detail: 'Open System Settings > Privacy & Security > Accessibility and add GhostEdit. Then restart the app.',
+          buttons: ['Open System Settings', 'Later'],
+          defaultId: 0,
+          cancelId: 1,
+        }).then((result) => {
+          if (result.response === 0) {
+            shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
+          }
+        });
         return;
       }
     } catch {
@@ -645,7 +703,7 @@ function startRealtimeMonitoring(): void {
     }
   }
 
-  initTrafficLight(config.trafficLightPosition as IconPosition);
+  initSuggestionsIPC();
 
   initAnalyzer({
     onColorChange: (color: TrafficLightColor) => {
@@ -656,20 +714,34 @@ function startRealtimeMonitoring(): void {
     },
   });
 
+  initAppContextTracker({
+    onAppSwitch: () => {
+      resetTypingState();
+      clearAnalyzerState();
+      setTrayTrafficColor(null);
+      closeDropdown();
+      clearContext();
+    },
+  });
+
   startMonitoring(
     {
       onBufferChange: (buffer: string) => {
         onBufferChanged(buffer);
         if (buffer.length === 0) {
-          hideTrafficLight();
+          setTrayTrafficColor(null);
+          closeDropdown();
+          clearContext();
         }
       },
       onTypingStarted: () => {
-        showTrafficLight();
+        markTypingContext();
       },
       onTypingStopped: () => {
-        // No-op: don't hide on inactivity — user may be thinking.
-        // Icon hides when buffer is cleared (empty buffer check above).
+        checkForAppSwitch();
+      },
+      onMouseClick: () => {
+        checkForAppSwitch();
       },
     },
     config.trafficLightInactivityMs,
@@ -682,6 +754,7 @@ function stopRealtimeMonitoring(): void {
   stopMonitoring();
   destroyAnalyzer();
   destroyTrafficLight();
+  destroyAppContextTracker();
   console.log('[GhostEdit] Real-time monitoring stopped');
 }
 
@@ -742,10 +815,20 @@ app.whenReady().then(() => {
     onUndoLastCorrection: () => undoLastCorrection(),
     onOpenSettings: () => openWindow('settings'),
     onOpenHistory: () => openWindow('history'),
+    onShowSuggestions: () => showSuggestionsFromTray(),
+    onDownloadUpdate: () => downloadAndInstall(),
+    getRecentCorrections: () => recentCorrections,
   };
 
   // Create tray
   createTray(trayCallbacks);
+
+  // Initialize auto-updater
+  initAutoUpdater({
+    onUpdateAvailable: () => {
+      updateMenu(trayCallbacks);
+    },
+  });
 
   // Register global hotkeys
   registerGlobalShortcuts(
@@ -760,6 +843,9 @@ app.whenReady().then(() => {
 
   // Start real-time monitoring if enabled
   startRealtimeMonitoring();
+
+  // Pre-warm the local model in the background (Feature 7: faster cold start)
+  setTimeout(() => preWarmModel(), 3000);
 
   // Refresh tray/hotkey when config changes
   ipcMain.on('config-changed', () => {
@@ -789,6 +875,24 @@ app.whenReady().then(() => {
   // Apply launch at login setting
   const config = configManager.load();
   app.setLoginItemSettings({ openAtLogin: config.launchAtLogin });
+
+  // ── Daily Digest Notification ──
+  let digestShownDate = '';
+
+  setInterval(() => {
+    const cfg = configManager.load();
+    if (!cfg.dailyDigestEnabled) return;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (digestShownDate === todayStr) return;
+
+    const stats = getTodayStats();
+    if (stats.count === 0) return;
+
+    const body = `Today: ${stats.count} correction${stats.count === 1 ? '' : 's'}. ${stats.successRate}% success rate.`;
+    new Notification({ title: 'GhostEdit Daily Digest', body }).show();
+    digestShownDate = todayStr;
+  }, 60 * 60 * 1000); // Check every hour
 
   // Only open settings on first run (lazy settings)
   if (!config.firstRunComplete) {

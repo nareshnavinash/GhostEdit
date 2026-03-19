@@ -38,11 +38,23 @@ describe('Welcome component', () => {
     expect(screen.getByText('Built-in (Offline)')).toBeInTheDocument();
   });
 
+  it('step 3 shows "Try it now" with sample text and Fix it button', () => {
+    render(<Welcome {...defaultProps} />);
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Next'));
+
+    expect(screen.getByText(/Try it now/i)).toBeInTheDocument();
+    expect(screen.getByText('Fix it')).toBeInTheDocument();
+    expect(screen.getByDisplayValue(/tset of GhostEdit/)).toBeInTheDocument();
+  });
+
   it('completing onboarding with local calls onComplete with firstRunComplete only', () => {
     const onComplete = vi.fn();
     render(<Welcome {...defaultProps} onComplete={onComplete} />);
 
-    // Navigate to last step
+    // Navigate to last step (step 3)
+    fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
     // Default is local; click Get Started
@@ -60,6 +72,8 @@ describe('Welcome component', () => {
     fireEvent.click(screen.getByText('Next'));
     // Select Claude
     fireEvent.click(screen.getByText('Claude'));
+    // Navigate to "Try it now" step
+    fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Get Started'));
 
     expect(onComplete).toHaveBeenCalledWith(
@@ -101,6 +115,7 @@ describe('Welcome component', () => {
 
   it('last step button says Get Started', () => {
     render(<Welcome {...defaultProps} />);
+    fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Next'));
 

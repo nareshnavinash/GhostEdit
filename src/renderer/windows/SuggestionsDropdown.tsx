@@ -16,16 +16,22 @@ const KIND_COLOR: Record<string, string> = {
 
 export default function SuggestionsDropdown() {
   const [issues, setIssues] = useState<SpellCheckIssue[]>([]);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const off = window.ghostedit.onSuggestionsUpdate?.((data: SpellCheckIssue[]) => {
       setIssues(data);
+      setExpandedIndex(null);
     });
     return () => { off?.(); };
   }, []);
 
-  const handleFix = (index: number) => {
-    window.ghostedit.applyFix?.(index);
+  const handleFix = (index: number, suggestionIndex?: number) => {
+    window.ghostedit.applyFix?.(index, suggestionIndex);
+  };
+
+  const handleDismiss = (index: number) => {
+    window.ghostedit.dismissSuggestion?.(index);
   };
 
   const handleFixAll = () => {
@@ -59,36 +65,72 @@ export default function SuggestionsDropdown() {
           issues.map((issue, index) => (
             <div
               key={`${issue.range.start}-${issue.word}`}
-              className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors"
+              className="border-b border-white/[0.04]"
             >
-              {/* Color dot */}
-              <div
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: KIND_COLOR[issue.kind] || '#eab308' }}
-              />
+              <div className="flex items-center gap-2 px-3 py-2 hover:bg-white/[0.03] transition-colors">
+                {/* Color dot */}
+                <div
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: KIND_COLOR[issue.kind] || '#eab308' }}
+                />
 
-              {/* Issue description */}
-              <div className="flex-1 min-w-0">
-                <div className="text-[12px] text-white/80 truncate">
-                  <span className="line-through text-white/40">{issue.word}</span>
-                  {issue.suggestions[0] && (
-                    <>
-                      <span className="text-white/30 mx-1">&rarr;</span>
-                      <span className="text-white/90">{issue.suggestions[0]}</span>
-                    </>
-                  )}
+                {/* Issue description */}
+                <div
+                  className="flex-1 min-w-0 cursor-pointer"
+                  onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
+                >
+                  <div className="text-[12px] text-white/80 truncate">
+                    <span className="line-through text-white/40">{issue.word}</span>
+                    {issue.suggestions[0] && (
+                      <>
+                        <span className="text-white/30 mx-1">&rarr;</span>
+                        <span className="text-white/90">{issue.suggestions[0]}</span>
+                      </>
+                    )}
+                    {issue.suggestions.length > 1 && (
+                      <span className="text-white/30 ml-1 text-[10px]">+{issue.suggestions.length - 1}</span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-white/30 capitalize">{issue.kind}</div>
                 </div>
-                <div className="text-[10px] text-white/30 capitalize">{issue.kind}</div>
+
+                {/* Fix / Dismiss buttons */}
+                <div className="flex items-center gap-1 shrink-0">
+                  {issue.suggestions.length > 0 && (
+                    <button
+                      onClick={() => handleFix(index)}
+                      className="px-2 py-0.5 rounded-md bg-white/[0.06] text-white/60 text-[11px] hover:bg-white/10 hover:text-white/80 transition-colors"
+                    >
+                      Fix
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDismiss(index)}
+                    className="px-1.5 py-0.5 rounded-md text-white/30 text-[11px] hover:bg-white/[0.06] hover:text-white/50 transition-colors"
+                    title="Dismiss"
+                  >
+                    &times;
+                  </button>
+                </div>
               </div>
 
-              {/* Fix button */}
-              {issue.suggestions.length > 0 && (
-                <button
-                  onClick={() => handleFix(index)}
-                  className="px-2 py-0.5 rounded-md bg-white/[0.06] text-white/60 text-[11px] hover:bg-white/10 hover:text-white/80 transition-colors shrink-0"
-                >
-                  Fix
-                </button>
+              {/* Expanded alternatives */}
+              {expandedIndex === index && issue.suggestions.length > 1 && (
+                <div className="px-3 pb-2 flex flex-wrap gap-1">
+                  {issue.suggestions.map((suggestion, si) => (
+                    <button
+                      key={si}
+                      onClick={() => handleFix(index, si)}
+                      className={`px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+                        si === 0
+                          ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+                          : 'bg-white/[0.06] text-white/60 hover:bg-white/10 hover:text-white/80'
+                      }`}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           ))

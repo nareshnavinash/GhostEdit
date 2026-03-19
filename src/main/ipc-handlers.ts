@@ -194,6 +194,58 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
   ipcMain.handle(IPC.GET_USAGE_STATS, () => {
     return computeUsageStats();
   });
+
+  // ── Re-Correct (run correction again on original text) ──
+  ipcMain.handle(IPC.RE_CORRECT, async (_event, text: string) => {
+    try {
+      const config = configManager.load();
+      const result = await correctText(
+        configManager.loadSystemPrompt(),
+        text,
+        config,
+      );
+      return { success: true, text: result.text, durationMs: result.durationMs };
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) };
+    }
+  });
+
+  // ── Explain Diff (for interactive preview "Why?" tooltip) ──
+  ipcMain.handle(IPC.EXPLAIN_DIFF, async (_event, original: string, corrected: string) => {
+    try {
+      const config = configManager.load();
+      const prompt = `Explain in 10 words or fewer why "${original}" was changed to "${corrected}". Be specific about the grammar or spelling rule.`;
+      const result = await correctText(prompt, '', {
+        ...config,
+        provider: config.provider === 'local' ? 'local' : config.cliProvider,
+        model: config.provider === 'local' ? 't5-grammar' : config.cliModel,
+      });
+      return { success: true, explanation: result.text };
+    } catch {
+      // For local model, return a generic category-based explanation
+      const lower = original.toLowerCase();
+      const lowerCorrected = corrected.toLowerCase();
+      if (lower === lowerCorrected) {
+        return { success: true, explanation: 'Capitalization fix' };
+      }
+      return { success: true, explanation: 'Spelling or grammar correction' };
+    }
+  });
+
+  // ── Inline Correction (for onboarding, no clipboard) ──
+  ipcMain.handle(IPC.CORRECT_INLINE, async (_event, text: string) => {
+    try {
+      const config = configManager.load();
+      const result = await correctText(
+        'You are a grammar correction assistant. Fix grammar, spelling, and punctuation in the provided text. Return ONLY the corrected text, nothing else.',
+        text,
+        { ...config, provider: 'local', model: 't5-grammar' },
+      );
+      return { success: true, text: result.text };
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) };
+    }
+  });
 }
 
 function csvEscape(value: string): string {

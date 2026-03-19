@@ -5,6 +5,8 @@
  */
 
 import { checkTextForIssues } from './dictionary-checker';
+import { configManager } from './config-manager';
+import { getCurrentAppName } from './app-context-tracker';
 import type { TrafficLightColor, SpellCheckIssue } from '../shared/types';
 
 const DEBOUNCE_MS = 300;
@@ -55,6 +57,39 @@ export function onBufferChanged(buffer: string): void {
   if (debounceTimer) clearTimeout(debounceTimer);
   if (backgroundTimer) clearTimeout(backgroundTimer);
 
+  // Check app whitelist filter
+  const config = configManager.load();
+
+  // Meeting mode: suppress analysis when a meeting app is active
+  if (config.meetingModeEnabled) {
+    const currentApp = getCurrentAppName();
+    const meetingApps = config.meetingApps ?? [];
+    if (currentApp && meetingApps.some((m) => currentApp.toLowerCase().includes(m.toLowerCase()))) {
+      if (lastColor !== 'green') {
+        lastColor = 'green';
+        lastIssues = [];
+        onColorChange?.('green');
+        onIssuesChange?.([]);
+      }
+      return;
+    }
+  }
+
+  if (config.monitoringAppFilter === 'whitelist') {
+    const currentApp = getCurrentAppName();
+    const whitelist = config.monitoringAppWhitelist ?? [];
+    if (currentApp && whitelist.length > 0 && !whitelist.some((w) => currentApp.toLowerCase().includes(w.toLowerCase()))) {
+      // Current app not in whitelist, suppress analysis
+      if (lastColor !== 'green') {
+        lastColor = 'green';
+        lastIssues = [];
+        onColorChange?.('green');
+        onIssuesChange?.([]);
+      }
+      return;
+    }
+  }
+
   // Too short — set green
   if (buffer.trim().length < MIN_CHARS) {
     if (lastColor !== 'green') {
@@ -76,7 +111,13 @@ async function runAnalysis(text: string): Promise<void> {
   analyzing = true;
 
   try {
-    const issues = await checkTextForIssues(text);
+    let issues = await checkTextForIssues(text);
+
+    // Filter out suppressed suggestions (rejected 2+ times)
+    const config = configManager.load();
+    const suppressed = config.suppressedSuggestions ?? {};
+    issues = issues.filter((issue) => (suppressed[issue.word] ?? 0) < 2);
+
     lastIssues = issues;
     const color = computeColor(issues);
     lastColor = color;

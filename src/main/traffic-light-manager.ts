@@ -1,21 +1,22 @@
 /**
- * Manages the floating traffic light icon window and the suggestions dropdown window.
- * Handles positioning, show/hide lifecycle, and IPC communication with renderers.
+ * Manages the suggestions dropdown window and traffic light state via tray icon.
+ * The floating traffic light window has been removed; the colored dot now
+ * appears on the menu-bar tray icon instead.
  */
 
 import * as path from 'node:path';
 import { BrowserWindow, screen, ipcMain } from 'electron';
-import { IPC, type TrafficLightColor, type SpellCheckIssue, type IconPosition } from '../shared/types';
+import { IPC, type TrafficLightColor, type SpellCheckIssue } from '../shared/types';
 import { applyFixes } from './dictionary-checker';
 import * as clipboardManager from './clipboard-manager';
 import { clearBuffer } from './keystroke-monitor';
-import { clearAnalyzerState, getLastIssues } from './realtime-analyzer';
+import { clearAnalyzerState } from './realtime-analyzer';
+import { setTrayTrafficColor, getTrayBounds, updateTrayIssueCount } from './tray-manager';
+import { configManager } from './config-manager';
 
-let trafficLightWin: BrowserWindow | null = null;
 let suggestionsWin: BrowserWindow | null = null;
 let currentColor: TrafficLightColor = 'green';
 let currentIssues: SpellCheckIssue[] = [];
-let currentPosition: IconPosition = 'top-right';
 let ipcRegistered = false;
 
 function getPreloadPath(): string {
@@ -32,104 +33,49 @@ function getRendererURL(windowType: string): string {
   return `file://${path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)}?windowType=${windowType}`;
 }
 
-function computeTrafficLightPosition(): { x: number; y: number } {
+function computeDropdownPosition(): { x: number; y: number } {
+  const bounds = getTrayBounds();
+
+  if (bounds && bounds.width > 0 && bounds.height > 0) {
+    const dropdownWidth = 320;
+    // macOS/Linux: tray at top, position below
+    if (process.platform !== 'win32') {
+      return {
+        x: Math.round(bounds.x + bounds.width / 2 - dropdownWidth / 2),
+        y: bounds.y + bounds.height + 4,
+      };
+    }
+    // Windows: tray at bottom, position above
+    const dropdownHeight = 300;
+    return {
+      x: Math.round(bounds.x + bounds.width / 2 - dropdownWidth / 2),
+      y: bounds.y - dropdownHeight - 4,
+    };
+  }
+
+  // Fallback: top-right of screen
   const point = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(point);
-  const { x, y, width, height } = display.workArea;
-  const margin = 16;
-  const size = 24;
-
-  switch (currentPosition) {
-    case 'top-left':
-      return { x: x + margin, y: y + margin };
-    case 'top-right':
-      return { x: x + width - size - margin, y: y + margin };
-    case 'bottom-left':
-      return { x: x + margin, y: y + height - size - margin };
-    case 'bottom-right':
-      return { x: x + width - size - margin, y: y + height - size - margin };
-    default:
-      return { x: x + width - size - margin, y: y + margin };
-  }
-}
-
-function computeDropdownPosition(): { x: number; y: number } {
-  if (!trafficLightWin || trafficLightWin.isDestroyed()) {
-    const point = screen.getCursorScreenPoint();
-    const display = screen.getDisplayNearestPoint(point);
-    const { x, y, width } = display.workArea;
-    return { x: x + width - 320 - 16, y: y + 70 };
-  }
-
-  const [tlX, tlY] = trafficLightWin.getPosition();
-  const dropdownWidth = 320;
-  const dropdownHeight = 300;
-
-  // Position adjacent to traffic light
-  if (currentPosition.includes('right')) {
-    return { x: tlX - dropdownWidth - 8, y: tlY };
-  } else {
-    return { x: tlX + 32, y: tlY };
-  }
-}
-
-function ensureTrafficLightWindow(): BrowserWindow {
-  if (trafficLightWin && !trafficLightWin.isDestroyed()) return trafficLightWin;
-
-  const pos = computeTrafficLightPosition();
-
-  const win = new BrowserWindow({
-    width: 24,
-    height: 24,
-    x: pos.x,
-    y: pos.y,
-    show: false,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    focusable: false,
-    resizable: false,
-    hasShadow: false,
-    ...(process.platform === 'darwin' ? { type: 'panel' as any } : {}),
-    webPreferences: {
-      preload: getPreloadPath(),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      backgroundThrottling: false,
-    },
-  });
-
-  win.loadURL(getRendererURL('traffic-light')).catch((err) => {
-    console.error('[GhostEdit] Failed to load traffic light window:', err.message);
-  });
-
-  win.on('closed', () => {
-    trafficLightWin = null;
-  });
-
-  trafficLightWin = win;
-  return win;
+  const { x, y, width } = display.workArea;
+  return { x: x + width - 320 - 16, y: y + 8 };
 }
 
 function ensureIPCHandlers(): void {
   if (ipcRegistered) return;
   ipcRegistered = true;
 
-  ipcMain.on(IPC.TRAFFIC_LIGHT_CLICKED, () => {
-    if (currentIssues.length > 0) {
-      openDropdown(currentIssues);
-    }
-  });
-
-  ipcMain.handle(IPC.APPLY_FIX, async (_event, index: number) => {
-    await applySingleFix(index);
+  ipcMain.handle(IPC.APPLY_FIX, async (_event, index: number, suggestionIndex?: number) => {
+    await applySingleFix(index, suggestionIndex);
     return { success: true };
   });
 
   ipcMain.handle(IPC.APPLY_ALL_FIXES, async () => {
     await applyAllFixesHandler();
+    return { success: true };
+  });
+
+  ipcMain.handle(IPC.DISMISS_SUGGESTION, async (_event, index: number) => {
+    await dismissSuggestion(index);
     return { success: true };
   });
 
@@ -148,50 +94,18 @@ function ensureIPCHandlers(): void {
 
 // ── Public API ──
 
-export function initTrafficLight(position: IconPosition): void {
-  currentPosition = position;
+export function initSuggestionsIPC(): void {
   ensureIPCHandlers();
-}
-
-export function showTrafficLight(): void {
-  const win = ensureTrafficLightWindow();
-  const pos = computeTrafficLightPosition();
-  win.setPosition(pos.x, pos.y);
-
-  const sendUpdate = () => {
-    win.webContents.send(IPC.TRAFFIC_LIGHT_UPDATE, { color: currentColor, visible: true });
-    if (!win.isVisible()) win.showInactive();
-  };
-
-  if (win.webContents.isLoading()) {
-    win.webContents.once('did-finish-load', sendUpdate);
-  } else {
-    sendUpdate();
-  }
-}
-
-export function hideTrafficLight(): void {
-  if (trafficLightWin && !trafficLightWin.isDestroyed()) {
-    trafficLightWin.webContents.send(IPC.TRAFFIC_LIGHT_HIDE);
-    // Hide after a brief fade-out
-    setTimeout(() => {
-      if (trafficLightWin && !trafficLightWin.isDestroyed()) {
-        trafficLightWin.hide();
-      }
-    }, 300);
-  }
-  closeDropdown();
 }
 
 export function updateColor(color: TrafficLightColor): void {
   currentColor = color;
-  if (trafficLightWin && !trafficLightWin.isDestroyed() && trafficLightWin.isVisible()) {
-    trafficLightWin.webContents.send(IPC.TRAFFIC_LIGHT_UPDATE, { color, visible: true });
-  }
+  setTrayTrafficColor(color);
 }
 
 export function updateIssues(issues: SpellCheckIssue[]): void {
   currentIssues = issues;
+  updateTrayIssueCount(issues.length);
   // If dropdown is open, update it
   if (suggestionsWin && !suggestionsWin.isDestroyed() && suggestionsWin.isVisible()) {
     suggestionsWin.webContents.send(IPC.SUGGESTIONS_UPDATE, issues);
@@ -264,6 +178,12 @@ export function openDropdown(issues: SpellCheckIssue[]): void {
   suggestionsWin = win;
 }
 
+export function showSuggestionsFromTray(): void {
+  if (currentIssues.length > 0) {
+    openDropdown(currentIssues);
+  }
+}
+
 export function closeDropdown(): void {
   if (suggestionsWin && !suggestionsWin.isDestroyed()) {
     suggestionsWin.close();
@@ -271,30 +191,40 @@ export function closeDropdown(): void {
   }
 }
 
-export function setPosition(position: IconPosition): void {
-  currentPosition = position;
-  if (trafficLightWin && !trafficLightWin.isDestroyed()) {
-    const pos = computeTrafficLightPosition();
-    trafficLightWin.setPosition(pos.x, pos.y);
-  }
-}
-
 export function destroyAll(): void {
-  if (trafficLightWin && !trafficLightWin.isDestroyed()) {
-    trafficLightWin.close();
-    trafficLightWin = null;
-  }
   if (suggestionsWin && !suggestionsWin.isDestroyed()) {
     suggestionsWin.close();
     suggestionsWin = null;
   }
   currentIssues = [];
   currentColor = 'green';
+  setTrayTrafficColor(null);
 }
 
 // ── Fix Application ──
 
-async function applySingleFix(index: number): Promise<void> {
+async function dismissSuggestion(index: number): Promise<void> {
+  if (index < 0 || index >= currentIssues.length) return;
+
+  const issue = currentIssues[index];
+  const config = configManager.load();
+  const suppressed = { ...(config.suppressedSuggestions ?? {}) };
+  suppressed[issue.word] = (suppressed[issue.word] ?? 0) + 1;
+  configManager.save({ ...config, suppressedSuggestions: suppressed });
+
+  // Remove from current issues
+  currentIssues = currentIssues.filter((_, i) => i !== index);
+
+  if (suggestionsWin && !suggestionsWin.isDestroyed()) {
+    suggestionsWin.webContents.send(IPC.SUGGESTIONS_UPDATE, currentIssues);
+  }
+  const newColor: TrafficLightColor = currentIssues.length === 0 ? 'green'
+    : currentIssues.some((i) => i.kind === 'spelling' || i.kind === 'grammar') ? 'red' : 'yellow';
+  updateColor(newColor);
+  updateTrayIssueCount(currentIssues.length);
+}
+
+async function applySingleFix(index: number, suggestionIndex?: number): Promise<void> {
   if (index < 0 || index >= currentIssues.length) return;
 
   try {
@@ -302,8 +232,13 @@ async function applySingleFix(index: number): Promise<void> {
     const lineText = await clipboardManager.captureCurrentLine();
     const issue = currentIssues[index];
 
+    // If a specific suggestion alternative was chosen, swap it in
+    const fixIssue = (suggestionIndex != null && suggestionIndex > 0 && suggestionIndex < issue.suggestions.length)
+      ? { ...issue, suggestions: [issue.suggestions[suggestionIndex], ...issue.suggestions.filter((_, i) => i !== suggestionIndex)] }
+      : issue;
+
     // Find and replace the issue word in the captured line
-    const fixedResult = applyFixes(lineText, [issue]);
+    const fixedResult = applyFixes(lineText, [fixIssue]);
     if (fixedResult.fixCount > 0) {
       await clipboardManager.pasteText(fixedResult.text);
     }

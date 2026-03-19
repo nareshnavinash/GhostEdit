@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import type { AppConfig, CLIProviderName, TonePreset, DiffPreviewMode, LocalModelInfo, LocalModelVariant, UsageStats, IconPosition } from '../../shared/types';
-import { CLI_PROVIDERS, LANGUAGES, DEFAULT_CONFIG, DEFAULT_BUNDLED_VARIANT } from '../../shared/constants';
+import type { AppConfig, CLIProviderName, TonePreset, DiffPreviewMode, LocalModelInfo, LocalModelVariant, UsageStats } from '../../shared/types';
+import { CLI_PROVIDERS, LANGUAGES, DEFAULT_CONFIG, DEFAULT_BUNDLED_VARIANT, TONE_PROMPTS } from '../../shared/constants';
 import HotkeyInput from '../components/HotkeyInput';
 import Welcome from '../components/Welcome';
 
@@ -50,6 +50,15 @@ export default function Settings() {
   const [dictWords, setDictWords] = useState<string[]>([]);
   const [newWord, setNewWord] = useState('');
   const [dictSaved, setDictSaved] = useState(false);
+
+  // Whitelist editor state
+  const [newWhitelistApp, setNewWhitelistApp] = useState('');
+
+  // Per-app tone editor state
+  const [newToneApp, setNewToneApp] = useState('');
+
+  // Meeting apps editor state
+  const [newMeetingApp, setNewMeetingApp] = useState('');
 
   // Usage stats state
   const [stats, setStats] = useState<UsageStats | null>(null);
@@ -153,6 +162,33 @@ export default function Settings() {
     await window.ghostedit.savePersonalDictionary(updated);
   }, [dictWords]);
 
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+
+  const handleBulkImport = useCallback(async () => {
+    const words = bulkText
+      .split(/[,\n]+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length > 0);
+    if (words.length === 0) return;
+    const unique = [...new Set([...dictWords, ...words])].sort();
+    setDictWords(unique);
+    setBulkText('');
+    setShowBulkImport(false);
+    await window.ghostedit.savePersonalDictionary(unique);
+    setDictSaved(true);
+    setTimeout(() => setDictSaved(false), 1500);
+  }, [bulkText, dictWords]);
+
+  const handlePasteFromClipboard = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setBulkText(text);
+    } catch {
+      // Clipboard access denied
+    }
+  }, []);
+
   // Show onboarding if first run hasn't been completed
   if (!config.firstRunComplete) {
     return (
@@ -162,6 +198,12 @@ export default function Settings() {
       />
     );
   }
+
+  const isSimpleMode = config.settingsMode !== 'advanced';
+  const SIMPLE_SECTIONS: Section[] = ['general', 'hotkeys', 'monitoring'];
+  const visibleSections = isSimpleMode
+    ? SECTIONS.filter((s) => SIMPLE_SECTIONS.includes(s.id))
+    : SECTIONS;
 
   const cliProviderDef = CLI_PROVIDERS[config.cliProvider];
   const cliModels = cliProviderDef?.availableModels ?? [];
@@ -198,21 +240,36 @@ export default function Settings() {
       {/* Main: sidebar + content */}
       <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
-        <nav className="w-[180px] shrink-0 bg-ghost-sidebar border-r border-white/[0.06] pt-3 px-2 space-y-0.5 overflow-y-auto">
-          {SECTIONS.map((section) => (
-            <button
-              key={section.id}
-              onClick={() => setActiveSection(section.id)}
-              className={`no-drag w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[13px] transition-colors ${
-                activeSection === section.id
-                  ? 'bg-white/10 text-white font-medium'
-                  : 'text-ghost-muted hover:bg-white/[0.05] hover:text-white/70'
-              }`}
-            >
-              <span className="w-4 h-4 shrink-0 text-white/40">{section.icon}</span>
-              {section.label}
-            </button>
-          ))}
+        <nav className="w-[180px] shrink-0 bg-ghost-sidebar border-r border-white/[0.06] pt-3 px-2 flex flex-col overflow-y-auto">
+          <div className="space-y-0.5 flex-1">
+            {visibleSections.map((section) => (
+              <button
+                key={section.id}
+                onClick={() => setActiveSection(section.id)}
+                className={`no-drag w-full flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[13px] transition-colors ${
+                  activeSection === section.id
+                    ? 'bg-white/10 text-white font-medium'
+                    : 'text-ghost-muted hover:bg-white/[0.05] hover:text-white/70'
+                }`}
+              >
+                <span className="w-4 h-4 shrink-0 text-white/40">{section.icon}</span>
+                {section.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => {
+              const next = isSimpleMode ? 'advanced' : 'simple';
+              update({ settingsMode: next } as any);
+              // If switching to simple and current section is hidden, go to general
+              if (next === 'simple' && !SIMPLE_SECTIONS.includes(activeSection)) {
+                setActiveSection('general');
+              }
+            }}
+            className="no-drag w-full flex items-center justify-center px-3 py-2 mb-2 rounded-lg text-[11px] text-ghost-muted hover:bg-white/[0.05] hover:text-white/70 transition-colors"
+          >
+            {isSimpleMode ? 'Show all settings' : 'Show fewer settings'}
+          </button>
         </nav>
 
         {/* Content area */}
@@ -542,6 +599,12 @@ export default function Settings() {
                   onChange={(v) => update({ notifyOnSuccess: v })}
                 />
                 <ToggleRow
+                  label="Daily digest notification"
+                  description="Show a daily summary of your corrections"
+                  checked={config.dailyDigestEnabled}
+                  onChange={(v) => update({ dailyDigestEnabled: v })}
+                />
+                <ToggleRow
                   label="Developer mode"
                   description="Show additional debug information"
                   checked={config.developerMode}
@@ -579,30 +642,13 @@ export default function Settings() {
               <>
                 <ToggleRow
                   label="Enable real-time monitoring"
-                  description="Passively analyze text as you type and show a floating traffic light indicator"
+                  description="Passively analyze text as you type and show a colored dot on the menu bar icon"
                   checked={config.monitoringEnabled}
                   onChange={(v) => update({ monitoringEnabled: v })}
                 />
 
                 {config.monitoringEnabled && (
                   <>
-                    <div className="settings-row">
-                      <div>
-                        <p className="text-[13px] font-medium">Icon position</p>
-                        <p className="text-[11px] text-ghost-muted">Screen corner for the traffic light indicator</p>
-                      </div>
-                      <select
-                        value={config.trafficLightPosition}
-                        onChange={(e) => update({ trafficLightPosition: e.target.value as IconPosition })}
-                        className="input w-40"
-                      >
-                        <option value="top-right">Top Right</option>
-                        <option value="top-left">Top Left</option>
-                        <option value="bottom-right">Bottom Right</option>
-                        <option value="bottom-left">Bottom Left</option>
-                      </select>
-                    </div>
-
                     <div className="settings-row">
                       <div>
                         <p className="text-[13px] font-medium">Inactivity timeout</p>
@@ -636,6 +682,198 @@ export default function Settings() {
                       onChange={(v) => update({ backgroundModelRefinement: v })}
                     />
 
+                    <div className="border-b border-ghost-row-border my-2" />
+
+                    <div className="settings-row">
+                      <div>
+                        <p className="text-[13px] font-medium">Active apps</p>
+                        <p className="text-[11px] text-ghost-muted">Which apps to monitor for typing</p>
+                      </div>
+                      <select
+                        value={config.monitoringAppFilter ?? 'all'}
+                        onChange={(e) => update({ monitoringAppFilter: e.target.value as 'all' | 'whitelist' })}
+                        className="input w-44"
+                      >
+                        <option value="all">All apps</option>
+                        <option value="whitelist">Only these apps</option>
+                      </select>
+                    </div>
+
+                    {config.monitoringAppFilter === 'whitelist' && (
+                      <div className="ml-1 mt-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={newWhitelistApp}
+                            onChange={(e) => setNewWhitelistApp(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && newWhitelistApp.trim()) {
+                                const apps = [...(config.monitoringAppWhitelist ?? []), newWhitelistApp.trim()];
+                                update({ monitoringAppWhitelist: [...new Set(apps)] });
+                                setNewWhitelistApp('');
+                              }
+                            }}
+                            placeholder="App name (e.g. Slack, Mail)..."
+                            className="input flex-1"
+                          />
+                          <button
+                            onClick={() => {
+                              if (!newWhitelistApp.trim()) return;
+                              const apps = [...(config.monitoringAppWhitelist ?? []), newWhitelistApp.trim()];
+                              update({ monitoringAppWhitelist: [...new Set(apps)] });
+                              setNewWhitelistApp('');
+                            }}
+                            disabled={!newWhitelistApp.trim()}
+                            className="px-3 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-[12px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Add
+                          </button>
+                        </div>
+                        {(config.monitoringAppWhitelist ?? []).length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {config.monitoringAppWhitelist.map((appName) => (
+                              <span
+                                key={appName}
+                                className="inline-flex items-center gap-1 bg-white/[0.06] border border-white/[0.08] rounded-lg px-2.5 py-1 text-[12px]"
+                              >
+                                {appName}
+                                <button
+                                  onClick={() => update({ monitoringAppWhitelist: config.monitoringAppWhitelist.filter((a) => a !== appName) })}
+                                  className="text-ghost-muted hover:text-ghost-error ml-0.5"
+                                  aria-label={`Remove ${appName}`}
+                                >
+                                  &times;
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="border-b border-ghost-row-border my-2" />
+
+                    {/* Per-App Tone Overrides */}
+                    <div className="settings-row">
+                      <div className="flex-1">
+                        <p className="text-[13px] font-medium">Tone per app</p>
+                        <p className="text-[11px] text-ghost-muted">Use a different tone when correcting in specific apps</p>
+                      </div>
+                    </div>
+
+                    <div className="ml-1 mt-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newToneApp}
+                          onChange={(e) => setNewToneApp(e.target.value)}
+                          placeholder="App name (e.g. Slack)..."
+                          className="input flex-1"
+                        />
+                        <select
+                          className="input w-36"
+                          onChange={(e) => {
+                            if (!newToneApp.trim()) return;
+                            const overrides = { ...(config.appToneOverrides ?? {}), [newToneApp.trim()]: e.target.value as TonePreset };
+                            update({ appToneOverrides: overrides });
+                            setNewToneApp('');
+                            e.target.value = '';
+                          }}
+                          value=""
+                        >
+                          <option value="" disabled>Add tone...</option>
+                          {(Object.keys(TONE_PROMPTS) as TonePreset[]).map((t) => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {Object.keys(config.appToneOverrides ?? {}).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(config.appToneOverrides).map(([appName, tone]) => (
+                            <span
+                              key={appName}
+                              className="inline-flex items-center gap-1 bg-white/[0.06] border border-white/[0.08] rounded-lg px-2.5 py-1 text-[12px]"
+                            >
+                              {appName} &rarr; {tone}
+                              <button
+                                onClick={() => {
+                                  const overrides = { ...config.appToneOverrides };
+                                  delete overrides[appName];
+                                  update({ appToneOverrides: overrides });
+                                }}
+                                className="text-ghost-muted hover:text-ghost-error ml-0.5"
+                                aria-label={`Remove ${appName}`}
+                              >
+                                &times;
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-b border-ghost-row-border my-2" />
+
+                    {/* Meeting Mode */}
+                    <ToggleRow
+                      label="Meeting mode"
+                      description="Automatically suppress monitoring when a meeting app is active"
+                      checked={config.meetingModeEnabled}
+                      onChange={(v) => update({ meetingModeEnabled: v })}
+                    />
+
+                    {config.meetingModeEnabled && (
+                      <div className="ml-1 mt-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={newMeetingApp}
+                            onChange={(e) => setNewMeetingApp(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && newMeetingApp.trim()) {
+                                const apps = [...(config.meetingApps ?? []), newMeetingApp.trim()];
+                                update({ meetingApps: [...new Set(apps)] });
+                                setNewMeetingApp('');
+                              }
+                            }}
+                            placeholder="App name (e.g. Zoom)..."
+                            className="input flex-1"
+                          />
+                          <button
+                            onClick={() => {
+                              if (!newMeetingApp.trim()) return;
+                              const apps = [...(config.meetingApps ?? []), newMeetingApp.trim()];
+                              update({ meetingApps: [...new Set(apps)] });
+                              setNewMeetingApp('');
+                            }}
+                            disabled={!newMeetingApp.trim()}
+                            className="px-3 py-2 rounded-lg bg-blue-500/20 text-blue-400 text-[12px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Add
+                          </button>
+                        </div>
+                        {(config.meetingApps ?? []).length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {config.meetingApps.map((appName) => (
+                              <span
+                                key={appName}
+                                className="inline-flex items-center gap-1 bg-white/[0.06] border border-white/[0.08] rounded-lg px-2.5 py-1 text-[12px]"
+                              >
+                                {appName}
+                                <button
+                                  onClick={() => update({ meetingApps: config.meetingApps.filter((a) => a !== appName) })}
+                                  className="text-ghost-muted hover:text-ghost-error ml-0.5"
+                                  aria-label={`Remove ${appName}`}
+                                >
+                                  &times;
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {isMac && (
                       <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-[11px] text-yellow-300/80 mt-3">
                         macOS requires Accessibility permission for keystroke monitoring.
@@ -646,8 +884,8 @@ export default function Settings() {
                 )}
 
                 <p className="text-[11px] text-ghost-muted mt-4">
-                  When enabled, a floating colored circle (green/yellow/red) appears while you type.
-                  Click it to see detected issues and apply fixes. The keystroke buffer is kept in memory only and never persisted.
+                  When enabled, a colored dot (green/yellow/red) appears on the menu bar icon while you type.
+                  Click the tray icon to see detected issues and apply fixes. The keystroke buffer is kept in memory only and never persisted.
                 </p>
               </>
             )}
@@ -701,7 +939,39 @@ export default function Settings() {
                   >
                     Add
                   </button>
+                  <button
+                    onClick={() => setShowBulkImport(!showBulkImport)}
+                    className="px-4 py-2 rounded-lg bg-white/5 text-ghost-muted text-[13px] font-medium hover:bg-white/10 transition-colors"
+                  >
+                    Import
+                  </button>
                 </div>
+
+                {showBulkImport && (
+                  <div className="mb-4 space-y-2">
+                    <textarea
+                      value={bulkText}
+                      onChange={(e) => setBulkText(e.target.value)}
+                      placeholder="Paste words separated by commas or newlines..."
+                      className="input w-full h-24 resize-y text-[12px]"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleBulkImport}
+                        disabled={!bulkText.trim()}
+                        className="px-4 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-[13px] font-medium hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Import All
+                      </button>
+                      <button
+                        onClick={handlePasteFromClipboard}
+                        className="px-4 py-1.5 rounded-lg bg-white/5 text-ghost-muted text-[13px] font-medium hover:bg-white/10 transition-colors"
+                      >
+                        Paste from Clipboard
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {dictSaved && (
                   <p className="text-[11px] text-ghost-success mb-2">Dictionary updated</p>
@@ -735,6 +1005,40 @@ export default function Settings() {
                   Words in your personal dictionary won't be flagged by the spell checker.
                   Stored in ~/.ghostedit/personal-dictionary.txt.
                 </p>
+
+                {/* Suppressed Suggestions */}
+                {Object.keys(config.suppressedSuggestions ?? {}).length > 0 && (
+                  <>
+                    <div className="border-b border-ghost-row-border my-3" />
+                    <p className="text-[13px] font-medium mb-2">Suppressed suggestions</p>
+                    <p className="text-[11px] text-ghost-muted mb-2">
+                      Words you have dismissed will stop being flagged after 2 dismissals. Un-suppress to see them again.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(config.suppressedSuggestions)
+                        .filter(([, count]) => count >= 2)
+                        .map(([word]) => (
+                        <span
+                          key={word}
+                          className="inline-flex items-center gap-1 bg-white/[0.06] border border-white/[0.08] rounded-lg px-2.5 py-1 text-[12px]"
+                        >
+                          {word}
+                          <button
+                            onClick={() => {
+                              const suppressed = { ...config.suppressedSuggestions };
+                              delete suppressed[word];
+                              update({ suppressedSuggestions: suppressed });
+                            }}
+                            className="text-ghost-muted hover:text-ghost-error ml-0.5"
+                            aria-label={`Un-suppress ${word}`}
+                          >
+                            &times;
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
               </>
             )}
 

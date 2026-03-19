@@ -34,8 +34,8 @@ describe('DEFAULT_CONFIG', () => {
     expect(DEFAULT_CONFIG.localModelVariant).toBe('int8');
   });
 
-  it('sets diffPreviewMode to passive by default', () => {
-    expect(DEFAULT_CONFIG.diffPreviewMode).toBe('passive');
+  it('sets diffPreviewMode to interactive by default', () => {
+    expect(DEFAULT_CONFIG.diffPreviewMode).toBe('interactive');
   });
 
   it('sets passivePreviewSeconds to 5 by default', () => {
@@ -68,6 +68,24 @@ describe('DEFAULT_CONFIG', () => {
 
   it('does NOT have a hotkeyAccelerator property', () => {
     expect(DEFAULT_CONFIG).not.toHaveProperty('hotkeyAccelerator');
+  });
+
+  it('has appToneOverrides default as empty object', () => {
+    expect(DEFAULT_CONFIG.appToneOverrides).toEqual({});
+  });
+
+  it('has meetingModeEnabled default as true', () => {
+    expect(DEFAULT_CONFIG.meetingModeEnabled).toBe(true);
+  });
+
+  it('has meetingApps default with common meeting apps', () => {
+    expect(DEFAULT_CONFIG.meetingApps).toContain('Zoom');
+    expect(DEFAULT_CONFIG.meetingApps).toContain('FaceTime');
+    expect(DEFAULT_CONFIG.meetingApps.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('has suppressedSuggestions default as empty object', () => {
+    expect(DEFAULT_CONFIG.suppressedSuggestions).toEqual({});
   });
 });
 

@@ -76,6 +76,11 @@ describe('IPC channels', () => {
     expect(IPC.INFERENCE_COMMAND).toBe('inference:command');
     expect(IPC.INFERENCE_RESULT).toBe('inference:result');
   });
+
+  it('includes RE_CORRECT and DISMISS_SUGGESTION channels', () => {
+    expect(IPC.RE_CORRECT).toBe('re-correct');
+    expect(IPC.DISMISS_SUGGESTION).toBe('dismiss-suggestion');
+  });
 });
 
 describe('AppConfig type', () => {
@@ -111,6 +116,15 @@ describe('AppConfig type', () => {
       trafficLightInactivityMs: 3000,
       lineHotkeyAccelerator: 'CommandOrControl+L',
       backgroundModelRefinement: false,
+      streakDates: [],
+      dailyDigestEnabled: true,
+      settingsMode: 'simple',
+      monitoringAppFilter: 'all',
+      monitoringAppWhitelist: [],
+      appToneOverrides: {},
+      meetingModeEnabled: true,
+      meetingApps: ['Zoom', 'Microsoft Teams', 'Google Meet', 'Webex', 'FaceTime'],
+      suppressedSuggestions: {},
     };
     expect(config.firstRunComplete).toBe(false);
     expect(config.localModelSpeed).toBe('fast');
@@ -148,6 +162,15 @@ describe('AppConfig type', () => {
       trafficLightInactivityMs: 3000,
       lineHotkeyAccelerator: 'CommandOrControl+L',
       backgroundModelRefinement: false,
+      streakDates: [],
+      dailyDigestEnabled: true,
+      settingsMode: 'simple',
+      monitoringAppFilter: 'all',
+      monitoringAppWhitelist: [],
+      appToneOverrides: {},
+      meetingModeEnabled: true,
+      meetingApps: ['Zoom', 'Microsoft Teams', 'Google Meet', 'Webex', 'FaceTime'],
+      suppressedSuggestions: {},
     };
     expect(config.localHotkeyAccelerator).toBe('CommandOrControl+E');
     expect(config.cliHotkeyAccelerator).toBe('CommandOrControl+Shift+E');
@@ -185,6 +208,15 @@ describe('AppConfig type', () => {
       trafficLightInactivityMs: 3000,
       lineHotkeyAccelerator: 'CommandOrControl+L',
       backgroundModelRefinement: false,
+      streakDates: [],
+      dailyDigestEnabled: true,
+      settingsMode: 'simple',
+      monitoringAppFilter: 'all',
+      monitoringAppWhitelist: [],
+      appToneOverrides: {},
+      meetingModeEnabled: true,
+      meetingApps: ['Zoom', 'Microsoft Teams', 'Google Meet', 'Webex', 'FaceTime'],
+      suppressedSuggestions: {},
     };
     // Runtime check: no hotkeyAccelerator key
     expect(config).not.toHaveProperty('hotkeyAccelerator');

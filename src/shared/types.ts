@@ -46,6 +46,15 @@ export interface AppConfig {
   trafficLightInactivityMs: number;
   lineHotkeyAccelerator: string;
   backgroundModelRefinement: boolean;
+  streakDates: string[]; // ISO date strings (YYYY-MM-DD) of days with corrections
+  dailyDigestEnabled: boolean;
+  settingsMode: 'simple' | 'advanced';
+  monitoringAppFilter: 'all' | 'whitelist';
+  monitoringAppWhitelist: string[];
+  appToneOverrides: Record<string, TonePreset>;
+  meetingModeEnabled: boolean;
+  meetingApps: string[];
+  suppressedSuggestions: Record<string, number>;
 }
 
 export type TonePreset = 'default' | 'casual' | 'professional' | 'academic' | 'slack';
@@ -190,13 +199,14 @@ export const IPC = {
   GET_PERSONAL_DICTIONARY: 'get-personal-dictionary',
   SAVE_PERSONAL_DICTIONARY: 'save-personal-dictionary',
   GET_USAGE_STATS: 'get-usage-stats',
-  TRAFFIC_LIGHT_UPDATE: 'traffic-light-update',
-  TRAFFIC_LIGHT_HIDE: 'traffic-light-hide',
-  TRAFFIC_LIGHT_CLICKED: 'traffic-light-clicked',
   SUGGESTIONS_UPDATE: 'suggestions-update',
   APPLY_FIX: 'apply-fix',
   APPLY_ALL_FIXES: 'apply-all-fixes',
   CHECK_ACCESSIBILITY: 'check-accessibility',
+  CORRECT_INLINE: 'correct-inline',
+  EXPLAIN_DIFF: 'explain-diff',
+  RE_CORRECT: 're-correct',
+  DISMISS_SUGGESTION: 'dismiss-suggestion',
 } as const;
 
 // ── Dictionary Checker ──
@@ -219,7 +229,7 @@ export interface DictionaryPrePassResult {
 
 // ── Window Types ──
 
-export type WindowType = 'settings' | 'history' | 'hud' | 'streaming-preview' | 'traffic-light' | 'suggestions';
+export type WindowType = 'settings' | 'history' | 'hud' | 'streaming-preview' | 'suggestions';
 
 // ── Traffic Light ──
 

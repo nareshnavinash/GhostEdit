@@ -29,6 +29,8 @@ export default function History() {
   const [tab, setTab] = useState<Tab>('history');
   const [copied, setCopied] = useState<'original' | 'corrected' | null>(null);
   const [showDiff, setShowDiff] = useState(false);
+  const [reCorrectResult, setReCorrectResult] = useState<string | null>(null);
+  const [reCorrectLoading, setReCorrectLoading] = useState(false);
 
   useEffect(() => {
     window.ghostedit.getHistory().then((h) => setEntries(h.reverse()));
@@ -76,6 +78,25 @@ export default function History() {
     setCopied(which);
     setTimeout(() => setCopied(null), 1500);
   }, []);
+
+  const handleReCorrect = useCallback(async () => {
+    if (!selected || reCorrectLoading) return;
+    setReCorrectLoading(true);
+    setReCorrectResult(null);
+    try {
+      const result = await window.ghostedit.reCorrect(selected.originalText);
+      if (result.success && result.text) {
+        setReCorrectResult(result.text);
+      }
+    } finally {
+      setReCorrectLoading(false);
+    }
+  }, [selected, reCorrectLoading]);
+
+  const reCorrectDiffSegments = useMemo(
+    () => (selected && reCorrectResult ? computeDiff(selected.originalText, reCorrectResult) : []),
+    [selected, reCorrectResult],
+  );
 
   const diffSegments = useMemo(
     () => (selected && showDiff ? computeDiff(selected.originalText, selected.generatedText) : []),
@@ -193,7 +214,7 @@ export default function History() {
               {filtered.map((entry) => (
                 <button
                   key={entry.id}
-                  onClick={() => { setSelected(entry); setShowDiff(false); }}
+                  onClick={() => { setSelected(entry); setShowDiff(false); setReCorrectResult(null); }}
                   className={`w-full text-left p-3 border-b border-white/5 hover:bg-white/5 transition-colors ${
                     selected?.id === entry.id ? 'bg-white/10' : ''
                   }`}
@@ -226,7 +247,7 @@ export default function History() {
             <div className="w-1/2 overflow-y-auto p-4">
               {selected ? (
                 <div className="space-y-4">
-                  {/* Diff toggle */}
+                  {/* Diff toggle + Re-correct */}
                   {selected.succeeded && selected.generatedText && (
                     <div className="flex items-center gap-2">
                       <button
@@ -238,6 +259,13 @@ export default function History() {
                         }`}
                       >
                         {showDiff ? 'Hide Diff' : 'Show Diff'}
+                      </button>
+                      <button
+                        onClick={handleReCorrect}
+                        disabled={reCorrectLoading}
+                        className="text-xs font-medium px-2.5 py-1 rounded-lg bg-white/5 text-ghost-muted hover:text-white/70 transition-colors disabled:opacity-50"
+                      >
+                        {reCorrectLoading ? 'Re-correcting...' : 'Re-correct'}
                       </button>
                     </div>
                   )}
@@ -290,6 +318,30 @@ export default function History() {
                         </p>
                       </div>
                     </>
+                  )}
+
+                  {/* Re-correct result */}
+                  {reCorrectResult && (
+                    <div className="space-y-2 border-t border-white/10 pt-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-medium text-blue-400 uppercase">Re-corrected</h3>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(reCorrectResult);
+                            setCopied('corrected');
+                            setTimeout(() => setCopied(null), 1500);
+                          }}
+                          className="text-xs text-blue-400 hover:text-blue-300 px-1.5 py-0.5"
+                        >
+                          {copied === 'corrected' ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      {reCorrectDiffSegments.length > 0 && (
+                        <div className="selectable-text bg-white/5 rounded p-2">
+                          <DiffView segments={reCorrectDiffSegments} side="corrected" />
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   <div className="flex gap-4 text-xs text-ghost-muted">

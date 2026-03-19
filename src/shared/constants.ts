@@ -91,7 +91,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   notifyOnSuccess: false,
   clipboardOnlyMode: false,
   tonePreset: 'default',
-  diffPreviewMode: 'passive',
+  diffPreviewMode: 'interactive',
   passivePreviewSeconds: 5,
   autoPasteDelaySeconds: 5,
   localModelVariant: 'int8',
@@ -102,6 +102,15 @@ export const DEFAULT_CONFIG: AppConfig = {
   trafficLightInactivityMs: 3000,
   lineHotkeyAccelerator: 'CommandOrControl+L',
   backgroundModelRefinement: false,
+  streakDates: [],
+  dailyDigestEnabled: true,
+  settingsMode: 'simple',
+  monitoringAppFilter: 'all',
+  monitoringAppWhitelist: [],
+  appToneOverrides: {},
+  meetingModeEnabled: true,
+  meetingApps: ['Zoom', 'Microsoft Teams', 'Google Meet', 'Webex', 'FaceTime'],
+  suppressedSuggestions: {},
 };
 
 // ── Tone Preset Prompts ──

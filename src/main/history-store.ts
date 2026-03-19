@@ -67,6 +67,75 @@ export function lastSuccessfulEntry(): CorrectionHistoryEntry | null {
   return null;
 }
 
+/**
+ * Record today's date in the streak and return the current streak length.
+ * Keeps only the last 90 dates to avoid unbounded growth.
+ */
+export function updateStreak(streakDates: string[]): { streakDates: string[]; streakCount: number } {
+  const today = new Date().toISOString().split('T')[0];
+  const dates = new Set(streakDates);
+  dates.add(today);
+
+  // Sort descending and compute consecutive day streak from today
+  const sorted = [...dates].sort().reverse();
+  let streakCount = 0;
+  const now = new Date(today);
+
+  for (let i = 0; i < sorted.length; i++) {
+    const expected = new Date(now);
+    expected.setDate(expected.getDate() - i);
+    const expectedStr = expected.toISOString().split('T')[0];
+    if (sorted[i] === expectedStr) {
+      streakCount++;
+    } else {
+      break;
+    }
+  }
+
+  // Keep only last 90 entries
+  const trimmed = sorted.slice(0, 90);
+
+  return { streakDates: trimmed, streakCount };
+}
+
+export interface TodayStats {
+  count: number;
+  spellingFixes: number;
+  grammarFixes: number;
+  successRate: number;
+}
+
+export function getTodayStats(): TodayStats {
+  const entries = ensureLoaded();
+  const today = new Date().toISOString().split('T')[0];
+  const todayEntries = entries.filter((e) => e.timestamp.startsWith(today));
+
+  if (todayEntries.length === 0) {
+    return { count: 0, spellingFixes: 0, grammarFixes: 0, successRate: 0 };
+  }
+
+  const succeeded = todayEntries.filter((e) => e.succeeded).length;
+  const successRate = Math.round((succeeded / todayEntries.length) * 100);
+
+  // Estimate spelling vs grammar by diffing original and corrected text
+  let spellingFixes = 0;
+  let grammarFixes = 0;
+  for (const entry of todayEntries) {
+    if (!entry.succeeded || !entry.originalText || !entry.generatedText) continue;
+    const origWords = entry.originalText.split(/\s+/);
+    const genWords = entry.generatedText.split(/\s+/);
+    if (origWords.length === genWords.length) {
+      // Same word count: likely spelling fixes
+      spellingFixes++;
+    } else {
+      // Word count changed: likely grammar/restructuring
+      grammarFixes++;
+    }
+  }
+
+  return { count: todayEntries.length, spellingFixes, grammarFixes, successRate };
+}
+
 export function computeUsageStats(): UsageStats {
   const entries = ensureLoaded();
   const successful = entries.filter((e) => e.succeeded);

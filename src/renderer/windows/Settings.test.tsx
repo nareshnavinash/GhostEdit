@@ -43,6 +43,7 @@ beforeEach(() => {
   window.ghostedit.getConfig = vi.fn().mockResolvedValue({
     ...DEFAULT_CONFIG,
     firstRunComplete: true,
+    settingsMode: 'advanced',
   }) as any;
   window.ghostedit.getCLIStatus = vi.fn().mockResolvedValue({}) as any;
   window.ghostedit.getLocalModelStatus = vi.fn().mockResolvedValue({
@@ -303,6 +304,7 @@ describe('Settings component', () => {
     window.ghostedit.getConfig = vi.fn().mockResolvedValue({
       ...DEFAULT_CONFIG,
       firstRunComplete: true,
+      settingsMode: 'advanced',
       diffPreviewMode: 'interactive',
     }) as any;
 
@@ -321,6 +323,7 @@ describe('Settings component', () => {
     window.ghostedit.getConfig = vi.fn().mockResolvedValue({
       ...DEFAULT_CONFIG,
       firstRunComplete: true,
+      settingsMode: 'advanced',
       diffPreviewMode: 'none',
     }) as any;
 
@@ -340,6 +343,7 @@ describe('Settings component', () => {
     window.ghostedit.getConfig = vi.fn().mockResolvedValue({
       ...DEFAULT_CONFIG,
       firstRunComplete: true,
+      settingsMode: 'advanced',
       diffPreviewMode: 'passive',
     }) as any;
 
@@ -358,6 +362,7 @@ describe('Settings component', () => {
     window.ghostedit.getConfig = vi.fn().mockResolvedValue({
       ...DEFAULT_CONFIG,
       firstRunComplete: true,
+      settingsMode: 'advanced',
       diffPreviewMode: 'interactive',
     }) as any;
 

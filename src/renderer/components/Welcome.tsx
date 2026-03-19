@@ -7,6 +7,8 @@ interface WelcomeProps {
   onComplete: (updates: Partial<AppConfig>) => void;
 }
 
+const SAMPLE_TEXT = "Ths is a tset of GhostEdit's corection engine.";
+
 const STEPS = [
   {
     title: 'GhostEdit lives in your menu bar',
@@ -15,17 +17,26 @@ const STEPS = [
   },
   {
     title: 'Select text anywhere, then press your hotkey',
-    description: null, // dynamic — will show the configured hotkey
+    description: null,
   },
   {
     title: 'Choose your AI provider',
-    description: null, // dynamic — provider picker
+    description: null,
+  },
+  {
+    title: 'Try it now',
+    description: null,
   },
 ];
 
 export default function Welcome({ config, onComplete }: WelcomeProps) {
   const [step, setStep] = useState(0);
   const [selectedProvider, setSelectedProvider] = useState<ProviderName>(config.provider);
+
+  // "Try it now" state
+  const [tryText, setTryText] = useState(SAMPLE_TEXT);
+  const [correcting, setCorrecting] = useState(false);
+  const [corrected, setCorrected] = useState(false);
 
   const isLast = step === STEPS.length - 1;
 
@@ -42,6 +53,23 @@ export default function Welcome({ config, onComplete }: WelcomeProps) {
       }
     } else {
       setStep(step + 1);
+    }
+  };
+
+  const handleTryCorrection = async () => {
+    if (correcting) return;
+    setCorrecting(true);
+    setCorrected(false);
+    try {
+      const result = await window.ghostedit.correctInline(tryText);
+      if (result.success && result.text) {
+        setTryText(result.text);
+        setCorrected(true);
+      }
+    } catch {
+      // Silently fail in onboarding
+    } finally {
+      setCorrecting(false);
     }
   };
 
@@ -120,6 +148,44 @@ export default function Welcome({ config, onComplete }: WelcomeProps) {
             <p className="text-xs text-ghost-muted text-center pt-1">
               You can change this later in Settings.
             </p>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="w-full max-w-md space-y-4">
+            <p className="text-sm text-ghost-muted text-center">
+              Edit the text below or use the sample, then click "Fix it" to see GhostEdit in action.
+            </p>
+            <textarea
+              value={tryText}
+              onChange={(e) => { setTryText(e.target.value); setCorrected(false); }}
+              className={`input w-full h-28 resize-none text-[14px] transition-colors ${
+                corrected ? 'border-green-500/50 text-green-300' : ''
+              }`}
+              disabled={correcting}
+            />
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={handleTryCorrection}
+                disabled={correcting || !tryText.trim()}
+                className="px-5 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {correcting ? 'Correcting...' : 'Fix it'}
+              </button>
+              {corrected && !correcting && (
+                <button
+                  onClick={() => { setTryText(SAMPLE_TEXT); setCorrected(false); }}
+                  className="px-4 py-2 rounded-lg text-sm text-ghost-muted hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+            {corrected && (
+              <p className="text-center text-sm text-green-400 animate-content-in">
+                It works! Now try it in any app with your hotkey.
+              </p>
+            )}
           </div>
         )}
       </div>

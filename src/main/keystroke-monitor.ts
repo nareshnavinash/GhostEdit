@@ -20,6 +20,7 @@ let inactivityMs = INACTIVITY_DEFAULT_MS;
 let onBufferChange: ((buffer: string) => void) | null = null;
 let onTypingStarted: (() => void) | null = null;
 let onTypingStopped: (() => void) | null = null;
+let onMouseClick: (() => void) | null = null;
 
 // Printable keycode → character map (US layout, best-effort)
 // uiohook uses scan codes (not virtual key codes).
@@ -60,6 +61,7 @@ const KC_END = 0xCF;
 const KC_ESCAPE = 0x01;
 // Modifier masks
 const MASK_CTRL = 1 << 1;
+const MASK_SHIFT = 1 << 0;
 const MASK_META = 1 << 3;
 
 function getUIOhook() {
@@ -125,9 +127,16 @@ function handleKeyDown(event: any): void {
 
   // Enter
   if (keycode === KC_ENTER) {
-    buffer += '\n';
-    trimBuffer();
-    emitBufferChange();
+    if (shift) {
+      // Shift+Enter = newline without send
+      buffer += '\n';
+      trimBuffer();
+      emitBufferChange();
+    } else {
+      // Bare Enter = "message sent" in most chat apps — clear buffer
+      buffer = '';
+      emitBufferChange();
+    }
     return;
   }
 
@@ -189,6 +198,11 @@ export interface MonitoringCallbacks {
   onBufferChange: (buffer: string) => void;
   onTypingStarted: () => void;
   onTypingStopped: () => void;
+  onMouseClick?: () => void;
+}
+
+function handleMouseDown(): void {
+  onMouseClick?.();
 }
 
 export function startMonitoring(callbacks: MonitoringCallbacks, inactivityTimeout?: number): void {
@@ -197,11 +211,13 @@ export function startMonitoring(callbacks: MonitoringCallbacks, inactivityTimeou
   onBufferChange = callbacks.onBufferChange;
   onTypingStarted = callbacks.onTypingStarted;
   onTypingStopped = callbacks.onTypingStopped;
+  onMouseClick = callbacks.onMouseClick ?? null;
   inactivityMs = inactivityTimeout ?? INACTIVITY_DEFAULT_MS;
 
   try {
     const hook = getUIOhook();
     hook.on('keydown', handleKeyDown);
+    hook.on('mousedown', handleMouseDown);
     hook.start();
     started = true;
     console.log('[GhostEdit] Keystroke monitoring started');
@@ -216,6 +232,7 @@ export function stopMonitoring(): void {
   try {
     const hook = getUIOhook();
     hook.removeListener('keydown', handleKeyDown);
+    hook.removeListener('mousedown', handleMouseDown);
     hook.stop();
   } catch {
     // Swallow — might already be stopped
@@ -232,6 +249,7 @@ export function stopMonitoring(): void {
   onBufferChange = null;
   onTypingStarted = null;
   onTypingStopped = null;
+  onMouseClick = null;
   console.log('[GhostEdit] Keystroke monitoring stopped');
 }
 
@@ -241,6 +259,17 @@ export function getBuffer(): string {
 
 export function clearBuffer(): void {
   buffer = '';
+  emitBufferChange();
+}
+
+/** Full reset: clears buffer, typing flags, and inactivity timer. */
+export function resetTypingState(): void {
+  buffer = '';
+  typingActive = false;
+  if (inactivityTimer) {
+    clearTimeout(inactivityTimer);
+    inactivityTimer = null;
+  }
   emitBufferChange();
 }
 
