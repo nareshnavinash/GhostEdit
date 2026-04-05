@@ -1,5 +1,6 @@
 import { correctText as correctTextCLI, correctTextStreaming as correctTextStreamingCLI } from './cli-runner';
 import { correctTextLocal, correctTextLocalStreaming } from './local-model-runner';
+import { correctTextBonsai, correctTextBonsaiStreaming } from './bonsai-inference';
 import type { AppConfig, CorrectionResult } from '../shared/types';
 
 export async function correctText(
@@ -8,7 +9,10 @@ export async function correctText(
   config: AppConfig,
 ): Promise<CorrectionResult> {
   if (config.provider === 'local') {
-    return correctTextLocal(systemPrompt, text);
+    if (config.localModelEngine === 't5') {
+      return correctTextLocal(systemPrompt, text);
+    }
+    return correctTextBonsai(systemPrompt, text);
   }
   return correctTextCLI(systemPrompt, text, config);
 }
@@ -20,7 +24,10 @@ export async function correctTextStreaming(
   config: AppConfig,
 ): Promise<CorrectionResult> {
   if (config.provider === 'local') {
-    return correctTextLocalStreaming(systemPrompt, text, onChunk);
+    if (config.localModelEngine === 't5') {
+      return correctTextLocalStreaming(systemPrompt, text, onChunk);
+    }
+    return correctTextBonsaiStreaming(systemPrompt, text, onChunk);
   }
   return correctTextStreamingCLI(systemPrompt, text, onChunk, config);
 }

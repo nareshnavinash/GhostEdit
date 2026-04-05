@@ -112,7 +112,7 @@ describe('Settings component', () => {
     fireEvent.click(within(nav).getByText('Behavior'));
 
     await waitFor(() => {
-      expect(screen.getByText('Fast correction mode')).toBeInTheDocument();
+      expect(screen.getByText('Launch at login')).toBeInTheDocument();
     });
   });
 
@@ -173,13 +173,13 @@ describe('Settings component', () => {
 
   // ── Models Section ──
 
-  it('Models section shows variant info', async () => {
-    window.ghostedit.getLocalModelStatus = vi.fn().mockResolvedValue({
-      ready: true,
-      activeVariant: 'fp32',
-      variants: [
-        { variant: 'fp32', displayName: 'FP32 (Best)', sizeMB: 963, available: true, bundled: true },
+  it('Models section shows engine selector and bonsai model info', async () => {
+    window.ghostedit.getBonsaiStatus = vi.fn().mockResolvedValue({
+      models: [
+        { size: '1.7b', displayName: 'Bonsai 1.7B (Default)', sizeMB: 248, available: true, bundled: true },
+        { size: '4b', displayName: 'Bonsai 4B', sizeMB: 572, available: false, bundled: false },
       ],
+      server: { running: false, port: null, healthy: false, modelSize: null },
     }) as any;
 
     render(<Settings />);
@@ -189,19 +189,18 @@ describe('Settings component', () => {
     fireEvent.click(within(nav).getByText('Models'));
 
     await waitFor(() => {
-      expect(screen.getByText('Active Variant')).toBeInTheDocument();
+      expect(screen.getByText('Correction Engine')).toBeInTheDocument();
     });
     expect(screen.getByText('Bundled')).toBeInTheDocument();
   });
 
-  it('Models section shows Download button for unavailable variants', async () => {
-    window.ghostedit.getLocalModelStatus = vi.fn().mockResolvedValue({
-      ready: true,
-      activeVariant: 'fp32',
-      variants: [
-        { variant: 'fp32', displayName: 'FP32 (Best)', sizeMB: 963, available: true, bundled: true },
-        { variant: 'fp16', displayName: 'FP16 (Fast)', sizeMB: 482, available: false, bundled: false },
+  it('Models section shows Download button for unavailable bonsai models', async () => {
+    window.ghostedit.getBonsaiStatus = vi.fn().mockResolvedValue({
+      models: [
+        { size: '1.7b', displayName: 'Bonsai 1.7B (Default)', sizeMB: 248, available: true, bundled: true },
+        { size: '4b', displayName: 'Bonsai 4B', sizeMB: 572, available: false, bundled: false },
       ],
+      server: { running: false, port: null, healthy: false, modelSize: null },
     }) as any;
 
     render(<Settings />);
@@ -253,19 +252,7 @@ describe('Settings component', () => {
 
   // ── Behavior Section ──
 
-  it('Behavior section shows fast-correction toggle', async () => {
-    render(<Settings />);
-    await waitForSettingsLoaded();
-
-    const nav = getSidebar();
-    fireEvent.click(within(nav).getByText('Behavior'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Fast correction mode')).toBeInTheDocument();
-    });
-  });
-
-  it('Behavior section shows all 6 toggles', async () => {
+  it('Behavior section hides fast-correction toggle when engine is bonsai', async () => {
     render(<Settings />);
     await waitForSettingsLoaded();
 
@@ -275,7 +262,19 @@ describe('Settings component', () => {
     await waitFor(() => {
       expect(screen.getByText('Launch at login')).toBeInTheDocument();
     });
-    expect(screen.getByText('Fast correction mode')).toBeInTheDocument();
+    expect(screen.queryByText('Fast correction mode')).not.toBeInTheDocument();
+  });
+
+  it('Behavior section shows core toggles', async () => {
+    render(<Settings />);
+    await waitForSettingsLoaded();
+
+    const nav = getSidebar();
+    fireEvent.click(within(nav).getByText('Behavior'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Launch at login')).toBeInTheDocument();
+    });
     expect(screen.getByText('Clipboard-only mode')).toBeInTheDocument();
     expect(screen.getByText('Sound feedback')).toBeInTheDocument();
     expect(screen.getByText('Notify on success')).toBeInTheDocument();

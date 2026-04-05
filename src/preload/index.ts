@@ -8,6 +8,9 @@ import type {
   UsageStats,
   LocalModelInfo,
   LocalModelVariant,
+  BonsaiModelSize,
+  BonsaiModelInfo,
+  BonsaiServerStatus,
   WindowType,
 } from '../shared/types';
 
@@ -102,6 +105,22 @@ const api = {
     const listener = (_event: any, data: { variant: LocalModelVariant; error: string }) => callback(data);
     ipcRenderer.on(IPC.DOWNLOAD_VARIANT_ERROR, listener);
     return () => ipcRenderer.removeListener(IPC.DOWNLOAD_VARIANT_ERROR, listener);
+  },
+
+  // ── Bonsai Model ──
+  getBonsaiStatus: (): Promise<{ models: BonsaiModelInfo[]; server: BonsaiServerStatus }> =>
+    ipcRenderer.invoke(IPC.GET_BONSAI_STATUS),
+  downloadBonsaiModel: (size: BonsaiModelSize): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC.DOWNLOAD_BONSAI_MODEL, size),
+  onDownloadBonsaiProgress: (callback: (data: { size: BonsaiModelSize; progress: number }) => void) => {
+    const listener = (_event: any, data: { size: BonsaiModelSize; progress: number }) => callback(data);
+    ipcRenderer.on(IPC.DOWNLOAD_BONSAI_PROGRESS, listener);
+    return () => ipcRenderer.removeListener(IPC.DOWNLOAD_BONSAI_PROGRESS, listener);
+  },
+  onDownloadBonsaiError: (callback: (data: { size: BonsaiModelSize; error: string }) => void) => {
+    const listener = (_event: any, data: { size: BonsaiModelSize; error: string }) => callback(data);
+    ipcRenderer.on(IPC.DOWNLOAD_BONSAI_ERROR, listener);
+    return () => ipcRenderer.removeListener(IPC.DOWNLOAD_BONSAI_ERROR, listener);
   },
 
   // ── Preview original text (from main → renderer) ──

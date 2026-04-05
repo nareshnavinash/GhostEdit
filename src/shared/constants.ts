@@ -1,4 +1,4 @@
-import type { AppConfig, CLIProvider, TonePreset, ProviderName, LocalModelVariant, DiffPreviewMode, IconPosition } from './types';
+import type { AppConfig, CLIProvider, TonePreset, ProviderName, LocalModelVariant, BonsaiModelSize, DiffPreviewMode, IconPosition } from './types';
 
 // ── CLI Provider Definitions ──
 
@@ -37,9 +37,9 @@ export const CLI_PROVIDERS: Record<string, CLIProvider> = {
 export const LOCAL_PROVIDER = {
   name: 'local' as const,
   displayName: 'Built-in (Offline)',
-  availableModels: ['t5-grammar'],
-  defaultModel: 't5-grammar',
-  modelRepoId: 'Xenova/t5-base-grammar-correction',
+  availableModels: ['bonsai-1.7b', 'bonsai-4b', 'bonsai-8b', 't5-grammar'],
+  defaultModel: 'bonsai-1.7b',
+  modelRepoId: 'Xenova/t5-base-grammar-correction', // kept for T5 fallback
 };
 
 // ── All Providers (CLI + local) ──
@@ -51,7 +51,42 @@ export const ALL_PROVIDERS: Record<string, { name: ProviderName; displayName: st
   local: LOCAL_PROVIDER,
 };
 
-// ── Model Variant Definitions ──
+// ── Bonsai Model Definitions ──
+
+export const BONSAI_MODELS: readonly { size: BonsaiModelSize; displayName: string; sizeMB: number }[] = [
+  { size: '1.7b', displayName: 'Bonsai 1.7B (Default)', sizeMB: 248 },
+  { size: '4b', displayName: 'Bonsai 4B', sizeMB: 572 },
+  { size: '8b', displayName: 'Bonsai 8B', sizeMB: 1150 },
+] as const;
+
+export const DEFAULT_BONSAI_MODEL: BonsaiModelSize = '1.7b';
+
+export const BONSAI_GGUF_FILES: Record<BonsaiModelSize, string> = {
+  '1.7b': 'Bonsai-1.7B.gguf',
+  '4b': 'Bonsai-4B.gguf',
+  '8b': 'Bonsai-8B.gguf',
+};
+
+export const BONSAI_HF_REPOS: Record<BonsaiModelSize, string> = {
+  '1.7b': 'prism-ml/Bonsai-1.7B-gguf',
+  '4b': 'prism-ml/Bonsai-4B-gguf',
+  '8b': 'prism-ml/Bonsai-8B-gguf',
+};
+
+export const BONSAI_DEFAULT_SYSTEM_PROMPT = 'You are an English teacher helping a student. Read the following text and return a corrected version with proper grammar, spelling, and punctuation. Return only the corrected text, nothing else.';
+
+export const LLAMA_SERVER_CONFIG = {
+  ctxSize: 4096,
+  batchSize: 512,
+  nGpuLayers: 99,
+  healthPollMs: 500,
+  healthTimeoutPerAttemptMs: 2000,
+  healthOverallTimeoutMs: 60000,
+  shutdownGracePeriodMs: 5000,
+  idleTimeoutMs: 5 * 60 * 1000,
+};
+
+// ── T5 Model Variant Definitions ──
 
 export const DEFAULT_BUNDLED_VARIANT: LocalModelVariant = 'int8';
 
@@ -76,7 +111,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   codexPath: '',
   geminiPath: '',
   provider: 'local',
-  model: 't5-grammar',
+  model: 'bonsai-1.7b',
+  localModelEngine: 'bonsai',
+  bonsaiModelSize: '1.7b',
   cliProvider: 'claude',
   cliModel: 'sonnet',
   timeoutSeconds: 60,

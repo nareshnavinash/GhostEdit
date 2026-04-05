@@ -49,8 +49,19 @@ vi.mock('./cli-arguments', () => ({
   resolveCLIPath: vi.fn(),
 }));
 
+vi.mock('./bonsai-model-manager', () => ({
+  scanBonsaiModels: vi.fn(() => []),
+  downloadBonsaiModel: vi.fn(),
+}));
+
+vi.mock('./llama-server-manager', () => ({
+  getLlamaServerStatus: vi.fn(() => ({ running: false, port: null, healthy: false, modelSize: null })),
+  stopLlamaServer: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock('../shared/constants', () => ({
   CLI_PROVIDERS: {},
+  DEFAULT_SYSTEM_PROMPT: 'test prompt',
 }));
 
 import { registerIPCHandlers } from './ipc-handlers';
@@ -59,7 +70,7 @@ import { IPC } from '../shared/types';
 beforeEach(() => {
   vi.clearAllMocks();
   Object.keys(handlers).forEach((k) => delete handlers[k]);
-  mockConfigLoad.mockReturnValue({ localModelVariant: 'q4f16' });
+  mockConfigLoad.mockReturnValue({ localModelVariant: 'q4f16', localModelEngine: 'bonsai', bonsaiModelSize: '1.7b' });
   registerIPCHandlers(vi.fn());
 });
 
@@ -73,20 +84,15 @@ function createMockEvent(destroyed = false) {
 }
 
 describe('GET_LOCAL_MODEL_STATUS handler', () => {
-  it('returns model info when ready', async () => {
+  it('returns combined model status with engine info', async () => {
     mockGetLocalModelStatus.mockReturnValue({ ready: true, activeVariant: 'q4f16', variants: [] });
 
     const result = await handlers[IPC.GET_LOCAL_MODEL_STATUS]();
 
-    expect(result).toEqual({ ready: true, activeVariant: 'q4f16', variants: [] });
-  });
-
-  it('returns not ready when model is missing', async () => {
-    mockGetLocalModelStatus.mockReturnValue({ ready: false, activeVariant: 'q4f16', variants: [] });
-
-    const result = await handlers[IPC.GET_LOCAL_MODEL_STATUS]();
-
-    expect(result).toEqual({ ready: false, activeVariant: 'q4f16', variants: [] });
+    expect(result.engine).toBe('bonsai');
+    expect(result.t5).toEqual({ ready: true, activeVariant: 'q4f16', variants: [] });
+    expect(result.bonsai).toBeDefined();
+    expect(result.bonsai.models).toEqual([]);
   });
 });
 

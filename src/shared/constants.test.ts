@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ALL_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDER, DEFAULT_CONFIG, MODEL_VARIANTS, VARIANT_ONNX_FILES, DEFAULT_BUNDLED_VARIANT } from './constants';
+import { ALL_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDER, DEFAULT_CONFIG, MODEL_VARIANTS, VARIANT_ONNX_FILES, DEFAULT_BUNDLED_VARIANT, BONSAI_MODELS, BONSAI_GGUF_FILES, BONSAI_HF_REPOS, BONSAI_DEFAULT_SYSTEM_PROMPT, LLAMA_SERVER_CONFIG } from './constants';
 
 describe('ALL_PROVIDERS', () => {
   it('contains all 4 providers', () => {
@@ -14,8 +14,8 @@ describe('ALL_PROVIDERS', () => {
   it('local has correct displayName, availableModels, defaultModel', () => {
     const local = ALL_PROVIDERS['local'];
     expect(local.displayName).toBe('Built-in (Offline)');
-    expect(local.availableModels).toEqual(['t5-grammar']);
-    expect(local.defaultModel).toBe('t5-grammar');
+    expect(local.availableModels).toEqual(['bonsai-1.7b', 'bonsai-4b', 'bonsai-8b', 't5-grammar']);
+    expect(local.defaultModel).toBe('bonsai-1.7b');
   });
 });
 
@@ -28,6 +28,18 @@ describe('LOCAL_PROVIDER', () => {
 describe('DEFAULT_CONFIG', () => {
   it('uses local as default provider', () => {
     expect(DEFAULT_CONFIG.provider).toBe('local');
+  });
+
+  it('uses bonsai as default local model engine', () => {
+    expect(DEFAULT_CONFIG.localModelEngine).toBe('bonsai');
+  });
+
+  it('uses 1.7b as default bonsai model size', () => {
+    expect(DEFAULT_CONFIG.bonsaiModelSize).toBe('1.7b');
+  });
+
+  it('uses bonsai-1.7b as default model', () => {
+    expect(DEFAULT_CONFIG.model).toBe('bonsai-1.7b');
   });
 
   it('uses int8 as default local model variant', () => {
@@ -142,5 +154,52 @@ describe('VARIANT_ONNX_FILES', () => {
   it('fp32 uses unquantized filenames', () => {
     expect(VARIANT_ONNX_FILES.fp32.encoder).toBe('encoder_model.onnx');
     expect(VARIANT_ONNX_FILES.fp32.decoder).toBe('decoder_model_merged.onnx');
+  });
+});
+
+describe('BONSAI_MODELS', () => {
+  it('contains all 3 bonsai model sizes', () => {
+    expect(BONSAI_MODELS).toHaveLength(3);
+    const sizes = BONSAI_MODELS.map((m) => m.size);
+    expect(sizes).toEqual(['1.7b', '4b', '8b']);
+  });
+
+  it('models are ordered from smallest to largest', () => {
+    const sizes = BONSAI_MODELS.map((m) => m.sizeMB);
+    for (let i = 1; i < sizes.length; i++) {
+      expect(sizes[i]).toBeGreaterThan(sizes[i - 1]);
+    }
+  });
+});
+
+describe('BONSAI_GGUF_FILES', () => {
+  it('has entries for all 3 sizes', () => {
+    expect(BONSAI_GGUF_FILES['1.7b']).toBe('Bonsai-1.7B.gguf');
+    expect(BONSAI_GGUF_FILES['4b']).toBe('Bonsai-4B.gguf');
+    expect(BONSAI_GGUF_FILES['8b']).toBe('Bonsai-8B.gguf');
+  });
+});
+
+describe('BONSAI_HF_REPOS', () => {
+  it('has HuggingFace repos for all sizes', () => {
+    expect(BONSAI_HF_REPOS['1.7b']).toContain('prism-ml');
+    expect(BONSAI_HF_REPOS['4b']).toContain('prism-ml');
+    expect(BONSAI_HF_REPOS['8b']).toContain('prism-ml');
+  });
+});
+
+describe('BONSAI_DEFAULT_SYSTEM_PROMPT', () => {
+  it('is the Teacher prompt', () => {
+    expect(BONSAI_DEFAULT_SYSTEM_PROMPT).toContain('English teacher');
+    expect(BONSAI_DEFAULT_SYSTEM_PROMPT).toContain('corrected version');
+  });
+});
+
+describe('LLAMA_SERVER_CONFIG', () => {
+  it('has required server configuration', () => {
+    expect(LLAMA_SERVER_CONFIG.ctxSize).toBe(4096);
+    expect(LLAMA_SERVER_CONFIG.batchSize).toBe(512);
+    expect(LLAMA_SERVER_CONFIG.nGpuLayers).toBe(99);
+    expect(LLAMA_SERVER_CONFIG.idleTimeoutMs).toBe(300000);
   });
 });

@@ -10,6 +10,7 @@ import {
   PERSONAL_DICTIONARY_FILE_NAME,
   DEFAULT_CONFIG,
   DEFAULT_SYSTEM_PROMPT,
+  BONSAI_DEFAULT_SYSTEM_PROMPT,
   CLI_PROVIDERS,
 } from '../shared/constants';
 
@@ -36,7 +37,10 @@ class ConfigManager {
       this.writeConfigFile(DEFAULT_CONFIG);
     }
     if (!fs.existsSync(this.promptPath)) {
-      fs.writeFileSync(this.promptPath, DEFAULT_SYSTEM_PROMPT, 'utf-8');
+      const defaultPrompt = DEFAULT_CONFIG.localModelEngine === 'bonsai'
+        ? BONSAI_DEFAULT_SYSTEM_PROMPT
+        : DEFAULT_SYSTEM_PROMPT;
+      fs.writeFileSync(this.promptPath, defaultPrompt, 'utf-8');
     }
   }
 
@@ -69,6 +73,16 @@ class ConfigManager {
       // Migrate: fp32 is no longer bundled — switch to int8 default
       if (parsed.localModelVariant === 'fp32') {
         parsed.localModelVariant = 'int8';
+      }
+      // Migrate: add bonsai engine fields
+      if (!('localModelEngine' in parsed)) {
+        parsed.localModelEngine = 'bonsai';
+      }
+      if (!('bonsaiModelSize' in parsed)) {
+        parsed.bonsaiModelSize = '1.7b';
+      }
+      if (parsed.model === 't5-grammar' && parsed.provider === 'local') {
+        parsed.model = 'bonsai-1.7b';
       }
       // Merge with defaults so new keys are always present
       const config: AppConfig = { ...DEFAULT_CONFIG, ...parsed };

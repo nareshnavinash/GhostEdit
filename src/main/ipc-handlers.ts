@@ -1,12 +1,14 @@
 import { ipcMain, dialog, type BrowserWindow } from 'electron';
 import * as fs from 'node:fs';
-import { IPC, type AppConfig, type CorrectionHistoryEntry, type LocalModelVariant, type WindowType } from '../shared/types';
+import { IPC, type AppConfig, type CorrectionHistoryEntry, type LocalModelVariant, type BonsaiModelSize, type WindowType } from '../shared/types';
 import { configManager } from './config-manager';
 import { correctText, correctTextStreaming } from './correction-dispatcher';
 import { getLocalModelStatus, invalidatePipeline, downloadVariant } from './local-model-runner';
+import { scanBonsaiModels, downloadBonsaiModel } from './bonsai-model-manager';
+import { getLlamaServerStatus, stopLlamaServer } from './llama-server-manager';
 import { loadHistory, clearHistory, computeUsageStats } from './history-store';
 import { resolveCLIPath } from './cli-arguments';
-import { CLI_PROVIDERS, DEFAULT_SYSTEM_PROMPT } from '../shared/constants';
+import { CLI_PROVIDERS, DEFAULT_SYSTEM_PROMPT, BONSAI_DEFAULT_SYSTEM_PROMPT } from '../shared/constants';
 import { getCachedDevice } from './device-selector';
 import { getErrors } from './error-log';
 import { reloadPersonalDictionary } from './dictionary-checker';
@@ -22,11 +24,18 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
     return configManager.load();
   });
 
-  ipcMain.handle(IPC.SAVE_CONFIG, (_event, config: AppConfig) => {
+  ipcMain.handle(IPC.SAVE_CONFIG, async (_event, config: AppConfig) => {
     const previous = configManager.load();
     configManager.save(config);
     if (previous.localModelVariant !== config.localModelVariant) {
       invalidatePipeline();
+    }
+    // Stop llama-server when switching away from bonsai or changing model size
+    if (
+      (previous.localModelEngine === 'bonsai' && config.localModelEngine !== 'bonsai') ||
+      (previous.bonsaiModelSize !== config.bonsaiModelSize)
+    ) {
+      await stopLlamaServer().catch(() => {});
     }
     ipcMain.emit('config-changed');
     return { success: true };
@@ -105,7 +114,39 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
 
   // ── Local Model ──
   ipcMain.handle(IPC.GET_LOCAL_MODEL_STATUS, () => {
-    return getLocalModelStatus();
+    const config = configManager.load();
+    return {
+      engine: config.localModelEngine,
+      t5: getLocalModelStatus(),
+      bonsai: {
+        models: scanBonsaiModels(),
+        server: getLlamaServerStatus(),
+      },
+    };
+  });
+
+  // ── Bonsai Model ──
+  ipcMain.handle(IPC.GET_BONSAI_STATUS, () => {
+    return {
+      models: scanBonsaiModels(),
+      server: getLlamaServerStatus(),
+    };
+  });
+
+  ipcMain.handle(IPC.DOWNLOAD_BONSAI_MODEL, async (event, size: BonsaiModelSize) => {
+    try {
+      await downloadBonsaiModel(size, (progress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC.DOWNLOAD_BONSAI_PROGRESS, { size, progress });
+        }
+      });
+      return { success: true };
+    } catch (err) {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(IPC.DOWNLOAD_BONSAI_ERROR, { size, error: String(err) });
+      }
+      return { success: false, error: String(err) };
+    }
   });
 
   // ── Inference Device ──
@@ -168,9 +209,13 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
 
   // ── System Prompt ──
   ipcMain.handle(IPC.GET_SYSTEM_PROMPT, () => {
+    const config = configManager.load();
+    const engineDefault = config.localModelEngine === 'bonsai'
+      ? BONSAI_DEFAULT_SYSTEM_PROMPT
+      : DEFAULT_SYSTEM_PROMPT;
     return {
       prompt: configManager.loadSystemPrompt(),
-      defaultPrompt: DEFAULT_SYSTEM_PROMPT,
+      defaultPrompt: engineDefault,
     };
   });
 
@@ -215,10 +260,13 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
     try {
       const config = configManager.load();
       const prompt = `Explain in 10 words or fewer why "${original}" was changed to "${corrected}". Be specific about the grammar or spelling rule.`;
+      const localModel = config.localModelEngine === 'bonsai'
+        ? `bonsai-${config.bonsaiModelSize}`
+        : 't5-grammar';
       const result = await correctText(prompt, '', {
         ...config,
         provider: config.provider === 'local' ? 'local' : config.cliProvider,
-        model: config.provider === 'local' ? 't5-grammar' : config.cliModel,
+        model: config.provider === 'local' ? localModel : config.cliModel,
       });
       return { success: true, explanation: result.text };
     } catch {
@@ -236,10 +284,13 @@ export function registerIPCHandlers(openWindow: WindowOpener): void {
   ipcMain.handle(IPC.CORRECT_INLINE, async (_event, text: string) => {
     try {
       const config = configManager.load();
+      const localModel = config.localModelEngine === 'bonsai'
+        ? `bonsai-${config.bonsaiModelSize}`
+        : 't5-grammar';
       const result = await correctText(
         'You are a grammar correction assistant. Fix grammar, spelling, and punctuation in the provided text. Return ONLY the corrected text, nothing else.',
         text,
-        { ...config, provider: 'local', model: 't5-grammar' },
+        { ...config, provider: 'local', model: localModel },
       );
       return { success: true, text: result.text };
     } catch (err: any) {

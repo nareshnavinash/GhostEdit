@@ -5,3 +5,4 @@ out/
 *.js.map
 .DS_Store
 resources/models/
+resources/bin/

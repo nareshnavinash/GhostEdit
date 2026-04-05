@@ -38,6 +38,8 @@ export interface AppConfig {
   diffPreviewMode: DiffPreviewMode;
   passivePreviewSeconds: number;
   autoPasteDelaySeconds: number;
+  localModelEngine: LocalModelEngine;
+  bonsaiModelSize: BonsaiModelSize;
   localModelVariant: LocalModelVariant;
   localModelSpeed: 'fast' | 'quality';
   firstRunComplete: boolean;
@@ -148,6 +150,9 @@ export interface ShellRunnerError {
 
 // ── Local Model ──
 
+export type LocalModelEngine = 'bonsai' | 't5';
+export type BonsaiModelSize = '1.7b' | '4b' | '8b';
+
 export type LocalModelVariant = 'q4f16' | 'int8' | 'fp16' | 'fp32';
 
 export interface LocalModelVariantInfo {
@@ -162,6 +167,23 @@ export interface LocalModelInfo {
   ready: boolean;
   activeVariant: LocalModelVariant;
   variants: LocalModelVariantInfo[];
+}
+
+// ── Bonsai Model ──
+
+export interface BonsaiModelInfo {
+  size: BonsaiModelSize;
+  displayName: string;
+  sizeMB: number;
+  available: boolean;
+  bundled: boolean;
+}
+
+export interface BonsaiServerStatus {
+  running: boolean;
+  port: number | null;
+  healthy: boolean;
+  modelSize: BonsaiModelSize | null;
 }
 
 // ── IPC Channel Names ──
@@ -207,6 +229,10 @@ export const IPC = {
   EXPLAIN_DIFF: 'explain-diff',
   RE_CORRECT: 're-correct',
   DISMISS_SUGGESTION: 'dismiss-suggestion',
+  GET_BONSAI_STATUS: 'get-bonsai-status',
+  DOWNLOAD_BONSAI_MODEL: 'download-bonsai-model',
+  DOWNLOAD_BONSAI_PROGRESS: 'download-bonsai-progress',
+  DOWNLOAD_BONSAI_ERROR: 'download-bonsai-error',
 } as const;
 
 // ── Dictionary Checker ──

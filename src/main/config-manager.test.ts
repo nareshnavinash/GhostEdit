@@ -163,6 +163,27 @@ describe('ConfigManager.load', () => {
     expect(config.localModelVariant).toBe('fp16');
   });
 
+  it('migrates: adds localModelEngine and bonsaiModelSize for old configs', async () => {
+    const cm = await freshModule();
+    const data = JSON.stringify({ provider: 'local', model: 't5-grammar' });
+    mockReadFileSync.mockReturnValue(data);
+
+    const config = cm.load();
+    expect(config.localModelEngine).toBe('bonsai');
+    expect(config.bonsaiModelSize).toBe('1.7b');
+    expect(config.model).toBe('bonsai-1.7b');
+  });
+
+  it('preserves existing localModelEngine when already set', async () => {
+    const cm = await freshModule();
+    const data = JSON.stringify({ localModelEngine: 't5', bonsaiModelSize: '4b', model: 'bonsai-4b' });
+    mockReadFileSync.mockReturnValue(data);
+
+    const config = cm.load();
+    expect(config.localModelEngine).toBe('t5');
+    expect(config.bonsaiModelSize).toBe('4b');
+  });
+
   it('returns DEFAULT_CONFIG on file read error', async () => {
     const cm = await freshModule();
     mockReadFileSync.mockImplementation(() => { throw new Error('ENOENT'); });

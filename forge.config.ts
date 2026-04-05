@@ -107,6 +107,15 @@ const config: ForgeConfig = {
         fs.cpSync(src, dest, { recursive: true });
       }
       console.log(`[forge hook] Copied ${packages.size} external packages to build`);
+
+      // Set llama-server binary as executable on unix
+      if (process.platform !== 'win32') {
+        const binDir = path.join(buildPath, '..', 'bin');
+        const llamaBin = path.join(binDir, 'llama-server');
+        if (fs.existsSync(llamaBin)) {
+          fs.chmodSync(llamaBin, 0o755);
+        }
+      }
     },
   },
   packagerConfig: {
@@ -116,7 +125,7 @@ const config: ForgeConfig = {
     asar: {
       unpack: '{**/*.node,**/*.dylib,**/*.so,**/*.so.*,**/*.dll}',
     },
-    extraResource: ['./resources/models', './assets/MenuBarIconIdle.png', './assets/MenuBarIconProcessing.png'],
+    extraResource: ['./resources/models', './resources/bin', './assets/MenuBarIconIdle.png', './assets/MenuBarIconProcessing.png'],
     extendInfo: {
       LSUIElement: true, // Hide from dock on macOS
     },

@@ -7,6 +7,7 @@ import { registerGlobalShortcuts, refreshGlobalShortcuts, unregisterAll } from '
 import { registerIPCHandlers } from './ipc-handlers';
 import { correctText } from './correction-dispatcher';
 import { preWarmModel } from './local-model-runner';
+import { ensureLlamaServer, shutdownLlamaServer } from './llama-server-manager';
 import { protectTokens, restoreTokens, bestEffortRestore, placeholdersAreIntact, getPlaceholderRanges, getOriginalTokenRanges, stripLeakedPlaceholders } from './token-preservation';
 import { dictionaryPrePass, dictionaryPolish } from './dictionary-checker';
 import { appendHistory, lastSuccessfulEntry, updateStreak, getTodayStats } from './history-store';
@@ -282,14 +283,14 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
 
   const config = configManager.load();
   const effectiveConfig = providerOverride
-    ? { ...config, provider: providerOverride, model: modelOverride ?? (providerOverride === 'local' ? 't5-grammar' : config.model) }
+    ? { ...config, provider: providerOverride, model: modelOverride ?? (providerOverride === 'local' ? (config.localModelEngine === 'bonsai' ? `bonsai-${config.bonsaiModelSize}` : 't5-grammar') : config.model) }
     : config;
   const startTime = Date.now();
   let snap: ReturnType<typeof clipboardManager.snapshot> | null = null;
   let selectedText = '';
 
   try {
-    showHUD(effectiveConfig.provider === 'local' ? 'Loading model...' : 'Working...');
+    showHUD('Working...');
 
     // 1. Save clipboard
     snap = clipboardManager.snapshot();
@@ -369,6 +370,8 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
           resolve();
         }
       });
+      // Wait for React to mount and register IPC listeners
+      await new Promise((r) => setTimeout(r, 150));
       previewWin.webContents.send(IPC.SET_PREVIEW_ORIGINAL, selectedText);
       previewWin.webContents.send(IPC.STREAMING_DONE, correctedText);
       previewWin.webContents.send(IPC.SET_PREVIEW_CONFIG, {
@@ -443,14 +446,17 @@ async function performCorrection(providerOverride?: ProviderName, modelOverride?
       // Show passive preview overlay (non-focusable, auto-closes)
       const passiveWin = openPassivePreviewWindow();
       const sendPassiveData = () => {
-        passiveWin.webContents.send(IPC.SET_PREVIEW_ORIGINAL, selectedText);
-        passiveWin.webContents.send(IPC.STREAMING_DONE, correctedText);
-        passiveWin.webContents.send(IPC.SET_PREVIEW_CONFIG, {
-          autoPasteDelaySeconds: 0,
-          diffPreviewMode: 'passive',
-          passivePreviewSeconds: config.passivePreviewSeconds,
-        });
-        passiveWin.showInactive();
+        // Wait for React to mount and register IPC listeners
+        setTimeout(() => {
+          passiveWin.webContents.send(IPC.SET_PREVIEW_ORIGINAL, selectedText);
+          passiveWin.webContents.send(IPC.STREAMING_DONE, correctedText);
+          passiveWin.webContents.send(IPC.SET_PREVIEW_CONFIG, {
+            autoPasteDelaySeconds: 0,
+            diffPreviewMode: 'passive',
+            passivePreviewSeconds: config.passivePreviewSeconds,
+          });
+          passiveWin.showInactive();
+        }, 150);
       };
 
       if (passiveWin.webContents.isLoading()) {
@@ -845,7 +851,16 @@ app.whenReady().then(() => {
   startRealtimeMonitoring();
 
   // Pre-warm the local model in the background (Feature 7: faster cold start)
-  setTimeout(() => preWarmModel(), 3000);
+  setTimeout(() => {
+    const cfg = configManager.load();
+    if (cfg.provider === 'local' && cfg.localModelEngine === 'bonsai') {
+      ensureLlamaServer(cfg.bonsaiModelSize).catch((err) => {
+        console.warn('[GhostEdit] Bonsai pre-warm failed:', err.message);
+      });
+    } else {
+      preWarmModel();
+    }
+  }, 3000);
 
   // Refresh tray/hotkey when config changes
   ipcMain.on('config-changed', () => {
@@ -908,6 +923,7 @@ app.on('will-quit', () => {
   unregisterAll();
   destroyTray();
   stopRealtimeMonitoring();
+  shutdownLlamaServer();
 });
 
 app.on('window-all-closed', () => {
