@@ -774,11 +774,151 @@ describe('isTechCompound', () => {
     expect(isTechCompound('webit', checker)).toBe(false);
   });
 
-  it('rejects words that do not start with a tech prefix', async () => {
+  it('rejects words that do not start with a compound prefix', async () => {
     const { isTechCompound } = await freshModule();
     mockCorrect.mockReturnValue(true);
     const checker = { correct: mockCorrect, suggest: mockSuggest };
     expect(isTechCompound('something', checker)).toBe(false);
+  });
+
+  it('detects compound words with common English prefixes', async () => {
+    const { isTechCompound } = await freshModule();
+    mockCorrect.mockReturnValue(true);
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    expect(isTechCompound('pushback', checker)).toBe(true);
+    expect(isTechCompound('fallback', checker)).toBe(true);
+    expect(isTechCompound('callback', checker)).toBe(true);
+    expect(isTechCompound('kickback', checker)).toBe(true);
+    expect(isTechCompound('setback', checker)).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════
+// levenshteinDistance
+// ═══════════════════════════════════════
+
+describe('levenshteinDistance', () => {
+  it('returns 0 for identical strings', async () => {
+    const { levenshteinDistance } = await freshModule();
+    expect(levenshteinDistance('hello', 'hello')).toBe(0);
+  });
+
+  it('computes distance for single substitution', async () => {
+    const { levenshteinDistance } = await freshModule();
+    expect(levenshteinDistance('teh', 'the')).toBe(2);
+  });
+
+  it('computes distance for pushback vs cashback', async () => {
+    const { levenshteinDistance } = await freshModule();
+    expect(levenshteinDistance('pushback', 'cashback')).toBe(2);
+  });
+
+  it('computes distance for insertion/deletion', async () => {
+    const { levenshteinDistance } = await freshModule();
+    expect(levenshteinDistance('dont', "don't")).toBe(1);
+  });
+
+  it('handles empty strings', async () => {
+    const { levenshteinDistance } = await freshModule();
+    expect(levenshteinDistance('', 'abc')).toBe(3);
+    expect(levenshteinDistance('abc', '')).toBe(3);
+    expect(levenshteinDistance('', '')).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════
+// isSafeNspellSuggestion
+// ═══════════════════════════════════════
+
+describe('isSafeNspellSuggestion', () => {
+  it('rejects pushback -> cashback (first 2 chars differ)', async () => {
+    const { isSafeNspellSuggestion } = await freshModule();
+    expect(isSafeNspellSuggestion('pushback', 'cashback')).toBe(false);
+  });
+
+  it('allows teh -> the (first char matches)', async () => {
+    const { isSafeNspellSuggestion } = await freshModule();
+    expect(isSafeNspellSuggestion('teh', 'the')).toBe(true);
+  });
+
+  it('allows recieve -> receive (first char matches)', async () => {
+    const { isSafeNspellSuggestion } = await freshModule();
+    expect(isSafeNspellSuggestion('recieve', 'receive')).toBe(true);
+  });
+
+  it('allows thier -> their (first char matches)', async () => {
+    const { isSafeNspellSuggestion } = await freshModule();
+    expect(isSafeNspellSuggestion('thier', 'their')).toBe(true);
+  });
+
+  it('allows dont -> don\'t (first char matches)', async () => {
+    const { isSafeNspellSuggestion } = await freshModule();
+    expect(isSafeNspellSuggestion('dont', "don't")).toBe(true);
+  });
+
+  it('allows colour -> color (first char matches)', async () => {
+    const { isSafeNspellSuggestion } = await freshModule();
+    expect(isSafeNspellSuggestion('colour', 'color')).toBe(true);
+  });
+
+  it('rejects suggestions with excessive edit distance', async () => {
+    const { isSafeNspellSuggestion } = await freshModule();
+    expect(isSafeNspellSuggestion('cat', 'elephant')).toBe(false);
+  });
+
+  it('rejects suggestions with excessive length difference', async () => {
+    const { isSafeNspellSuggestion } = await freshModule();
+    expect(isSafeNspellSuggestion('run', 'running')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════
+// applyFixes — nspell guard
+// ═══════════════════════════════════════
+
+describe('applyFixes nspell guard', () => {
+  it('blocks unsafe nspell suggestion (pushback -> cashback)', async () => {
+    const { applyFixes } = await freshModule();
+    const issue: SpellCheckIssue = {
+      word: 'pushback',
+      range: { start: 15, end: 23 },
+      kind: 'spelling',
+      suggestions: ['cashback'],
+      source: 'nspell',
+    };
+    const result = applyFixes('there was some pushback on this', [issue]);
+    expect(result.text).toContain('pushback');
+    expect(result.text).not.toContain('cashback');
+    expect(result.fixCount).toBe(0);
+  });
+
+  it('allows safe nspell suggestion (teh -> the)', async () => {
+    const { applyFixes } = await freshModule();
+    const issue: SpellCheckIssue = {
+      word: 'teh',
+      range: { start: 0, end: 3 },
+      kind: 'spelling',
+      suggestions: ['the'],
+      source: 'nspell',
+    };
+    const result = applyFixes('teh world', [issue]);
+    expect(result.text).toBe('the world');
+    expect(result.fixCount).toBe(1);
+  });
+
+  it('does not guard harper suggestions', async () => {
+    const { applyFixes } = await freshModule();
+    const issue: SpellCheckIssue = {
+      word: 'pushback',
+      range: { start: 15, end: 23 },
+      kind: 'spelling',
+      suggestions: ['cashback'],
+      source: 'harper',
+    };
+    // Harper is context-aware, so its suggestions are trusted
+    const result = applyFixes('there was some pushback on this', [issue]);
+    expect(result.text).toContain('cashback');
+    expect(result.fixCount).toBe(1);
   });
 });
 

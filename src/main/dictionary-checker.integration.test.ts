@@ -363,4 +363,40 @@ describe('heuristic functions with real nspell', () => {
     if (!nspellChecker) return;
     expect(isTechCompound('webxyzq', nspellChecker)).toBe(false);
   });
+
+  it('isTechCompound detects pushback with real checker', () => {
+    if (!nspellChecker) return;
+    expect(isTechCompound('pushback', nspellChecker)).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════
+// Word Substitution Guard Integration
+// ═══════════════════════════════════════
+
+describe('word substitution guard integration', () => {
+  it('does not corrupt pushback to cashback', async () => {
+    const result = await dictionaryPrePass('There was significant pushback on this proposal.', []);
+    expect(result.text).toContain('pushback');
+    expect(result.text).not.toContain('cashback');
+  });
+
+  it('does not corrupt pushback in the original reported sentence', async () => {
+    const result = await dictionaryPrePass(
+      'are we sure that we will not get any pushback on this explanation?',
+      [],
+    );
+    expect(result.text).toContain('pushback');
+    expect(result.text).not.toContain('cashback');
+  });
+
+  it('does not corrupt feedback', async () => {
+    const result = await dictionaryPrePass('Please share your feedback on this document.', []);
+    expect(result.text).toContain('feedback');
+  });
+
+  it('does not corrupt setback', async () => {
+    const result = await dictionaryPrePass('This was a major setback for the team.', []);
+    expect(result.text).toContain('setback');
+  });
 });

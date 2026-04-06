@@ -73,7 +73,7 @@ export const BONSAI_HF_REPOS: Record<BonsaiModelSize, string> = {
   '8b': 'prism-ml/Bonsai-8B-gguf',
 };
 
-export const BONSAI_DEFAULT_SYSTEM_PROMPT = 'You are an English teacher helping a student. Read the following text and return a corrected version with proper grammar, spelling, and punctuation. Return only the corrected text, nothing else.';
+export const BONSAI_DEFAULT_SYSTEM_PROMPT = 'You are an English teacher helping a student. Read the following text and return a corrected version with proper grammar, spelling, and punctuation. Do not change correctly-spelled words to different words. Preserve the original vocabulary and meaning. Return only the corrected text, nothing else.';
 
 export const LLAMA_SERVER_CONFIG = {
   ctxSize: 4096,
@@ -166,7 +166,7 @@ export const TONE_PROMPTS: Record<TonePreset, string> = {
 
 // ── Default System Prompt ──
 
-export const DEFAULT_SYSTEM_PROMPT = `You are a grammar correction assistant. Fix grammar, spelling, and punctuation in the provided text. Return ONLY the corrected text, nothing else. Do not add explanations, notes, or markdown. Preserve the original meaning, tone, and formatting. If the text is already correct, return it as-is.`;
+export const DEFAULT_SYSTEM_PROMPT = `You are a grammar correction assistant. Fix grammar, spelling, and punctuation in the provided text. Do not change correctly-spelled words to different words. Return ONLY the corrected text, nothing else. Do not add explanations, notes, or markdown. Preserve the original meaning, tone, formatting, and vocabulary. If the text is already correct, return it as-is.`;
 
 // ── Config Directory ──
 

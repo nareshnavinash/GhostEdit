@@ -165,10 +165,14 @@ export async function getHarperIssues(linter: any, text: string): Promise<SpellC
 
 // ── Tech Word Heuristics ──
 
-const TECH_PREFIXES = [
+const COMPOUND_PREFIXES = [
+  // Tech prefixes
   'web', 'micro', 'multi', 'auto', 'pre', 'un', 're', 'sub',
   'super', 'over', 'under', 'cross', 'inter', 'semi', 'non',
   'meta', 'pseudo', 'cyber', 'dev',
+  // Common English compound-forming prefixes
+  'push', 'pull', 'call', 'fall', 'feed', 'kick', 'set', 'pay',
+  'cut', 'drop', 'roll', 'back', 'down', 'out', 'up',
 ];
 
 /** Detect camelCase words like `backgroundColor`, `userId`. */
@@ -184,7 +188,7 @@ export function hasEmbeddedDigits(word: string): boolean {
 /** Detect tech compound words where prefix + real English suffix. */
 export function isTechCompound(word: string, checker: any): boolean {
   const lower = word.toLowerCase();
-  for (const prefix of TECH_PREFIXES) {
+  for (const prefix of COMPOUND_PREFIXES) {
     if (lower.startsWith(prefix) && lower.length > prefix.length) {
       const suffix = lower.slice(prefix.length);
       if (suffix.length >= 3 && checker.correct(suffix)) {
@@ -324,6 +328,49 @@ export function filterTechWords(
   });
 }
 
+// ── Suggestion Safety ──
+
+/** Compute Levenshtein edit distance between two strings. */
+export function levenshteinDistance(a: string, b: string): number {
+  const la = a.length;
+  const lb = b.length;
+  const dp: number[] = Array.from({ length: lb + 1 }, (_, i) => i);
+  for (let i = 1; i <= la; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= lb; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[lb];
+}
+
+/**
+ * Check whether an nspell suggestion is safe to auto-apply.
+ * Rejects suggestions that change both the first AND second character,
+ * which indicates a semantically unrelated word (e.g. pushback -> cashback).
+ */
+export function isSafeNspellSuggestion(original: string, suggestion: string): boolean {
+  const o = original.toLowerCase();
+  const s = suggestion.toLowerCase();
+
+  // Reject if both first and second characters differ
+  if (o[0] !== s[0] && o.length > 1 && s.length > 1 && o[1] !== s[1]) return false;
+
+  // Reject if edit distance exceeds reasonable threshold
+  const dist = levenshteinDistance(o, s);
+  const maxDist = o.length <= 6 ? 2 : o.length <= 10 ? 3 : 4;
+  if (dist > maxDist) return false;
+
+  // Reject if length difference is too large
+  const maxLenDiff = o.length < 8 ? 2 : 3;
+  if (Math.abs(o.length - s.length) > maxLenDiff) return false;
+
+  return true;
+}
+
 // ── Fix Application ──
 
 export function applyFixes(
@@ -342,10 +389,11 @@ export function applyFixes(
     const actual = result.slice(issue.range.start, issue.range.end);
     if (actual !== issue.word) continue;
 
-    // Apply first suggestion
+    // Apply first suggestion, but guard nspell suggestions against wild substitutions
     const replacement = issue.suggestions[0];
     if (replacement === undefined) continue;
     if (replacement === actual) continue; // No-op replacement
+    if (issue.source === 'nspell' && !isSafeNspellSuggestion(issue.word, replacement)) continue;
 
     result = result.slice(0, issue.range.start) + replacement + result.slice(issue.range.end);
     fixCount++;
