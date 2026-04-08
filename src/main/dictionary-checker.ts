@@ -180,6 +180,11 @@ export function isCamelCase(word: string): boolean {
   return /^[a-z]+[A-Z]/.test(word);
 }
 
+/** Detect PascalCase words like `StringBuilder`, `HttpClient`. */
+export function isPascalCase(word: string): boolean {
+  return /^[A-Z][a-z]+[A-Z]/.test(word);
+}
+
 /** Detect words with embedded digits like `utf8`, `base64`, `h264`. */
 export function hasEmbeddedDigits(word: string): boolean {
   return /[a-zA-Z]/.test(word) && /\d/.test(word);
@@ -201,7 +206,29 @@ export function isTechCompound(word: string, checker: any): boolean {
 
 /** Returns true if the word should be skipped as a tech/code word. */
 function shouldSkipAsTechWord(word: string, checker: any): boolean {
-  return isCamelCase(word) || hasEmbeddedDigits(word) || isTechCompound(word, checker);
+  return isCamelCase(word) || isPascalCase(word) || hasEmbeddedDigits(word) || isTechCompound(word, checker);
+}
+
+// ── Compound Identifier Detection ──
+
+/** Find ranges of kebab-case and snake_case identifiers in text. */
+export function getCompoundIdentifierRanges(text: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+
+  // Kebab-case: my-component, react-router-dom
+  const kebabRegex = /\b[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z][a-zA-Z0-9]*)+\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = kebabRegex.exec(text)) !== null) {
+    ranges.push({ start: m.index, end: m.index + m[0].length });
+  }
+
+  // Snake_case: user_name, MAX_RETRIES, __init__
+  const snakeRegex = /\b_{0,2}[a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z0-9]+)+_{0,2}\b/g;
+  while ((m = snakeRegex.exec(text)) !== null) {
+    ranges.push({ start: m.index, end: m.index + m[0].length });
+  }
+
+  return ranges;
 }
 
 // ── nspell Issue Extraction ──
@@ -210,6 +237,9 @@ export function getNspellIssues(checker: any, text: string): SpellCheckIssue[] {
   const issues: SpellCheckIssue[] = [];
   const wordRegex = /[a-zA-Z'\u2019]+/g;
   let match: RegExpExecArray | null;
+
+  // Pre-compute compound identifier ranges to skip words inside them
+  const compoundRanges = getCompoundIdentifierRanges(text);
 
   while ((match = wordRegex.exec(text)) !== null) {
     const word = match[0];
@@ -222,7 +252,10 @@ export function getNspellIssues(checker: any, text: string): SpellCheckIssue[] {
     // Skip words that are just apostrophes
     if (/^['\u2019]+$/.test(word)) continue;
 
-    // Skip tech/code words (camelCase, embedded digits, tech compounds)
+    // Skip words that are part of a compound identifier (kebab-case, snake_case)
+    if (compoundRanges.some((r) => start >= r.start && end <= r.end)) continue;
+
+    // Skip tech/code words (camelCase, PascalCase, embedded digits, tech compounds)
     if (shouldSkipAsTechWord(word, checker)) continue;
 
     if (!checker.correct(word)) {
@@ -308,7 +341,15 @@ export function filterTechWords(
   text: string,
   nspellChecker: any | null,
 ): SpellCheckIssue[] {
+  // Pre-compute compound identifier ranges
+  const compoundRanges = getCompoundIdentifierRanges(text);
+
   return issues.filter((issue) => {
+    // Filter issues inside compound identifiers (kebab-case, snake_case)
+    if (compoundRanges.some((r) => issue.range.start >= r.start && issue.range.end <= r.end)) {
+      return false;
+    }
+
     // Look at the full token in the original text containing this issue range
     const fullTokenRegex = /[a-zA-Z0-9]+/g;
     let tokenMatch: RegExpExecArray | null;
@@ -318,7 +359,7 @@ export function filterTechWords(
       // Check if this token contains the issue range
       if (tStart <= issue.range.start && tEnd >= issue.range.end) {
         const fullToken = tokenMatch[0];
-        if (isCamelCase(fullToken) || hasEmbeddedDigits(fullToken)) return false;
+        if (isCamelCase(fullToken) || isPascalCase(fullToken) || hasEmbeddedDigits(fullToken)) return false;
         if (nspellChecker && isTechCompound(fullToken, nspellChecker)) return false;
         break;
       }

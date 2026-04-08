@@ -23,22 +23,34 @@ const TOKEN_PATTERNS: RegExp[] = [
   /(?:~|\/|\.{1,2}\/)(?:[A-Za-z0-9._\-]+\/)*[A-Za-z0-9._\-]+(?:\.[A-Za-z0-9._\-]+)?/g,
   // 5. Folder/file style paths
   /(?:[A-Za-z0-9._\-]+\/){1,}[A-Za-z0-9._\-]+(?:\.[A-Za-z0-9._\-]+)?/g,
-  // 6. Slack-style emoji :emoji_name:
+  // 6. Environment variables: $VAR, ${VAR}
+  /\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/g,
+  // 7. CLI flags: --verbose, --no-cache, -rf
+  /(?<=\s|^)--?[a-zA-Z][a-zA-Z0-9-]*(?:=[^\s]*)?/g,
+  // 8. Version strings: v1.2.3, 1.0.0-beta.1
+  /\bv?\d+\.\d+(?:\.\d+)?(?:-[a-zA-Z0-9.]+)?\b/g,
+  // 9. Slack-style emoji :emoji_name:
   /:[A-Za-z0-9_+\-]+:/g,
-  // 7. Slack special mentions (before @mentions to avoid partial matches)
+  // 10. Slack special mentions (before @mentions to avoid partial matches)
   /<!(?:here|channel|everyone)>/g,
-  // 8. Slack user group mentions
+  // 11. Slack user group mentions
   /<!subteam\^[^|>]+(?:\|[^>]+)?>/g,
-  // 9. @<id> mentions
+  // 12. @<id> mentions
   /(?<![\w@])@<[^>\s]+>/g,
-  // 10. <@id> mentions
+  // 13. <@id> mentions
   /(?<![\w@])<@[A-Za-z0-9][A-Za-z0-9._\-]*>/g,
-  // 11. @name mentions
+  // 14. @name mentions
   /(?<![\w@])@[A-Za-z0-9](?:[A-Za-z0-9._\-]*[A-Za-z0-9_\-])?/g,
-  // 12. #hashtag / #channel names
+  // 15. #hashtag / #channel names
   /(?<![#\w])#[A-Za-z][A-Za-z0-9_\-]*/g,
-  // 13. Jira-style issue keys (PROJ-123)
+  // 16. Jira-style issue keys (PROJ-123)
   /\b[A-Z][A-Z0-9]+-\d+\b/g,
+  // 17. Snake_case identifiers: user_name, MAX_RETRIES, __init__
+  /\b_{0,2}[a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z0-9]+)+_{0,2}\b/g,
+  // 18. Kebab-case identifiers: my-component, react-router-dom
+  /\b[a-zA-Z][a-zA-Z0-9]*(?:-[a-zA-Z][a-zA-Z0-9]*)+\b/g,
+  // 19. Dot-separated qualified names (3+ segments): com.example.app
+  /\b[a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*){2,}\b/g,
 ];
 
 /**

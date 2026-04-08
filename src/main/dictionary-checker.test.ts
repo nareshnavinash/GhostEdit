@@ -973,4 +973,84 @@ describe('getNspellIssues heuristic skips', () => {
     const issues = getNspellIssues(checker, 'I recieved the email');
     expect(issues.find((i) => i.word === 'recieved')).toBeDefined();
   });
+
+  it('skips words inside kebab-case identifiers', async () => {
+    const { getNspellIssues } = await freshModule();
+    mockCorrect.mockImplementation((w) => !['nxt'].includes(w));
+    mockSuggest.mockImplementation((w) => (w === 'nxt' ? ['next'] : []));
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    const issues = getNspellIssues(checker, 'check nxt-backend for updates');
+    expect(issues.find((i) => i.word === 'nxt')).toBeUndefined();
+  });
+
+  it('skips words inside snake_case identifiers', async () => {
+    const { getNspellIssues } = await freshModule();
+    mockCorrect.mockImplementation((w) => !['nxt'].includes(w));
+    mockSuggest.mockImplementation((w) => (w === 'nxt' ? ['next'] : []));
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    const issues = getNspellIssues(checker, 'set nxt_backend as target');
+    expect(issues.find((i) => i.word === 'nxt')).toBeUndefined();
+  });
+
+  it('skips PascalCase words', async () => {
+    const { getNspellIssues } = await freshModule();
+    mockCorrect.mockImplementation((w) => !['StringBuilder'].includes(w));
+    mockSuggest.mockImplementation((w) => (w === 'StringBuilder' ? ['string'] : []));
+    const checker = { correct: mockCorrect, suggest: mockSuggest };
+    const issues = getNspellIssues(checker, 'StringBuilder is useful');
+    expect(issues.find((i) => i.word === 'StringBuilder')).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════
+// isPascalCase
+// ═══════════════════════════════════════
+
+describe('isPascalCase', () => {
+  it('detects PascalCase words', async () => {
+    const { isPascalCase } = await freshModule();
+    expect(isPascalCase('StringBuilder')).toBe(true);
+    expect(isPascalCase('HttpClient')).toBe(true);
+    expect(isPascalCase('MyComponent')).toBe(true);
+  });
+
+  it('rejects non-PascalCase words', async () => {
+    const { isPascalCase } = await freshModule();
+    expect(isPascalCase('hello')).toBe(false);
+    expect(isPascalCase('ALLCAPS')).toBe(false);
+    expect(isPascalCase('camelCase')).toBe(false);
+    expect(isPascalCase('Proper')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════
+// getCompoundIdentifierRanges
+// ═══════════════════════════════════════
+
+describe('getCompoundIdentifierRanges', () => {
+  it('detects kebab-case identifiers', async () => {
+    const { getCompoundIdentifierRanges } = await freshModule();
+    const ranges = getCompoundIdentifierRanges('use my-component here');
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0]).toEqual({ start: 4, end: 16 });
+  });
+
+  it('detects snake_case identifiers', async () => {
+    const { getCompoundIdentifierRanges } = await freshModule();
+    const ranges = getCompoundIdentifierRanges('set max_retries to 5');
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0]).toEqual({ start: 4, end: 15 });
+  });
+
+  it('detects multiple compound identifiers', async () => {
+    const { getCompoundIdentifierRanges } = await freshModule();
+    const ranges = getCompoundIdentifierRanges('use my-component and user_name');
+    expect(ranges).toHaveLength(2);
+  });
+
+  it('returns empty for plain text', async () => {
+    const { getCompoundIdentifierRanges } = await freshModule();
+    const ranges = getCompoundIdentifierRanges('hello world');
+    expect(ranges).toHaveLength(0);
+  });
 });

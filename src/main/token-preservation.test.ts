@@ -393,3 +393,88 @@ describe('protectTokens: Slack user group mentions', () => {
     expect(restored).toBe(input);
   });
 });
+
+// ── Kebab-case identifiers ──
+
+describe('protectTokens: kebab-case identifiers', () => {
+  it('protects repo-style kebab-case names', () => {
+    const result = protectTokens('check my-component for the fix');
+    expect(result.tokens.some((t) => t.originalToken === 'my-component')).toBe(true);
+    expect(result.protectedText).not.toContain('my-component');
+  });
+
+  it('protects multi-segment kebab-case', () => {
+    const result = protectTokens('install react-router-dom please');
+    expect(result.tokens.some((t) => t.originalToken === 'react-router-dom')).toBe(true);
+  });
+
+  it('round-trips kebab-case identifiers', () => {
+    const input = 'use docker-compose and ts-node';
+    const protection = protectTokens(input);
+    const restored = restoreTokens(protection.protectedText, protection.tokens);
+    expect(restored).toBe(input);
+  });
+});
+
+// ── Snake_case identifiers ──
+
+describe('protectTokens: snake_case identifiers', () => {
+  it('protects snake_case names', () => {
+    const result = protectTokens('set user_name as the target');
+    expect(result.tokens.some((t) => t.originalToken === 'user_name')).toBe(true);
+  });
+
+  it('protects SCREAMING_SNAKE_CASE', () => {
+    const result = protectTokens('set MAX_RETRIES to 5');
+    expect(result.tokens.some((t) => t.originalToken === 'MAX_RETRIES')).toBe(true);
+  });
+
+  it('round-trips snake_case identifiers', () => {
+    const input = 'check user_name and BASE_URL';
+    const protection = protectTokens(input);
+    const restored = restoreTokens(protection.protectedText, protection.tokens);
+    expect(restored).toBe(input);
+  });
+});
+
+// ── Environment variables ──
+
+describe('protectTokens: environment variables', () => {
+  it('protects $VAR style', () => {
+    const result = protectTokens('set $NODE_ENV to production');
+    expect(result.tokens.some((t) => t.originalToken === '$NODE_ENV')).toBe(true);
+  });
+
+  it('protects ${VAR} style', () => {
+    const result = protectTokens('use ${DATABASE_URL} for connection');
+    expect(result.tokens.some((t) => t.originalToken === '${DATABASE_URL}')).toBe(true);
+  });
+});
+
+// ── CLI flags ──
+
+describe('protectTokens: CLI flags', () => {
+  it('protects double-dash flags', () => {
+    const result = protectTokens('run with --verbose flag');
+    expect(result.tokens.some((t) => t.originalToken === '--verbose')).toBe(true);
+  });
+
+  it('protects flags with hyphens', () => {
+    const result = protectTokens('add --no-cache option');
+    expect(result.tokens.some((t) => t.originalToken === '--no-cache')).toBe(true);
+  });
+});
+
+// ── Version strings ──
+
+describe('protectTokens: version strings', () => {
+  it('protects semver strings', () => {
+    const result = protectTokens('upgrade to v1.2.3 please');
+    expect(result.tokens.some((t) => t.originalToken === 'v1.2.3')).toBe(true);
+  });
+
+  it('protects version with prerelease', () => {
+    const result = protectTokens('using 1.0.0-beta.1 now');
+    expect(result.tokens.some((t) => t.originalToken === '1.0.0-beta.1')).toBe(true);
+  });
+});

@@ -23,6 +23,7 @@ architected
 arduino
 arg
 args
+arr
 async
 atlassian
 auth
@@ -73,12 +74,15 @@ breakpoints
 broadband
 browsable
 browserify
+btn
+buf
 bytecode
 cacheability
 cacheable
 caching
 captcha
 cdn
+cfg
 chatbot
 chatbots
 chatroom
@@ -93,6 +97,7 @@ clickjacking
 clipboard
 cloudflare
 cloudfront
+cmd
 cloudwatch
 cmake
 cname
@@ -114,6 +119,7 @@ containerize
 containerized
 cors
 couchdb
+ctx
 cpu
 cpus
 cron
@@ -162,7 +168,9 @@ deserializer
 devops
 diffable
 digitalocean
+dir
 dirname
+dst
 django
 dll
 dns
@@ -193,6 +201,7 @@ encryption
 endian
 endpoint
 endpoints
+env
 enum
 enums
 epub
@@ -216,6 +225,8 @@ firewalls
 firmware
 flatmap
 flywheel
+fmt
+fn
 formatter
 formatters
 frontend
@@ -228,6 +239,7 @@ geofence
 geofencing
 geolocation
 getters
+gid
 gig
 gigabit
 gigabyte
@@ -287,6 +299,8 @@ hyperlinks
 hypervisor
 idempotent
 idempotency
+idx
+img
 iframe
 iframes
 imagenet
@@ -356,7 +370,9 @@ lang
 langs
 latency
 ldap
+len
 lerna
+lib
 lifecycle
 lifecycles
 linter
@@ -400,6 +416,7 @@ mockup
 mockups
 mongo
 mongodb
+msg
 monorepo
 monorepos
 multicast
@@ -438,6 +455,7 @@ nullable
 numpad
 nvme
 oauth
+obj
 observability
 ocaml
 offline
@@ -471,6 +489,8 @@ permalink
 permalinks
 phishing
 php
+pid
+pkg
 pixel
 pixels
 plaintext
@@ -519,6 +539,8 @@ proxy
 proxied
 proxies
 pseudocode
+pty
+ptr
 pubkey
 pubsub
 pulldown
@@ -550,6 +572,7 @@ reconfiguration
 reconfigure
 reconfigured
 redis
+ref
 refactor
 refactored
 refactoring
@@ -562,6 +585,8 @@ reindex
 reindexed
 remapper
 renderer
+req
+res
 renderers
 repo
 repos
@@ -585,6 +610,7 @@ runbooks
 runtime
 runtimes
 rust
+rx
 saas
 sandboxed
 scalability
@@ -631,6 +657,7 @@ sockets
 solidity
 sourcemap
 sourcemaps
+src
 spam
 spammer
 spammers
@@ -648,6 +675,7 @@ stdin
 stdout
 storefront
 storefronts
+str
 stringified
 stringify
 subdirectory
@@ -669,6 +697,7 @@ swappable
 symlink
 symlinks
 sync
+sys
 synced
 syncing
 sysadmin
@@ -691,6 +720,7 @@ throughput
 timestamp
 timestamps
 tls
+tmp
 tmpdir
 todo
 todos
@@ -708,7 +738,9 @@ transpiler
 transpilers
 truthy
 tsx
+tty
 tuple
+tx
 tuples
 tweakable
 twilio
@@ -754,11 +786,14 @@ uris
 url
 urls
 usb
+usr
 username
 usernames
 utf
+ux
 uuid
 uuids
+val
 validator
 validators
 vercel
